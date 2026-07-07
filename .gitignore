@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temp extraction (can be regenerated from source PPTX)
+__pptx_extracted/
+__pptx_extracted_xml/
+
+# Office temp files
+~$*
+
+# Package locks (keep yarn.lock or package-lock.json if needed)
+# package-lock.json
+# yarn.lock
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+*.tsbuildinfo
