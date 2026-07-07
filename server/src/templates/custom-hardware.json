@@ -1,272 +1,309 @@
 {
-  "name": "定制硬件产品开发排期模板",
-  "description": "基于实际项目流程简化的开发排期模板，含 M1-M5 核心阶段，38 个计划节点",
+  "name": "自定义硬件研发流程",
+  "description": "从用户保存的版本导出",
   "tasks": [
     {
       "name": "M1 预研阶段",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": null,
-      "predecessor_refs": []
+      "duration_days": 1
     },
     {
       "name": "L3 立项筹备",
       "task_type": "普通任务",
       "duration_days": 1,
-      "parent_ref": 0,
-      "predecessor_refs": []
+      "parent_ref": 0
+    },
+    {
+      "name": "M2 计划阶段",
+      "task_type": "阶段任务",
+      "duration_days": 7
     },
     {
       "name": "L4 概要设计",
       "task_type": "普通任务",
       "duration_days": 7,
-      "parent_ref": 0,
-      "predecessor_refs": [1]
+      "parent_ref": 2,
+      "predecessor_refs": [
+        1
+      ]
     },
     {
       "name": "L5 开发计划",
       "task_type": "普通任务",
       "duration_days": 7,
-      "parent_ref": 0,
-      "predecessor_refs": [2]
-    },
-    {
-      "name": "M2 计划阶段",
-      "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": null,
-      "predecessor_refs": [3]
+      "parent_ref": 2,
+      "predecessor_refs": [
+        1
+      ]
     },
     {
       "name": "M3 研发测试阶段",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": null,
-      "predecessor_refs": [4]
+      "duration_days": 212
     },
     {
       "name": "L6 详细设计",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": 5,
-      "predecessor_refs": []
+      "duration_days": 98,
+      "parent_ref": 5
     },
     {
       "name": "板卡详设",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": 6,
-      "predecessor_refs": []
+      "duration_days": 98,
+      "parent_ref": 6
     },
     {
       "name": "原理图",
       "task_type": "普通任务",
       "duration_days": 21,
       "parent_ref": 7,
-      "predecessor_refs": [2]
+      "predecessor_refs": [
+        4
+      ]
     },
     {
       "name": "Layout",
       "task_type": "普通任务",
       "duration_days": 30,
       "parent_ref": 7,
-      "predecessor_refs": [8]
+      "predecessor_refs": [
+        8
+      ]
     },
     {
       "name": "基材备料",
       "task_type": "普通任务",
       "duration_days": 60,
       "parent_ref": 7,
-      "predecessor_refs": [2]
+      "predecessor_refs": [
+        4
+      ]
     },
     {
       "name": "BOM备料",
       "task_type": "普通任务",
       "duration_days": 45,
       "parent_ref": 7,
-      "predecessor_refs": [8]
+      "predecessor_refs": [
+        8
+      ]
     },
     {
       "name": "PCB洗板",
       "task_type": "普通任务",
       "duration_days": 28,
       "parent_ref": 7,
-      "predecessor_refs": [9, 10]
+      "predecessor_refs": [
+        9,
+        10
+      ]
     },
     {
       "name": "PCBA打板",
       "task_type": "普通任务",
       "duration_days": 10,
       "parent_ref": 7,
-      "predecessor_refs": [12, 11]
+      "predecessor_refs": [
+        12,
+        11
+      ]
     },
     {
       "name": "结构详设",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": 6,
-      "predecessor_refs": []
+      "duration_days": 40,
+      "parent_ref": 6
     },
     {
       "name": "结构设计",
       "task_type": "普通任务",
       "duration_days": 10,
       "parent_ref": 14,
-      "predecessor_refs": [2]
+      "predecessor_refs": [
+        4
+      ]
     },
     {
       "name": "结构打样",
       "task_type": "普通任务",
       "duration_days": 30,
       "parent_ref": 14,
-      "predecessor_refs": [15]
+      "predecessor_refs": [
+        15
+      ]
     },
     {
       "name": "散热详设",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": 6,
-      "predecessor_refs": []
+      "duration_days": 40,
+      "parent_ref": 6
     },
     {
       "name": "散热设计",
       "task_type": "普通任务",
       "duration_days": 10,
       "parent_ref": 17,
-      "predecessor_refs": [2]
+      "predecessor_refs": [
+        4
+      ]
     },
     {
       "name": "散热打样",
       "task_type": "普通任务",
       "duration_days": 30,
       "parent_ref": 17,
-      "predecessor_refs": [18]
+      "predecessor_refs": [
+        18
+      ]
     },
     {
       "name": "L7 Power On",
       "task_type": "普通任务",
       "duration_days": 20,
-      "parent_ref": 6,
-      "predecessor_refs": [13]
-    },
-    {
-      "name": "M4 试制阶段",
-      "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": null,
-      "predecessor_refs": [5]
+      "parent_ref": 5,
+      "predecessor_refs": [
+        13
+      ]
     },
     {
       "name": "L9 DVT",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": 21,
-      "predecessor_refs": []
+      "duration_days": 94,
+      "parent_ref": 5
     },
     {
       "name": "组装评审",
       "task_type": "普通任务",
       "duration_days": 2,
-      "parent_ref": 22,
-      "predecessor_refs": []
+      "parent_ref": 21,
+      "predecessor_refs": [
+        20
+      ]
     },
     {
       "name": "改版项测试",
       "task_type": "普通任务",
       "duration_days": 14,
-      "parent_ref": 22,
-      "predecessor_refs": []
+      "parent_ref": 21,
+      "predecessor_refs": [
+        20
+      ]
     },
     {
       "name": "非改版项测试",
       "task_type": "普通任务",
       "duration_days": 50,
-      "parent_ref": 22,
-      "predecessor_refs": [24]
+      "parent_ref": 21,
+      "predecessor_refs": [
+        23
+      ]
     },
     {
       "name": "Debug",
       "task_type": "普通任务",
       "duration_days": 30,
-      "parent_ref": 22,
-      "predecessor_refs": [25]
+      "parent_ref": 21,
+      "predecessor_refs": [
+        24
+      ]
     },
     {
       "name": "板卡改版",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": 21,
-      "predecessor_refs": []
+      "duration_days": 58,
+      "parent_ref": 21
     },
     {
       "name": "A02原理图改版",
       "task_type": "普通任务",
       "duration_days": 14,
-      "parent_ref": 27,
-      "predecessor_refs": []
+      "parent_ref": 26,
+      "predecessor_refs": [
+        23
+      ]
     },
     {
       "name": "A02Layout",
       "task_type": "普通任务",
       "duration_days": 7,
-      "parent_ref": 27,
-      "predecessor_refs": [28]
+      "parent_ref": 26,
+      "predecessor_refs": [
+        27
+      ]
     },
     {
       "name": "A02洗板",
       "task_type": "普通任务",
       "duration_days": 30,
-      "parent_ref": 27,
-      "predecessor_refs": [29]
+      "parent_ref": 26,
+      "predecessor_refs": [
+        28
+      ]
     },
     {
       "name": "A02打板",
       "task_type": "普通任务",
       "duration_days": 7,
-      "parent_ref": 27,
-      "predecessor_refs": [30]
+      "parent_ref": 26,
+      "predecessor_refs": [
+        29
+      ]
     },
     {
-      "name": "L13 NPI导入",
-      "task_type": "普通任务",
-      "duration_days": 7,
-      "parent_ref": 21,
-      "predecessor_refs": [26]
-    },
-    {
-      "name": "M5 新品导入阶段",
+      "name": "M4 试制阶段",
       "task_type": "阶段任务",
-      "duration_days": 0,
-      "parent_ref": null,
-      "predecessor_refs": [21]
-    },
-    {
-      "name": "L14 直通率爬坡",
-      "task_type": "普通任务",
-      "duration_days": 90,
-      "parent_ref": 33,
-      "predecessor_refs": [32]
+      "duration_days": 48
     },
     {
       "name": "L12 批量测试",
       "task_type": "普通任务",
       "duration_days": 20,
-      "parent_ref": 33,
-      "predecessor_refs": []
+      "parent_ref": 31,
+      "predecessor_refs": [
+        25
+      ]
     },
     {
       "name": "批量测试Debug",
       "task_type": "普通任务",
       "duration_days": 14,
-      "parent_ref": 33,
-      "predecessor_refs": [35]
+      "parent_ref": 31,
+      "predecessor_refs": [
+        32
+      ]
     },
     {
       "name": "质量抽测＆质量评审",
       "task_type": "普通任务",
       "duration_days": 14,
-      "parent_ref": 33,
-      "predecessor_refs": [36]
+      "parent_ref": 31,
+      "predecessor_refs": [
+        33
+      ]
+    },
+    {
+      "name": "M5 新品导入阶段",
+      "task_type": "阶段任务",
+      "duration_days": 97
+    },
+    {
+      "name": "L13 NPI导入",
+      "task_type": "普通任务",
+      "duration_days": 7,
+      "parent_ref": 35,
+      "predecessor_refs": [
+        34
+      ]
+    },
+    {
+      "name": "L14 直通率爬坡",
+      "task_type": "普通任务",
+      "duration_days": 90,
+      "parent_ref": 35,
+      "predecessor_refs": [
+        36
+      ]
     }
   ]
 }

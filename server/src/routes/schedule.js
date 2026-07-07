@@ -242,7 +242,6 @@ function cascadePropagation(tasks, changedTaskId) {
     }
   }
 
-  allTasks = recalcPhaseAggregation(allTasks);
   return allTasks;
 }
 
@@ -322,16 +321,13 @@ router.get("/projects/:id/schedule", (req, res) => {
     }
 
     let tasks = getProjectTasksTree(id);
+    tasks = recalcPhaseAggregation(tasks);        // belt: ensure phase dates always correct
     tasks = updateAllCompletionStatuses(tasks);
-    const updateStmt = db.prepare(
-      "UPDATE schedule_tasks SET completion_status = ?, updated_at = datetime('now','localtime') WHERE id = ?"
-    );
-    const updateMany = db.transaction((items) => {
-      for (const t of items) {
-        updateStmt.run(t.completion_status, t.id);
-      }
-    });
-    updateMany(tasks);
+    persistTaskFields(tasks);                     // suspenders: write corrected data back to DB
+
+    // Re-read to get clean tree after persist
+    tasks = getProjectTasksTree(id);
+    tasks = updateAllCompletionStatuses(tasks);
 
     res.json({ ok: true, data: tasks });
   } catch (err) {
