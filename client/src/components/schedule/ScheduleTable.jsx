@@ -9,9 +9,8 @@ import dayjs from "dayjs";
 import { calcCompletionStatus, updateStartDate, updateEndDate, updateDuration } from "../../utils/schedule-date";
 
 /**
- * 排期表 — 类 Excel 可编辑表格
- * 由于 MUI DataGrid 的编辑模式与 DatePicker 配合复杂，
- * 这里使用原生 HTML table + 内联编辑组件实现
+ * 排期表 — 类 Excel 可编辑表格（支持树形层级展示）
+ * 任务名称列根据 depth 字段显示缩进与树形连接线
  */
 
 const TASK_TYPE_COLORS = {
@@ -19,6 +18,9 @@ const TASK_TYPE_COLORS = {
   "节点任务": "#FFF8E1",
   "普通任务": "transparent",
 };
+
+/** 根据 depth 计算缩进像素 */
+const INDENT_WIDTH = 24; // 每级缩进 24px
 
 export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskUpdate }) {
   // 编辑状态: { taskId, field }
@@ -170,6 +172,51 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
     return style;
   };
 
+  // 渲染任务名称（含树形缩进）
+  const renderTaskName = (task, depth) => {
+    const isEditing = editCell?.taskId === task.id && editCell?.field === "name";
+
+    if (isEditing) {
+      return (
+        <TextField
+          autoFocus
+          size="small"
+          variant="standard"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={handleSaveEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSaveEdit();
+            if (e.key === "Escape") setEditCell(null);
+          }}
+          sx={{ width: "100%", minWidth: 60, ml: `${depth * INDENT_WIDTH}px` }}
+          InputProps={{ disableUnderline: false }}
+        />
+      );
+    }
+
+    const indentPadding = depth * INDENT_WIDTH;
+    const prefix = depth > 0 ? "└ " : "";
+    const nameText = task.name || "（点击编辑）";
+
+    return (
+      <Box
+        onClick={() => handleStartEdit(task.id, "name", task.name)}
+        sx={{
+          cursor: "pointer",
+          minHeight: 24,
+          display: "flex",
+          alignItems: "center",
+          px: 0.5,
+          pl: `${indentPadding + 4}px`,
+          "&:hover": { bgcolor: "action.hover" },
+        }}
+      >
+        {prefix}{nameText}
+      </Box>
+    );
+  };
+
   // 渲染可编辑单元格
   const renderCell = (task, field, displayValue, type = "text") => {
     const isEditing = editCell?.taskId === task.id && editCell?.field === field;
@@ -297,7 +344,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
                   {task.task_type === "节点任务" ? "◆" : task.task_order}
                 </td>
                 <td style={tdStyle("240px")}>
-                  {renderCell(task, "name", task.name || "（点击编辑）", "text")}
+                  {renderTaskName(task, task.depth || 0)}
                 </td>
                 <td style={tdStyle("130px", "center")}>
                   {renderCell(task, "planned_start", task.planned_start || "-", "date")}

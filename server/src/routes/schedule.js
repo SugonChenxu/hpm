@@ -58,12 +58,60 @@ function dayBefore(dateStr) {
 }
 
 /**
- * 获取项目中所有排期任务（按 task_order 排序）
+ * 获取项目中所有排期任务（按 task_order 排序，返回扁平列表）
  */
 function getProjectTasks(projectId) {
   return db.prepare(
     "SELECT * FROM schedule_tasks WHERE project_id = ? ORDER BY task_order ASC"
   ).all(projectId);
+}
+
+/**
+ * 将扁平任务列表构建为树形排序结果
+ * 深度优先遍历：父任务 → 其子任务（按 task_order）→ 下一个兄弟任务
+ * 每个任务附加 depth 字段（0 = 顶级）
+ */
+function buildTreeOrder(allTasks) {
+  // 构建 parent_id → children 映射（null 映射为 0）
+  const childrenMap = new Map();
+  for (const t of allTasks) {
+    const pid = t.parent_id || 0;
+    if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+    childrenMap.get(pid).push(t);
+  }
+
+  // 每组子任务按 task_order 排序
+  for (const [, children] of childrenMap) {
+    children.sort((a, b) => a.task_order - b.task_order);
+  }
+
+  const result = [];
+
+  /**
+   * 递归遍历，将任务及其后代按深度优先加入结果
+   * @param {number} parentId - 父任务 ID（0 表示顶级）
+   * @param {number} depth  - 当前深度
+   */
+  function traverse(parentId, depth) {
+    const children = childrenMap.get(parentId) || [];
+    for (const child of children) {
+      result.push({ ...child, depth });
+      traverse(child.id, depth + 1);
+    }
+  }
+
+  traverse(0, 0);
+  return result;
+}
+
+/**
+ * 获取树形排序的排期任务列表（供 GET 端点使用）
+ */
+function getProjectTasksTree(projectId) {
+  const allTasks = db.prepare(
+    "SELECT * FROM schedule_tasks WHERE project_id = ?"
+  ).all(projectId);
+  return buildTreeOrder(allTasks);
 }
 
 /**
@@ -108,59 +156,74 @@ function detectCycle(allTasks, taskId, newPredecessorIds) {
 }
 
 /**
- * 重新计算所有阶段任务的聚合日期
- * 阶段任务的 start = MIN(其管辖范围内所有子任务的 start)
- * 阶段任务的 end = MAX(其管辖范围内所有子任务的 end)
+ * 递归收集某个任务的所有子孙任务的日期极值
+ * @param {number} taskId
+ * @param {Map<number, Array>} childrenMap - parent_id → children 映射
+ * @param {Set} visited - 防环
+ * @returns {{ minStart: string|null, maxEnd: string|null }}
+ */
+function collectDescendantDates(taskId, childrenMap, visited) {
+  if (visited.has(taskId)) return { minStart: null, maxEnd: null };
+  visited.add(taskId);
+
+  const children = childrenMap.get(taskId) || [];
+  let minStart = null;
+  let maxEnd = null;
+
+  for (const child of children) {
+    // 纳入子任务的日期
+    if (child.planned_start && (!minStart || child.planned_start < minStart)) {
+      minStart = child.planned_start;
+    }
+    if (child.planned_end && (!maxEnd || child.planned_end > maxEnd)) {
+      maxEnd = child.planned_end;
+    }
+
+    // 递归收集孙辈
+    const sub = collectDescendantDates(child.id, childrenMap, visited);
+    if (sub.minStart && (!minStart || sub.minStart < minStart)) {
+      minStart = sub.minStart;
+    }
+    if (sub.maxEnd && (!maxEnd || sub.maxEnd > maxEnd)) {
+      maxEnd = sub.maxEnd;
+    }
+  }
+
+  return { minStart, maxEnd };
+}
+
+/**
+ * 重新计算所有阶段任务的聚合日期（基于树形结构）
+ * 阶段任务的 start = MIN(所有子孙任务的 start)
+ * 阶段任务的 end   = MAX(所有子孙任务的 end)
  */
 function recalcPhaseAggregation(tasks) {
   if (!tasks || tasks.length === 0) return tasks;
 
-  // 按 task_order 排序
-  const sorted = [...tasks].sort((a, b) => a.task_order - b.task_order);
+  // 构建 parent_id → children 映射（null 映射为 0）
+  const childrenMap = new Map();
+  for (const t of tasks) {
+    const pid = t.parent_id || 0;
+    if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+    childrenMap.get(pid).push(t);
+  }
 
-  // 找到所有阶段任务及其位置
-  const phaseIndices = [];
-  sorted.forEach((t, i) => {
-    if (t.task_type === "阶段任务") {
-      phaseIndices.push(i);
-    }
-  });
+  const result = tasks.map(t => ({ ...t }));
 
-  if (phaseIndices.length === 0) return tasks;
-
-  // 为每个阶段任务确定管辖范围
-  for (let pi = 0; pi < phaseIndices.length; pi++) {
-    const phaseIdx = phaseIndices[pi];
-    const startIdx = phaseIdx + 1; // 阶段任务之后
-    const endIdx = pi + 1 < phaseIndices.length
-      ? phaseIndices[pi + 1] // 下一个阶段任务之前
-      : sorted.length;
-
-    // 收集范围内的普通任务和节点任务
-    const childTasks = sorted.slice(startIdx, endIdx).filter(
-      t => t.task_type !== "阶段任务"
-    );
-
-    if (childTasks.length > 0) {
-      const starts = childTasks.map(t => t.planned_start).filter(Boolean);
-      const ends = childTasks.map(t => t.planned_end).filter(Boolean);
-
-      if (starts.length > 0) {
-        const minStart = starts.sort()[0];
-        sorted[phaseIdx].planned_start = minStart;
+  for (const task of result) {
+    if (task.task_type === "阶段任务") {
+      const agg = collectDescendantDates(task.id, childrenMap, new Set());
+      if (agg.minStart) {
+        task.planned_start = agg.minStart;
       }
-      if (ends.length > 0) {
-        const maxEnd = ends.sort().reverse()[0];
-        sorted[phaseIdx].planned_end = maxEnd;
-        sorted[phaseIdx].duration_days = daysBetween(
-          sorted[phaseIdx].planned_start,
-          sorted[phaseIdx].planned_end
-        );
+      if (agg.maxEnd) {
+        task.planned_end = agg.maxEnd;
+        task.duration_days = daysBetween(task.planned_start, task.planned_end);
       }
     }
   }
 
-  return sorted;
+  return result;
 }
 
 /**
@@ -168,7 +231,6 @@ function recalcPhaseAggregation(tasks) {
  */
 function cascadePropagation(tasks, changedTaskId) {
   let allTasks = tasks.map(t => ({ ...t }));
-  const changed = new Set();
 
   // BFS：找到所有以 changedTaskId 为前置的任务
   const queue = [changedTaskId];
@@ -210,7 +272,6 @@ function cascadePropagation(tasks, changedTaskId) {
         const maxEnd = predEnds.sort().reverse()[0];
         task.planned_start = addDays(maxEnd, 1);
         task.planned_end = addDays(task.planned_start, task.duration_days - 1);
-        changed.add(tid);
       }
     }
   }
@@ -255,8 +316,43 @@ function updateAllCompletionStatuses(tasks) {
   });
 }
 
+/**
+ * 批量持久化任务的 planned_start / planned_end / duration_days / completion_status
+ */
+function persistTaskFields(tasks) {
+  const stmt = db.prepare(`
+    UPDATE schedule_tasks SET
+      planned_start = ?, planned_end = ?, duration_days = ?,
+      completion_status = ?, updated_at = datetime('now','localtime')
+    WHERE id = ?
+  `);
+  for (const t of tasks) {
+    stmt.run(t.planned_start, t.planned_end, t.duration_days, t.completion_status, t.id);
+  }
+}
+
+/**
+ * 重新编号同父级下的兄弟任务的 task_order（1-based）
+ * @param {number} projectId
+ * @param {number|null} parentId - null 表示顶级任务
+ */
+function renumberSiblings(projectId, parentId) {
+  const siblings = parentId === null
+    ? db.prepare(
+        "SELECT * FROM schedule_tasks WHERE project_id = ? AND parent_id IS NULL ORDER BY task_order ASC"
+      ).all(projectId)
+    : db.prepare(
+        "SELECT * FROM schedule_tasks WHERE project_id = ? AND parent_id = ? ORDER BY task_order ASC"
+      ).all(projectId, parentId);
+
+  const stmt = db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?");
+  siblings.forEach((t, i) => {
+    stmt.run(i + 1, t.id);
+  });
+}
+
 // ============================================================
-// 端点 1：GET /api/projects/:id/schedule — 获取当前排期任务列表
+// 端点 1：GET /api/projects/:id/schedule — 获取当前排期任务列表（树形排序）
 // ============================================================
 router.get("/projects/:id/schedule", (req, res) => {
   try {
@@ -266,7 +362,7 @@ router.get("/projects/:id/schedule", (req, res) => {
       return res.status(404).json({ ok: false, error: "项目不存在" });
     }
 
-    let tasks = getProjectTasks(id);
+    let tasks = getProjectTasksTree(id);
     // 更新 completion_status
     tasks = updateAllCompletionStatuses(tasks);
     // 批量持久化状态更新
@@ -329,8 +425,8 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
       const indexToId = new Map();
 
       const insertStmt = db.prepare(`
-        INSERT INTO schedule_tasks (project_id, name, task_order, task_type, planned_start, planned_end, duration_days, predecessor_ids, is_locked)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO schedule_tasks (project_id, name, task_order, task_type, planned_start, planned_end, duration_days, predecessor_ids, parent_id, is_locked)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
       `);
 
       // 第一遍：计算日期并插入
@@ -397,7 +493,23 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
         }
       }
 
-      // 第三遍：重新读取所有任务，计算阶段聚合和级联传播
+      // 第三遍：自动构建树形结构 — 将阶段任务之后的普通任务/节点任务挂载为子任务
+      const updateParentStmt = db.prepare(
+        "UPDATE schedule_tasks SET parent_id = ? WHERE id = ?"
+      );
+      let currentPhaseId = null;
+      const flatTasks = db.prepare(
+        "SELECT * FROM schedule_tasks WHERE project_id = ? ORDER BY task_order ASC"
+      ).all(id);
+      for (const t of flatTasks) {
+        if (t.task_type === "阶段任务") {
+          currentPhaseId = t.id;
+        } else if (currentPhaseId !== null) {
+          updateParentStmt.run(currentPhaseId, t.id);
+        }
+      }
+
+      // 第四遍：重新读取所有任务，计算阶段聚合和级联传播
       let allTasks = getProjectTasks(id);
 
       // 对有前置依赖的任务重新计算开始日期
@@ -419,7 +531,9 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
       }
 
       // 级联传播
-      allTasks = cascadePropagation(allTasks, allTasks[0]?.id);
+      if (allTasks.length > 0) {
+        allTasks = cascadePropagation(allTasks, allTasks[0]?.id);
+      }
 
       // 阶段聚合
       allTasks = recalcPhaseAggregation(allTasks);
@@ -428,17 +542,9 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
       allTasks = updateAllCompletionStatuses(allTasks);
 
       // 批量更新
-      const updateStmt = db.prepare(`
-        UPDATE schedule_tasks SET
-          planned_start = ?, planned_end = ?, duration_days = ?,
-          completion_status = ?, updated_at = datetime('now','localtime')
-        WHERE id = ?
-      `);
-      for (const t of allTasks) {
-        updateStmt.run(t.planned_start, t.planned_end, t.duration_days, t.completion_status, t.id);
-      }
+      persistTaskFields(allTasks);
 
-      return allTasks;
+      return getProjectTasksTree(id);
     });
 
     const result = generate();
@@ -553,15 +659,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
       allTasks = updateAllCompletionStatuses(allTasks);
 
       // 批量持久化
-      const persistStmt = db.prepare(`
-        UPDATE schedule_tasks SET
-          planned_start = ?, planned_end = ?, duration_days = ?,
-          completion_status = ?, updated_at = datetime('now','localtime')
-        WHERE id = ?
-      `);
-      for (const t of allTasks) {
-        persistStmt.run(t.planned_start, t.planned_end, t.duration_days, t.completion_status, t.id);
-      }
+      persistTaskFields(allTasks);
 
       return db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(id);
     });
@@ -594,35 +692,36 @@ router.post("/projects/:id/schedule/insert", (req, res) => {
     }
 
     const insert = db.transaction(() => {
-      // 计算插入位置
+      // 计算插入位置（同级）
       let insertOrder = refTask.task_order;
       if (position === "below") {
         insertOrder = refTask.task_order + 1;
       }
 
-      // 后续任务 order +1
-      db.prepare(
-        "UPDATE schedule_tasks SET task_order = task_order + 1 WHERE project_id = ? AND task_order >= ?"
-      ).run(id, insertOrder);
+      // 后续同级兄弟任务 order +1
+      if (refTask.parent_id === null) {
+        db.prepare(
+          "UPDATE schedule_tasks SET task_order = task_order + 1 WHERE project_id = ? AND parent_id IS NULL AND task_order >= ?"
+        ).run(id, insertOrder);
+      } else {
+        db.prepare(
+          "UPDATE schedule_tasks SET task_order = task_order + 1 WHERE project_id = ? AND parent_id = ? AND task_order >= ?"
+        ).run(id, refTask.parent_id, insertOrder);
+      }
 
-      // 插入新任务
+      // 插入新任务（与参考任务同级）
       const result = db.prepare(`
-        INSERT INTO schedule_tasks (project_id, name, task_order, task_type, planned_start, planned_end, duration_days, predecessor_ids, is_locked)
-        VALUES (?, '', ?, '普通任务', ?, ?, 1, '[]', 0)
+        INSERT INTO schedule_tasks (project_id, name, task_order, task_type, planned_start, planned_end, duration_days, predecessor_ids, parent_id, is_locked)
+        VALUES (?, '', ?, '普通任务', ?, ?, 1, '[]', ?, 0)
       `).run(
         id, insertOrder,
         refTask.planned_start || todayStr(),
-        refTask.planned_start || todayStr()
+        refTask.planned_start || todayStr(),
+        refTask.parent_id
       );
 
-      // 重新编号
-      const tasks = getProjectTasks(id);
-      const renumStmt = db.prepare(
-        "UPDATE schedule_tasks SET task_order = ? WHERE id = ?"
-      );
-      tasks.forEach((t, i) => {
-        renumStmt.run(i + 1, t.id);
-      });
+      // 重新编号同级兄弟
+      renumberSiblings(id, refTask.parent_id);
 
       return db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(result.lastInsertRowid);
     });
@@ -649,6 +748,11 @@ router.delete("/schedule-tasks/:id", (req, res) => {
     const projectId = task.project_id;
 
     const remove = db.transaction(() => {
+      // 先将被删任务的子任务提升到其父级
+      db.prepare(
+        "UPDATE schedule_tasks SET parent_id = ? WHERE parent_id = ? AND project_id = ?"
+      ).run(task.parent_id, Number(id), projectId);
+
       // 删除
       db.prepare("DELETE FROM schedule_tasks WHERE id = ?").run(id);
 
@@ -668,30 +772,14 @@ router.delete("/schedule-tasks/:id", (req, res) => {
         }
       }
 
-      // 重新编号
-      const remaining = db.prepare(
-        "SELECT * FROM schedule_tasks WHERE project_id = ? ORDER BY task_order ASC"
-      ).all(projectId);
-      const renumStmt = db.prepare(
-        "UPDATE schedule_tasks SET task_order = ? WHERE id = ?"
-      );
-      remaining.forEach((t, i) => {
-        renumStmt.run(i + 1, t.id);
-      });
+      // 重新编号被删任务的同级兄弟（父级=原父级）
+      renumberSiblings(projectId, task.parent_id);
 
       // 重新计算阶段聚合
       let updated = getProjectTasks(projectId);
       updated = recalcPhaseAggregation(updated);
       updated = updateAllCompletionStatuses(updated);
-      const persistStmt = db.prepare(`
-        UPDATE schedule_tasks SET
-          planned_start = ?, planned_end = ?, duration_days = ?,
-          completion_status = ?, updated_at = datetime('now','localtime')
-        WHERE id = ?
-      `);
-      for (const t of updated) {
-        persistStmt.run(t.planned_start, t.planned_end, t.duration_days, t.completion_status, t.id);
-      }
+      persistTaskFields(updated);
     });
 
     remove();
@@ -703,57 +791,144 @@ router.delete("/schedule-tasks/:id", (req, res) => {
 });
 
 // ============================================================
-// 端点 6：PUT /api/schedule-tasks/:id/move — 升级/降级
+// 端点 6：PUT /api/projects/:id/schedule/:taskId/indent — 降级（缩进）
 // ============================================================
-router.put("/schedule-tasks/:id/move", (req, res) => {
+router.put("/projects/:id/schedule/:taskId/indent", (req, res) => {
   try {
-    const { id } = req.params;
-    const { direction } = req.body;
+    const { id, taskId } = req.params;
 
-    const task = db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(id);
+    const task = db.prepare(
+      "SELECT * FROM schedule_tasks WHERE id = ? AND project_id = ?"
+    ).get(taskId, id);
     if (!task) {
       return res.status(404).json({ ok: false, error: "排期任务不存在" });
     }
 
-    const allTasks = getProjectTasks(task.project_id);
-    const currentIdx = allTasks.findIndex(t => t.id === Number(id));
+    // 查找同级兄弟任务（按 task_order 排序）
+    const siblings = task.parent_id === null
+      ? db.prepare(
+          "SELECT * FROM schedule_tasks WHERE project_id = ? AND parent_id IS NULL ORDER BY task_order ASC"
+        ).all(id)
+      : db.prepare(
+          "SELECT * FROM schedule_tasks WHERE project_id = ? AND parent_id = ? ORDER BY task_order ASC"
+        ).all(id, task.parent_id);
 
-    if (direction === "up") {
-      if (currentIdx <= 0) {
-        return res.status(400).json({ ok: false, error: "已是首行，无法上移" });
-      }
-      const prev = allTasks[currentIdx - 1];
-      // 交换 task_order
-      const move = db.transaction(() => {
-        db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?").run(task.task_order, prev.id);
-        db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?").run(prev.task_order, task.id);
+    const myIndex = siblings.findIndex(t => t.id === Number(taskId));
+    if (myIndex <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "已是同层级第一个任务，无法降级（需要有紧邻上方的兄弟任务）",
       });
-      move();
-    } else if (direction === "down") {
-      if (currentIdx >= allTasks.length - 1) {
-        return res.status(400).json({ ok: false, error: "已是末行，无法下移" });
-      }
-      const next = allTasks[currentIdx + 1];
-      const move = db.transaction(() => {
-        db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?").run(task.task_order, next.id);
-        db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?").run(next.task_order, task.id);
-      });
-      move();
-    } else {
-      return res.status(400).json({ ok: false, error: "direction 必须为 up 或 down" });
     }
 
-    // 返回重排后的列表
-    const result = getProjectTasks(task.project_id);
+    const prevSibling = siblings[myIndex - 1];
+
+    const indent = db.transaction(() => {
+      // 将当前任务挂载到前一个兄弟任务下
+      db.prepare(
+        "UPDATE schedule_tasks SET parent_id = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+      ).run(prevSibling.id, taskId);
+
+      // 放在新父任务子列表的最末尾
+      const maxOrderRow = db.prepare(
+        "SELECT MAX(task_order) AS max_order FROM schedule_tasks WHERE project_id = ? AND parent_id = ?"
+      ).get(id, prevSibling.id);
+      const newOrder = (maxOrderRow?.max_order || 0) + 1;
+
+      db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?")
+        .run(newOrder, taskId);
+
+      // 重新编号原同级兄弟（移除了当前任务后）
+      renumberSiblings(id, task.parent_id);
+
+      // 级联 + 聚合
+      let allTasks = getProjectTasks(id);
+      allTasks = recalcPhaseAggregation(allTasks);
+      allTasks = updateAllCompletionStatuses(allTasks);
+      persistTaskFields(allTasks);
+
+      return getProjectTasksTree(id);
+    });
+
+    const result = indent();
     res.json({ ok: true, data: result });
   } catch (err) {
-    console.error("PUT move:", err);
+    console.error("PUT indent:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
 // ============================================================
-// 端点 7：PUT /api/schedule-tasks/:id/predecessors — 更新前置任务
+// 端点 7：PUT /api/projects/:id/schedule/:taskId/outdent — 升级（减少缩进）
+// ============================================================
+router.put("/projects/:id/schedule/:taskId/outdent", (req, res) => {
+  try {
+    const { id, taskId } = req.params;
+
+    const task = db.prepare(
+      "SELECT * FROM schedule_tasks WHERE id = ? AND project_id = ?"
+    ).get(taskId, id);
+    if (!task) {
+      return res.status(404).json({ ok: false, error: "排期任务不存在" });
+    }
+
+    if (task.parent_id === null) {
+      return res.status(400).json({
+        ok: false,
+        error: "顶级任务无法再升级",
+      });
+    }
+
+    const parent = db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(task.parent_id);
+    const grandParentId = parent ? parent.parent_id : null;
+
+    const outdent = db.transaction(() => {
+      // 提升到祖父级（parent_id = 父级的 parent_id）
+      db.prepare(
+        "UPDATE schedule_tasks SET parent_id = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+      ).run(grandParentId, taskId);
+
+      // 放在父任务之后的位置
+      const newOrder = parent.task_order + 1;
+
+      // 目标层级中，>= newOrder 的兄弟后移
+      if (grandParentId === null) {
+        db.prepare(
+          "UPDATE schedule_tasks SET task_order = task_order + 1 WHERE project_id = ? AND parent_id IS NULL AND task_order >= ? AND id != ?"
+        ).run(id, newOrder, taskId);
+      } else {
+        db.prepare(
+          "UPDATE schedule_tasks SET task_order = task_order + 1 WHERE project_id = ? AND parent_id = ? AND task_order >= ? AND id != ?"
+        ).run(id, grandParentId, newOrder, taskId);
+      }
+
+      db.prepare("UPDATE schedule_tasks SET task_order = ? WHERE id = ?")
+        .run(newOrder, taskId);
+
+      // 重新编号原同级兄弟
+      renumberSiblings(id, task.parent_id);
+      // 重新编号目标层级兄弟
+      renumberSiblings(id, grandParentId);
+
+      // 级联 + 聚合
+      let allTasks = getProjectTasks(id);
+      allTasks = recalcPhaseAggregation(allTasks);
+      allTasks = updateAllCompletionStatuses(allTasks);
+      persistTaskFields(allTasks);
+
+      return getProjectTasksTree(id);
+    });
+
+    const result = outdent();
+    res.json({ ok: true, data: result });
+  } catch (err) {
+    console.error("PUT outdent:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
+// 端点 8：PUT /api/schedule-tasks/:id/predecessors — 更新前置任务
 // ============================================================
 router.put("/schedule-tasks/:id/predecessors", (req, res) => {
   try {
@@ -820,15 +995,7 @@ router.put("/schedule-tasks/:id/predecessors", (req, res) => {
       updated = recalcPhaseAggregation(updated);
       updated = updateAllCompletionStatuses(updated);
 
-      const persistStmt = db.prepare(`
-        UPDATE schedule_tasks SET
-          planned_start = ?, planned_end = ?, duration_days = ?,
-          completion_status = ?, updated_at = datetime('now','localtime')
-        WHERE id = ?
-      `);
-      for (const t of updated) {
-        persistStmt.run(t.planned_start, t.planned_end, t.duration_days, t.completion_status, t.id);
-      }
+      persistTaskFields(updated);
 
       return db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(id);
     });
@@ -842,7 +1009,7 @@ router.put("/schedule-tasks/:id/predecessors", (req, res) => {
 });
 
 // ============================================================
-// 端点 8：GET /api/templates/schedule — 列出可用模板
+// 端点 9：GET /api/templates/schedule — 列出可用模板
 // ============================================================
 router.get("/templates/schedule", (req, res) => {
   try {
@@ -875,7 +1042,7 @@ router.get("/templates/schedule", (req, res) => {
 });
 
 // ============================================================
-// 端点 9：POST /api/projects/:id/schedule/save — 保存版本快照
+// 端点 10：POST /api/projects/:id/schedule/save — 保存版本快照
 // ============================================================
 router.post("/projects/:id/schedule/save", (req, res) => {
   try {
@@ -920,7 +1087,7 @@ router.post("/projects/:id/schedule/save", (req, res) => {
 });
 
 // ============================================================
-// 端点 10：GET /api/projects/:id/schedule/versions — 获取版本历史
+// 端点 11：GET /api/projects/:id/schedule/versions — 获取版本历史
 // ============================================================
 router.get("/projects/:id/schedule/versions", (req, res) => {
   try {
@@ -943,7 +1110,7 @@ router.get("/projects/:id/schedule/versions", (req, res) => {
 });
 
 // ============================================================
-// 端点 11：GET /api/projects/:id/schedule/versions/:vid — 查看版本快照详情
+// 端点 12：GET /api/projects/:id/schedule/versions/:vid — 查看版本快照详情
 // ============================================================
 router.get("/projects/:id/schedule/versions/:vid", (req, res) => {
   try {
@@ -964,7 +1131,7 @@ router.get("/projects/:id/schedule/versions/:vid", (req, res) => {
 });
 
 // ============================================================
-// 端点 12：POST /api/projects/:id/schedule/versions/:vid/restore — 恢复版本
+// 端点 13：POST /api/projects/:id/schedule/versions/:vid/restore — 恢复版本
 // ============================================================
 router.post("/projects/:id/schedule/versions/:vid/restore", (req, res) => {
   try {
@@ -992,21 +1159,21 @@ router.post("/projects/:id/schedule/versions/:vid/restore", (req, res) => {
       const insertStmt = db.prepare(`
         INSERT INTO schedule_tasks (id, project_id, name, task_order, task_type,
           planned_start, planned_end, duration_days, completion_status,
-          predecessor_ids, is_locked, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          predecessor_ids, parent_id, is_locked, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const t of snapshotTasks) {
         insertStmt.run(
           t.id, t.project_id, t.name, t.task_order, t.task_type,
           t.planned_start, t.planned_end, t.duration_days, t.completion_status,
-          t.predecessor_ids, t.is_locked ?? 0,
+          t.predecessor_ids, t.parent_id ?? null, t.is_locked ?? 0,
           t.created_at || new Date().toISOString(),
           new Date().toISOString()
         );
       }
 
-      return getProjectTasks(id);
+      return getProjectTasksTree(id);
     });
 
     const result = restore();
@@ -1018,7 +1185,7 @@ router.post("/projects/:id/schedule/versions/:vid/restore", (req, res) => {
 });
 
 // ============================================================
-// 端点 13：GET /api/projects/:id/schedule/export — 导出 Excel
+// 端点 14：GET /api/projects/:id/schedule/export — 导出 Excel
 // ============================================================
 router.get("/projects/:id/schedule/export", async (req, res) => {
   try {
@@ -1028,7 +1195,7 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
       return res.status(404).json({ ok: false, error: "项目不存在" });
     }
 
-    let tasks = getProjectTasks(id);
+    let tasks = getProjectTasksTree(id);
     if (tasks.length === 0) {
       return res.status(400).json({ ok: false, error: "项目无排期数据可导出" });
     }
@@ -1077,6 +1244,10 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
       // 工期值
       const durationVal = t.duration_days || 1;
 
+      // 树形缩进前缀
+      const indent = "  ".repeat(t.depth || 0);
+      const displayName = indent + (t.depth > 0 ? "└ " : "") + t.name;
+
       // 开始时间 — 如果有前置依赖，使用公式
       let startFormula = null;
       let preds = [];
@@ -1087,10 +1258,8 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
           .map(pid => taskRowMap.get(pid))
           .filter(Boolean);
         if (predRows.length === 1) {
-          // =WORKDAY(D{predRow}, 1) — D列是结束日期
           startFormula = `=WORKDAY(D${predRows[0]}, 1)`;
         } else if (predRows.length > 1) {
-          // =WORKDAY(MAX(D{predRow1}, D{predRow2}, ...), 1)
           const rangeRefs = predRows.map(r => `D${r}`).join(", ");
           startFormula = `=WORKDAY(MAX(${rangeRefs}), 1)`;
         }
@@ -1106,7 +1275,7 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
 
       const rowValues = [
         t.task_order,
-        t.name,
+        displayName,
         startFormula || t.planned_start,
         endFormula || t.planned_end,
         durationVal,
@@ -1123,7 +1292,6 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
       const startCell = sheet.getCell(rowNum, 3);
       const endCell = sheet.getCell(rowNum, 4);
 
-      // 只有非公式单元格才设置数字格式
       if (typeof startCell.value === "string" && !startCell.value.startsWith("=")) {
         startCell.numFmt = "yyyy-mm-dd";
       }

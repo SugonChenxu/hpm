@@ -89,11 +89,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify(data),
       }),
-    move: (id, direction) =>
-      request(`/schedule-tasks/${id}/move`, {
-        method: "PUT",
-        body: JSON.stringify({ direction }),
-      }),
+    indent: (projectId, taskId) =>
+      request(`/projects/${projectId}/schedule/${taskId}/indent`, { method: "PUT" }),
+    outdent: (projectId, taskId) =>
+      request(`/projects/${projectId}/schedule/${taskId}/outdent`, { method: "PUT" }),
     updatePredecessors: (id, predecessorIds) =>
       request(`/schedule-tasks/${id}/predecessors`, {
         method: "PUT",

@@ -105,14 +105,25 @@ export default function SchedulePage() {
     }
   };
 
-  // 升级/降级
-  const handleMove = async (taskId, direction) => {
+  // 降级 (Indent) — 将当前任务变成紧邻上方兄弟任务的子任务
+  const handleIndent = async (taskId) => {
     try {
-      const res = await api.schedule.move(taskId, direction);
+      const res = await api.schedule.indent(id, taskId);
       setTasks(res.data || []);
-      setSnackbar({ open: true, message: direction === "up" ? "已上移" : "已下移", severity: "success" });
+      setSnackbar({ open: true, message: "已降级（增加缩进）", severity: "success" });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "移动失败", severity: "error" });
+      setSnackbar({ open: true, message: err.message || "降级失败", severity: "error" });
+    }
+  };
+
+  // 升级 (Outdent) — 将子任务提升到与父任务平级
+  const handleOutdent = async (taskId) => {
+    try {
+      const res = await api.schedule.outdent(id, taskId);
+      setTasks(res.data || []);
+      setSnackbar({ open: true, message: "已升级（减少缩进）", severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "升级失败", severity: "error" });
     }
   };
 
@@ -341,7 +352,8 @@ export default function SchedulePage() {
         tasks={tasks}
         onClose={handleCloseContextMenu}
         onChangeType={handleChangeType}
-        onMove={handleMove}
+        onIndent={handleIndent}
+        onOutdent={handleOutdent}
         onPredecessors={handlePredecessorOpen}
         onInsert={handleInsert}
         onDelete={handleDelete}

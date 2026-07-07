@@ -3,12 +3,16 @@ import {
   Menu, MenuItem, ListItemIcon, ListItemText, Divider,
 } from "@mui/material";
 import {
-  SwapHoriz, ArrowUpward, ArrowDownward, AccountTree, Add, Delete,
+  SwapHoriz, FormatIndentDecrease, FormatIndentIncrease, AccountTree, Add, Delete,
 } from "@mui/icons-material";
 
 /**
  * 右键菜单组件
  * 7 项主菜单 + 1 个子菜单（修改任务类型）
+ *
+ * 升级/降级使用树形缩进语义：
+ * - 降级 (Indent)：将当前任务变成紧邻上方兄弟任务的子任务
+ * - 升级 (Outdent)：将子任务提升到与父任务平级
  */
 export default function ContextMenu({
   open,
@@ -17,7 +21,8 @@ export default function ContextMenu({
   tasks,
   onClose,
   onChangeType,
-  onMove,
+  onIndent,
+  onOutdent,
   onPredecessors,
   onInsert,
   onDelete,
@@ -26,9 +31,15 @@ export default function ContextMenu({
 
   if (!task) return null;
 
-  const taskIndex = tasks.findIndex((t) => t.id === task.id);
-  const isFirst = taskIndex === 0;
-  const isLast = taskIndex === tasks.length - 1;
+  // 查找同父级的兄弟任务，判断是否为第一个兄弟（不能降级）
+  const taskParentKey = task.parent_id || null;
+  const siblings = tasks.filter(
+    (t) => (t.parent_id || null) === taskParentKey
+  );
+  const siblingIndex = siblings.findIndex((t) => t.id === task.id);
+  const isFirstSibling = siblingIndex <= 0;
+  // 顶级任务不能升级
+  const isTopLevel = task.parent_id === null || task.parent_id === undefined;
 
   const taskTypes = ["普通任务", "阶段任务", "节点任务"];
 
@@ -76,24 +87,24 @@ export default function ContextMenu({
 
       <Divider />
 
-      {/* 升级 */}
+      {/* 降级 (Indent) — 成为上方兄弟任务的子任务 */}
       <MenuItem
-        onClick={() => { onClose(); onMove(task.id, "up"); }}
-        disabled={isFirst}
+        onClick={() => { onClose(); onIndent(task.id); }}
+        disabled={isFirstSibling}
         dense
       >
-        <ListItemIcon><ArrowUpward fontSize="small" /></ListItemIcon>
-        <ListItemText>升级</ListItemText>
+        <ListItemIcon><FormatIndentIncrease fontSize="small" /></ListItemIcon>
+        <ListItemText>降级</ListItemText>
       </MenuItem>
 
-      {/* 降级 */}
+      {/* 升级 (Outdent) — 提升到父任务平级 */}
       <MenuItem
-        onClick={() => { onClose(); onMove(task.id, "down"); }}
-        disabled={isLast}
+        onClick={() => { onClose(); onOutdent(task.id); }}
+        disabled={isTopLevel}
         dense
       >
-        <ListItemIcon><ArrowDownward fontSize="small" /></ListItemIcon>
-        <ListItemText>降级</ListItemText>
+        <ListItemIcon><FormatIndentDecrease fontSize="small" /></ListItemIcon>
+        <ListItemText>升级</ListItemText>
       </MenuItem>
 
       <Divider />
