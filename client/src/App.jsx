@@ -8,6 +8,7 @@ import MaterialListPage from "./pages/MaterialListPage";
 import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
 import CreateProjectPage from "./pages/CreateProjectPage";
+import SchedulePage from "./pages/SchedulePage";
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/projects/:id/materials" element={<MaterialListPage />} />
         <Route path="/projects/:id/meetings" element={<MeetingListPage />} />
         <Route path="/projects/:id/weekly" element={<WeeklyReportPage />} />
+        <Route path="/projects/:id/schedule" element={<SchedulePage />} />
       </Route>
     </Routes>
   );

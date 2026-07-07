@@ -43,6 +43,7 @@ export default function ProjectDetailPage() {
         <Button component={Link} to={`/projects/${id}/materials`} size="small" variant="outlined">物料管理</Button>
         <Button component={Link} to={`/projects/${id}/meetings`} size="small" variant="outlined">会议纪要</Button>
         <Button component={Link} to={`/projects/${id}/weekly`} size="small" variant="outlined">周报</Button>
+        <Button component={Link} to={`/projects/${id}/schedule`} size="small" variant="outlined">排期计划</Button>
       </Box>
 
       <Card>

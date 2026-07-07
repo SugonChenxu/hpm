@@ -849,3 +849,705 @@ P0: '#D32F2F'  P1: '#ED6C02'  P2: '#1565C0'
 ---
 
 > **架构版本**: v1.0 | **下次更新**: 任一模块开发完成/技术栈变更时。
+
+---
+
+# △ 增量：项目计划排期表
+
+> **来源**: `docs/modules/01-项目进度模块-PRD.md` §2.6  
+> **日期**: 2026-07-07  
+> **增量性质**: 在 M1 已有项目管理/阶段管理基础上，新增排期表子功能
+
+---
+
+## △ 增量：项目计划排期表 — 一、数据库增量设计
+
+### 1.1 `schedule_tasks`（排期任务核心表）
+
+```sql
+-- =====================================================
+-- M1 增量：项目计划排期表
+-- =====================================================
+
+CREATE TABLE schedule_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    task_order INTEGER NOT NULL DEFAULT 0,
+    task_type TEXT NOT NULL DEFAULT '普通任务',    -- 普通任务 / 阶段任务 / 节点任务
+    planned_start TEXT,                            -- 计划开始日期 ISO8601
+    planned_end TEXT,                              -- 计划结束日期 ISO8601
+    duration_days INTEGER DEFAULT 1,               -- 工期（天）
+    completion_status TEXT DEFAULT '未开始',        -- 已完成 / 进行中 / 未开始（自动判定，只读）
+    predecessor_ids TEXT DEFAULT '[]',             -- JSON 数组，如 [3,5]，无前置为 []
+    is_locked INTEGER DEFAULT 0,                   -- 0=可编辑 / 1=时间锁定（节点任务专用）
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX idx_schedule_tasks_project ON schedule_tasks(project_id, task_order);
+```
+
+| 字段 | 类型 | 约束 | 说明 |
+|------|------|------|------|
+| `id` | INTEGER | PK, AUTOINCREMENT | 自增主键 |
+| `project_id` | INTEGER | FK→projects.id, CASCADE | 所属项目 |
+| `name` | TEXT | NOT NULL, DEFAULT '' | 任务名称 |
+| `task_order` | INTEGER | NOT NULL, DEFAULT 0 | 排序序号（从 1 开始，插入/移动后重整） |
+| `task_type` | TEXT | NOT NULL, DEFAULT '普通任务' | `普通任务` / `阶段任务` / `节点任务` |
+| `planned_start` | TEXT | — | 计划开始日期（ISO8601 日期） |
+| `planned_end` | TEXT | — | 计划结束日期（ISO8601 日期） |
+| `duration_days` | INTEGER | DEFAULT 1 | 工期（天） |
+| `completion_status` | TEXT | DEFAULT '未开始' | 自动判定（只读） |
+| `predecessor_ids` | TEXT | DEFAULT '[]' | 前置任务 ID 列表，JSON 数组 |
+| `is_locked` | INTEGER | DEFAULT 0 | 时间锁定（节点任务=1） |
+| `created_at` | TEXT | DEFAULT now(localtime) | 创建时间 |
+| `updated_at` | TEXT | DEFAULT now(localtime) | 更新时间 |
+
+### 1.2 `schedule_versions`（排期版本快照）
+
+```sql
+CREATE TABLE schedule_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    version_name TEXT NOT NULL,                    -- 如 2026-07-07_Version1
+    tasks_snapshot TEXT NOT NULL,                  -- JSON 序列化的完整排期任务快照
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX idx_schedule_versions_project ON schedule_versions(project_id);
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | INTEGER PK | 自增主键 |
+| `project_id` | INTEGER FK | 关联 projects.id |
+| `version_name` | TEXT | 自动生成：`{当日日期}_Version{N}`，N 为当日已有版本数 +1 |
+| `tasks_snapshot` | TEXT | `JSON.stringify()` 当前全部 `schedule_tasks` 行 |
+| `created_at` | TEXT | 保存时间 |
+
+### 1.3 与现有表的关系
+
+```
+projects 1 ──── * schedule_tasks         （一个项目可有多个排期任务）
+projects 1 ──── * schedule_versions      （一个项目可有多个排期版本）
+phases   ? ──── ? schedule_tasks         （无直接 FK——排期"阶段任务"是排期表内部层级概念，
+                                          与 phases 表的顶层阶段结构独立，互不耦合）
+```
+
+**关键区分**：
+
+| 维度 | `phases` 表（M1 顶层阶段） | 排期「阶段任务」（`schedule_tasks.task_type='阶段任务'`） |
+|------|---------------------------|--------------------------------------------------------|
+| 层级 | 项目顶层 M1-M5 | 排期表内部组织单元 |
+| 来源 | `phase_templates` 实例化 | 排期模板生成或手动创建 |
+| 用途 | 门禁判定、进度百分比、模块关联锚点 | 排期表视图聚合行（自动汇总子任务时间） |
+| 外键 | M2 tasks / M3 issues 的外键 | 仅在排期表内部使用，无外部 FK |
+
+### 1.4 模板文件约定
+
+- **存储路径**：`server/src/templates/*.json`
+- **发现机制**：系统启动时或调用 API 时读取目录下所有 `.json` 文件
+- **模板格式**：见下方完整示例
+
+#### 曙光标准排期模板：`server/src/templates/曙光标准排期.json`
+
+```json
+{
+  "name": "曙光硬件产品开发标准排期",
+  "description": "基于曙光标准流程 M1-M5 的默认项目排期模板，含 23 个计划节点（5 阶段 + 12 普通任务 + 6 节点/门禁），估算总工期约 100 天",
+  "tasks": [
+    { "name": "M1 预研阶段",               "task_type": "阶段任务", "duration_days": 20, "predecessors": [] },
+    { "name": "需求分析与规格定义",          "task_type": "普通任务", "duration_days": 8,  "predecessors": [] },
+    { "name": "技术可行性评估",             "task_type": "普通任务", "duration_days": 5,  "predecessors": [1] },
+    { "name": "TR1 技术评审",              "task_type": "节点任务", "duration_days": 1,  "predecessors": [2] },
+    { "name": "M2 计划阶段",               "task_type": "阶段任务", "duration_days": 15, "predecessors": [] },
+    { "name": "系统方案设计",               "task_type": "普通任务", "duration_days": 5,  "predecessors": [3] },
+    { "name": "详细设计（硬件/结构/软件）",   "task_type": "普通任务", "duration_days": 8,  "predecessors": [5] },
+    { "name": "DCP1 决策评审",             "task_type": "节点任务", "duration_days": 1,  "predecessors": [6] },
+    { "name": "M3 研发测试阶段",            "task_type": "阶段任务", "duration_days": 45, "predecessors": [] },
+    { "name": "原理图设计与评审",            "task_type": "普通任务", "duration_days": 10, "predecessors": [7] },
+    { "name": "PCB Layout 设计",          "task_type": "普通任务", "duration_days": 12, "predecessors": [9] },
+    { "name": "EVT 工程验证测试",           "task_type": "普通任务", "duration_days": 10, "predecessors": [10] },
+    { "name": "TR2 技术评审",              "task_type": "节点任务", "duration_days": 1,  "predecessors": [11] },
+    { "name": "DVT 设计验证测试",           "task_type": "普通任务", "duration_days": 15, "predecessors": [12] },
+    { "name": "TR3 技术评审",              "task_type": "节点任务", "duration_days": 1,  "predecessors": [13] },
+    { "name": "M4 试制阶段",               "task_type": "阶段任务", "duration_days": 20, "predecessors": [] },
+    { "name": "PVT 小批量试制",            "task_type": "普通任务", "duration_days": 10, "predecessors": [14] },
+    { "name": "MR1 管理评审",              "task_type": "节点任务", "duration_days": 1,  "predecessors": [16] },
+    { "name": "试产问题整改",               "task_type": "普通任务", "duration_days": 8,  "predecessors": [17] },
+    { "name": "M5 新品导入阶段",            "task_type": "阶段任务", "duration_days": 25, "predecessors": [] },
+    { "name": "量产准备（工装/治具/文件）",   "task_type": "普通任务", "duration_days": 10, "predecessors": [18] },
+    { "name": "首批量产与爬坡",             "task_type": "普通任务", "duration_days": 12, "predecessors": [20] },
+    { "name": "G-O 版本发布评审",           "task_type": "节点任务", "duration_days": 1,  "predecessors": [21] }
+  ]
+}
+```
+
+> **模板中 `predecessors` 使用 tasks 数组零基索引。** 生成时系统：
+> 1. 将所有索引映射为实际数据库 ID
+> 2. 以当日日期为 M1 预研阶段基准，逐任务平移计算所有 `planned_start` / `planned_end`
+> 3. 阶段任务的日期在全部生成完毕后由聚合逻辑二次计算
+
+---
+
+## △ 增量：项目计划排期表 — 二、新增 API 路由
+
+### 2.1 路由文件
+
+- **文件**：`server/src/routes/schedule.js`
+- **挂载**：在 `server/src/index.js` 中新增 `app.use('/api', scheduleRouter)`
+
+### 2.2 完整端点列表（13 个）
+
+#### 端点 1：获取当前排期任务列表
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `GET` |
+| **Path** | `/api/projects/:id/schedule` |
+| **说明** | 按 `task_order` 升序返回项目全部排期任务 |
+| **Query** | 无 |
+| **Response** | `{ "ok": true, "data": [ { "id":1, "project_id":1, "name":"M1 预研阶段", ... }, ... ] }` |
+| **错误** | 404 — 项目不存在 |
+
+#### 端点 2：一键生成排期
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `POST` |
+| **Path** | `/api/projects/:id/schedule/generate` |
+| **说明** | 从指定模板生成排期任务列表，以当日日期为基准 |
+| **Body** | `{ "template_name": "曙光标准排期" }` |
+| **Response** | `{ "ok": true, "data": [ ...新创建的排期任务列表... ] }` |
+| **逻辑** | ① 读取 `server/src/templates/{template_name}.json`；② 清空项目现有排期任务；③ 遍历模板 tasks，以 `new Date()` 为首任务 `planned_start`，按 `duration_days` 和 `predecessors` 平移计算每个任务日期；④ 批量 INSERT；⑤ 计算阶段任务聚合日期；⑥ 返回完整列表 |
+| **错误** | 400 — 模板不存在 / 模板格式错误；404 — 项目不存在 |
+
+#### 端点 3：更新单个排期任务
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `PUT` |
+| **Path** | `/api/schedule-tasks/:id` |
+| **说明** | 行内编辑保存 |
+| **Body** | `{ "name": "新名称" }` 或 `{ "planned_start": "2026-07-15" }` 或 `{ "duration_days": 10 }` 等（部分更新） |
+| **Response** | `{ "ok": true, "data": { ...更新后的任务... } }` |
+| **后端校验** | 节点任务不可修改 `planned_start` / `duration_days`（`is_locked=1`）；阶段任务不可修改 `planned_start` / `planned_end` / `duration_days`（只读计算）；日期修改后触发级联传播；前置依赖循环检测 |
+| **错误** | 400 — 校验失败（含具体字段）；404 — 任务不存在 |
+
+#### 端点 4：插入新任务
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `POST` |
+| **Path** | `/api/projects/:id/schedule/insert` |
+| **说明** | 在指定任务上方/下方插入空白行 |
+| **Body** | `{ "position": "above", "reference_id": 5 }` |
+| **Response** | `{ "ok": true, "data": { ...新任务... } }` |
+| **逻辑** | ① 创建默认空白任务（`name=""`, `task_type="普通任务"`, `duration_days=1`）；② 插入到指定位置；③ 后续所有任务的 `task_order` 重新编号 |
+| **错误** | 400 — reference_id 不存在 |
+
+#### 端点 5：删除排期任务
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `DELETE` |
+| **Path** | `/api/schedule-tasks/:id` |
+| **说明** | 物理删除（前端已弹出 ConfirmDialog） |
+| **Response** | `{ "ok": true }` |
+| **逻辑** | ① 物理删除；② 检查是否有其他任务以被删任务为前置，自动清理 `predecessor_ids`；③ 重新编号 `task_order`；④ 重新计算阶段任务聚合日期 |
+| **错误** | 404 — 任务不存在 |
+
+#### 端点 6：升级/降级调整排序
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `PUT` |
+| **Path** | `/api/schedule-tasks/:id/move` |
+| **说明** | 与上方/下方任务交换 `task_order` |
+| **Body** | `{ "direction": "up" }` 或 `{ "direction": "down" }` |
+| **Response** | `{ "ok": true, "data": [ ...重排后的任务列表... ] }` |
+| **逻辑** | ① 找到相邻行；② 交换 `task_order`；③ 重新计算阶段任务聚合范围 |
+| **错误** | 400 — 已是首行/末行无法移动 |
+
+#### 端点 7：更新前置任务
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `PUT` |
+| **Path** | `/api/schedule-tasks/:id/predecessors` |
+| **说明** | 设置前置依赖 |
+| **Body** | `{ "predecessor_ids": [3, 5] }` |
+| **Response** | `{ "ok": true, "data": { ...更新后任务... } }` |
+| **后端校验** | 循环依赖检测（见 §六 共享知识增量）；所有 `predecessor_ids` 必须属于同一 `project_id` |
+| **联动** | 设置前置后重新计算 `planned_start = max(所有前置.planned_end) + 1 天`，触发级联传播 |
+| **错误** | 400 — 循环依赖 / ID 无效 |
+
+#### 端点 8：列出可用模板
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `GET` |
+| **Path** | `/api/templates/schedule` |
+| **说明** | 返回 `server/src/templates/` 下所有 `.json` 模板文件的摘要列表 |
+| **Response** | `{ "ok": true, "data": [ { "file": "曙光标准排期.json", "name": "曙光硬件产品开发标准排期", "description": "...", "task_count": 23 }, ... ] }` |
+| **逻辑** | 读取目录 → 过滤 `.json` → 解析每个文件 → 提取 `name`/`description`/`tasks.length` |
+
+#### 端点 9：保存版本快照
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `POST` |
+| **Path** | `/api/projects/:id/schedule/save` |
+| **说明** | 将当前全部排期任务序列化保存到 `schedule_versions` |
+| **Body** | 无 |
+| **Response** | `{ "ok": true, "data": { "id": 1, "version_name": "2026-07-07_Version1" } }` |
+| **逻辑** | ① 查询今日已有版本数 N；② `version_name = 今日日期 + '_Version' + (N+1)`；③ `tasks_snapshot = JSON.stringify(当前全部 schedule_tasks 行)`；④ INSERT |
+| **错误** | 400 — 项目无排期数据可保存 |
+
+#### 端点 10：获取版本历史
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `GET` |
+| **Path** | `/api/projects/:id/schedule/versions` |
+| **说明** | 版本列表（不含快照内容，仅摘要） |
+| **Response** | `{ "ok": true, "data": [ { "id":1, "version_name":"2026-07-07_Version1", "created_at":"2026-07-07T10:30:00" }, ... ] }` |
+
+#### 端点 11：查看版本快照详情
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `GET` |
+| **Path** | `/api/projects/:id/schedule/versions/:vid` |
+| **说明** | 返回完整快照（含 `tasks_snapshot` JSON） |
+| **Response** | `{ "ok": true, "data": { "id":1, "version_name":"...", "tasks_snapshot": "[{...},...]", "created_at":"..." } }` |
+| **错误** | 404 — 版本不存在 |
+
+#### 端点 12：恢复版本
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `POST` |
+| **Path** | `/api/projects/:id/schedule/versions/:vid/restore` |
+| **说明** | 用快照数据替换当前 `schedule_tasks` |
+| **Body** | 无 |
+| **Response** | `{ "ok": true, "data": [ ...恢复后的任务列表... ] }` |
+| **逻辑** | ① 解析 `tasks_snapshot` JSON；② 事务中先 DELETE 当前项目全部排期任务，再批量 INSERT 快照数据（保留原 ID）；③ 返回恢复后的列表 |
+| **警告** | 当前未保存的修改将丢失 |
+| **错误** | 404 — 版本不存在 |
+
+#### 端点 13：导出 Excel
+
+| 属性 | 值 |
+|------|-----|
+| **Method** | `GET` |
+| **Path** | `/api/projects/:id/schedule/export` |
+| **说明** | 导出当前排期表为 `.xlsx` 文件 |
+| **Response Header** | `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` |
+| **Response Header** | `Content-Disposition: attachment; filename="{项目代号}_排期表_{日期}.xlsx"` |
+| **Response Body** | Excel 二进制流 |
+| **实现** | 使用 `exceljs` 库在服务端构建 Workbook → 设置列宽和样式 → 填入数据 → 写入 `res` 流 |
+| **公式导出策略** | 见 PRD §2.6.10——开始/结束日期列导出 `=DATE()` 或 `=WORKDAY()` 公式而非静态值 |
+| **错误** | 400 — 项目无排期数据；404 — 项目不存在 |
+
+---
+
+## △ 增量：项目计划排期表 — 三、前端设计增量
+
+### 3.1 新增路由
+
+| 路由 | 页面组件 | 说明 |
+|------|----------|------|
+| `/projects/:id/schedule` | `SchedulePage` | 排期表主页面 |
+
+在 `ProjectDetailPage` 的子模块 `Tabs` 中新增「排期」标签（位于「概览」和「任务」之间）。
+
+### 3.2 新增文件清单
+
+```
+client/src/
+├── pages/
+│   └── SchedulePage.jsx                    # 排期表主页面
+├── components/
+│   └── schedule/
+│       ├── ScheduleToolbar.jsx             # 顶部工具栏
+│       ├── ScheduleTable.jsx               # 类 Excel 可编辑表格（MUI DataGrid）
+│       ├── ContextMenu.jsx                 # 右键菜单组件
+│       ├── PredecessorDialog.jsx           # 前置任务多选弹窗
+│       ├── VersionHistoryDialog.jsx        # 版本历史查看 & 恢复
+│       ├── ProjectSelector.jsx             # 顶部项目切换下拉框
+│       ├── CreatePlanButton.jsx            # 一键创建计划按钮
+│       ├── ExportButton.jsx                # 导出 Excel 按钮
+│       └── SaveVersionButton.jsx           # 保存版本按钮
+├── hooks/
+│   └── useSchedule.js                      # 排期数据 CRUD + 级联状态管理
+├── utils/
+│   └── schedule-date.js                    # 日期级联 & 前置依赖计算纯函数
+└── api/
+    └── schedule.js                         # 排期 API 请求封装
+```
+
+### 3.3 SchedulePage 完整组件树
+
+```
+SchedulePage
+├── ScheduleToolbar
+│   ├── ProjectSelector                     # Select 下拉切换项目（加载对应排期数据）
+│   ├── CreateProjectButton                 # Button(outlined) → /projects/new
+│   ├── CreatePlanButton                    # 「从模板生成」Button → POST generate
+│   ├── SaveVersionButton                   # 「保存版本」Button → POST save
+│   ├── VersionHistoryDropdown              # 「版本历史」下拉 → GET versions → VersionHistoryDialog
+│   └── ExportButton                        # 「导出 Excel」Button → GET export
+├── ScheduleTable (MUI DataGrid, editable)
+│   ├── 列1: 序号 (task_order, 60px, 只读)
+│   ├── 列2: 任务名称 (name, 240px, InlineTextField)
+│   ├── 列3: 开始时间 (planned_start, 130px, InlineDatePicker)
+│   ├── 列4: 完成时间 (planned_end, 130px, InlineDatePicker)
+│   ├── 列5: 工期 (duration_days, 80px, InlineInputNumber)
+│   ├── 列6: 完成情况 (completion_status, 100px, CompletionStatusTag)
+│   └── 列7: 前置任务 (predecessor_ids, 160px, PredecessorLink)
+├── ContextMenu                             # 右键弹出（MUI Menu）
+│   ├── 修改任务类型 → 子菜单: 普通任务/阶段任务/节点任务
+│   ├── 升级 (ArrowUpward, 首行 disabled)
+│   ├── 降级 (ArrowDownward, 末行 disabled)
+│   ├── 前置任务设置 (AccountTree) → PredecessorDialog
+│   ├── 在上方插入 (Add)
+│   ├── 在下方插入 (Add)
+│   └── 删除任务 (Delete, red)
+├── PredecessorDialog                       # Dialog + Checkbox 列表多选前置任务
+├── VersionHistoryDialog                    # 版本列表 + 恢复按钮
+└── ConfirmDialog                           # 复用 shared/ConfirmDialog（删除确认/恢复确认）
+```
+
+### 3.4 关键组件详设
+
+#### 3.4.1 `ScheduleTable`（类 Excel 表格）
+
+| 属性 | 说明 |
+|------|------|
+| **基础组件** | MUI `DataGrid`（`@mui/x-data-grid`），模式 `editMode="cell"` |
+| **行模型** | 每行对应一条 `schedule_tasks` 记录 |
+| **列定义** | 7 列，见下方 |
+| **右键** | `onCellContextMenu` → 打开 `ContextMenu`（传入选中的行 `id` 和 `params`） |
+| **行样式** | 阶段任务行：`fontWeight: 700` + 浅蓝背景 `#E3F2FD`；已完成行：`opacity: 0.45`；节点任务行：行首 ◆ 图标 |
+
+**各列编辑控件**：
+
+| 列 | 编辑控件 | `renderEditCell` | 保存触发 |
+|----|----------|------------------|----------|
+| 名称 | MUI `TextField` (内联) | `renderEditSingleSelectCell` 风格 | `onCellEditStop` → `PUT /api/schedule-tasks/:id` |
+| 开始日期 | MUI `DatePicker` (`@mui/x-date-pickers`) | 自定义 `EditDateCell` | `onAccept` → PUT，触发级联 |
+| 结束日期 | MUI `DatePicker` | 同上 | 同上 |
+| 工期 | MUI `TextField type="number"` | 内联 | `onCellEditStop` → PUT，触发级联 |
+| 前置任务 | 只读展示（名称列表），通过右键菜单设置 | — | — |
+
+#### 3.4.2 `ContextMenu`（右键菜单）
+
+- **触发**：`ScheduleTable` 中 `onCellContextMenu` 事件，`event.preventDefault()` 阻止浏览器默认菜单
+- **定位**：`Menu` 的 `anchorPosition` 设为鼠标坐标 `{ top: event.clientY, left: event.clientX }`
+- **菜单项**（7 项）：
+
+| 菜单项 | Icon | `onClick` | 禁用条件 |
+|--------|------|-----------|----------|
+| 修改任务类型 | `SwapHoriz` | 打开子菜单（Nested Menu）→ `PUT /api/schedule-tasks/:id { task_type }` | — |
+| 升级 | `ArrowUpward` | `PUT /api/schedule-tasks/:id/move { direction:"up" }` | `task_order === 1` |
+| 降级 | `ArrowDownward` | `PUT /api/schedule-tasks/:id/move { direction:"down" }` | 最后一行 |
+| 前置任务设置 | `AccountTree` | 打开 `PredecessorDialog` | — |
+| 在上方插入 | `Add` | `POST /api/projects/:id/schedule/insert { position:"above", reference_id }` | — |
+| 在下方插入 | `Add` | `POST /api/projects/:id/schedule/insert { position:"below", reference_id }` | — |
+| 删除任务 | `Delete` (red) | 弹出 `ConfirmDialog` → `DELETE /api/schedule-tasks/:id` | — |
+
+#### 3.4.3 `ExportButton`（导出 Excel）
+
+- **组件**：`Button variant="outlined" startIcon={<FileDownload />}`
+- **实现方案**：前端调用 `GET /api/projects/:id/schedule/export`，后端返回 Excel 文件流。前端使用 `file-saver` 的 `saveAs(blob, filename)` 触发下载。
+- **备选方案**（前端导出）：若后端暂未就绪，前端使用 `exceljs` 直接在浏览器构建 `.xlsx` 并触发下载。
+
+#### 3.4.4 `ProjectSelector`（项目切换下拉框）
+
+- **组件**：MUI `Select`（或 `Autocomplete`），位于 `ScheduleToolbar` 最左侧
+- **数据源**：`GET /api/projects` 返回的项目列表
+- **行为**：切换项目 → `navigate(/projects/${newId}/schedule)`，页面重新加载对应项目的排期数据
+- **右侧伴生**：`CreateProjectButton`（`Button variant="outlined"` → `/projects/new`）
+
+#### 3.4.5 `CreatePlanButton`（一键创建计划）
+
+- **组件**：`Button variant="contained" startIcon={<AutoFixHigh />}`
+- **点击流程**：
+  1. 若项目已有排期数据 → 弹出 `ConfirmDialog`「当前排期数据将被清空并重新生成，是否继续？」
+  2. 弹出模板选择 `Dialog`（列出 `GET /api/templates/schedule` 返回的模板列表）
+  3. 选择模板 → `POST /api/projects/:id/schedule/generate { template_name }`
+  4. 成功后刷新表格，`Snackbar` 提示「已从模板生成排期，共 N 个节点」
+
+---
+
+## △ 增量：项目计划排期表 — 四、依赖库增量
+
+### 4.1 前端新增依赖
+
+```json
+{
+  "dependencies": {
+    "@mui/x-date-pickers": "^7.0.0",
+    "dayjs": "^1.11.0",
+    "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5"
+  }
+}
+```
+
+| 包 | 版本 | 用途 |
+|----|------|------|
+| `@mui/x-date-pickers` | `^7.0.0` | 开始/结束日期列的 DatePicker 编辑控件 |
+| `dayjs` | `^1.11.0` | 日期计算与格式化（已在 T0 依赖中，确认版本） |
+| `exceljs` | `^4.4.0` | 前端导出 Excel（备选方案）——构建 .xlsx 含公式 |
+| `file-saver` | `^2.0.5` | 触发浏览器文件下载（配合 exceljs 或后端 blob） |
+
+### 4.2 后端新增依赖
+
+```json
+{
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}
+```
+
+| 包 | 版本 | 用途 |
+|----|------|------|
+| `exceljs` | `^4.4.0` | 服务端 `GET /api/projects/:id/schedule/export` 构建 Excel 文件流（含 DATE/WORKDAY 公式） |
+
+### 4.3 无需新增
+
+- **表格**：MUI DataGrid（`@mui/x-data-grid`）已在 T0 依赖中，其 `editable` 模式原生支持行内编辑
+- **右键菜单**：MUI `Menu` 组件（`@mui/material` 内置），无需额外依赖
+- **日期处理**：`dayjs` 已在 T0 依赖中
+- **循环依赖检测**：纯算法实现（见 §六），不引入图库
+
+---
+
+## △ 增量：项目计划排期表 — 五、实现任务列表
+
+> 以下任务属于 T1（M1 项目进度模块）的增量子任务组 **T1-A**，建议在 T1.1–T1.8 之后实施。
+
+| # | 任务 | 依赖 | 预估文件 |
+|:--:|------|:--:|------|
+| **T1-A.1** | 数据库增量 | T0.3 | `server/src/db.js`（追加 DDL 执行） |
+| **T1-A.2** | 模板文件 | — | `server/src/templates/曙光标准排期.json` |
+| **T1-A.3** | 后端 schedule.js 路由（13 端点） | T1-A.1 | `server/src/routes/schedule.js`, `server/src/index.js`（挂载路由） |
+| **T1-A.4** | SchedulePage 主框架 + ProjectSelector + CreatePlanButton | T0.5, T1-A.3 | `client/src/pages/SchedulePage.jsx`, `client/src/components/schedule/ProjectSelector.jsx`, `client/src/components/schedule/CreatePlanButton.jsx`, `client/src/api/schedule.js`, `client/src/hooks/useSchedule.js` |
+| **T1-A.5** | ScheduleTable 类 Excel 表格 + 7 列 + 行内编辑 | T1-A.4 | `client/src/components/schedule/ScheduleTable.jsx`, `client/src/components/schedule/ScheduleToolbar.jsx` |
+| **T1-A.6** | ContextMenu 右键菜单（7 项功能） | T1-A.5 | `client/src/components/schedule/ContextMenu.jsx` |
+| **T1-A.7** | 日期联动逻辑 | T1-A.5 | `client/src/utils/schedule-date.js` |
+| **T1-A.8** | 完成情况自动判定 + Tag 样式 + 行样式 | T1-A.5 | `client/src/components/schedule/ScheduleTable.jsx`（追加列 renderer） |
+| **T1-A.9** | 前置任务选择器 + 循环依赖检测 | T1-A.6, T1-A.3 | `client/src/components/schedule/PredecessorDialog.jsx`, `server/src/routes/schedule.js`（循环检测逻辑） |
+| **T1-A.10** | 导出 Excel 按钮 + exceljs 实现 | T1-A.5, T1-A.3 | `client/src/components/schedule/ExportButton.jsx`, `server/src/routes/schedule.js`（export 端点） |
+| **T1-A.11** | 保存与版本管理流程 | T1-A.3, T1-A.5 | `client/src/components/schedule/SaveVersionButton.jsx`, `client/src/components/schedule/VersionHistoryDialog.jsx`, `server/src/routes/schedule.js`（save/versions/restore 端点） |
+
+### 任务详情
+
+#### T1-A.1：数据库增量（DDL 执行）
+
+- 在 `server/src/db.js` 中追加 `schedule_tasks` 和 `schedule_versions` 两张表的建表 SQL（含索引）
+- 验证 DDL 在 SQLite 中执行无误
+- **不涉及** seed 数据（模板是 JSON 文件，非数据库行）
+
+#### T1-A.2：模板文件
+
+- 创建 `server/src/templates/` 目录
+- 写入 `曙光标准排期.json`（内容见 §1.4）
+- 确保 JSON 格式合法、`predecessors` 索引引用正确
+
+#### T1-A.3：后端 schedule.js 路由
+
+- 新建 `server/src/routes/schedule.js`
+- 实现全部 13 个端点（§2.2）
+- 在 `server/src/index.js` 中挂载路由
+- 关键后端逻辑：
+  - `generate`：模板解析 + 日期平移 + 批量 INSERT + 阶段聚合
+  - `PUT /:id`：字段校验 + 节点/阶段任务编辑保护 + 级联传播 + 循环检测
+  - `export`：exceljs 构建 Workbook（含公式列）
+  - `save` / `versions` / `restore`：版本管理
+
+#### T1-A.4：SchedulePage 主框架
+
+- 新建 `SchedulePage.jsx`：`useParams()` 获取 `projectId`，加载排期数据
+- `ProjectSelector.jsx`：`GET /api/projects` → `Select` 下拉，切换跳转
+- `CreatePlanButton.jsx`：模板选择 Dialog → `POST generate`
+- `client/src/api/schedule.js`：封装 13 个 API 调用函数
+- `client/src/hooks/useSchedule.js`：排期数据状态管理（加载/乐观更新/级联）
+- 在 `App.jsx` 新增路由 `/projects/:id/schedule`
+- 在 `ProjectDetailPage.jsx` 的 Tabs 中新增「排期」标签
+
+#### T1-A.5：ScheduleTable 类 Excel 表格
+
+- 基于 MUI DataGrid `editable` 模式，`editMode="cell"`
+- 7 列配置：序号/名称/开始时间/完成时间/工期/完成情况/前置任务
+- 名称列：`renderEditCell` 使用 `TextField`，空值前端拦截
+- 日期列：自定义 `EditDateCell`，使用 `@mui/x-date-pickers` 的 `DatePicker`
+- 工期列：`TextField type="number"`，`onCellEditStop` 触发级联
+- 前置任务列：只读展示，逗号分隔名称，点击弹出 PredecessorDialog
+- 阶段任务行：`fontWeight: 700` + `bgcolor: #E3F2FD`
+- 节点任务行：行首 ◆ 图标
+- 已完成行：`opacity: 0.45`
+
+#### T1-A.6：ContextMenu 右键菜单
+
+- `onCellContextMenu` 事件 → `event.preventDefault()` → 定位 `Menu`
+- 7 项菜单（含 1 个子菜单「修改任务类型」）
+- 升级/降级调用 `PUT /move`
+- 插入调用 `POST /insert`
+- 删除弹出 `ConfirmDialog` → `DELETE`
+- 前置任务设置 → 打开 `PredecessorDialog`
+
+#### T1-A.7：日期联动逻辑
+
+- 文件：`client/src/utils/schedule-date.js`
+- 纯函数导出：
+  - `cascadeStartChange(task, newStart, allTasks)` → 返回受影响任务列表
+  - `cascadeEndChange(task, newEnd, allTasks)` → 返回受影响任务列表
+  - `cascadeDurationChange(task, newDuration, allTasks)` → 返回受影响任务列表
+  - `propagateToSuccessors(task, allTasks)` → BFS 递归传播
+  - `recalcPhaseAggregation(phaseTask, allTasks)` → 重新计算阶段聚合日期
+- 前端在编辑保存前调用这些函数计算预览值
+- 后端在 PUT 时重新执行相同的级联逻辑以确保数据一致性
+
+#### T1-A.8：完成情况自动判定 + Tag 样式 + 行样式
+
+- `completion_status` 列使用自定义 `renderCell`，渲染 MUI `Chip`
+- 判定逻辑（每次渲染时计算，不存为独立状态）：
+
+| 条件 | 状态 | Chip 样式 | 行样式 |
+|------|------|-----------|--------|
+| `planned_end < today` | 已完成 | `<Chip label="已完成" color="default" size="small" />` | `opacity: 0.45` |
+| `planned_start ≤ today ≤ planned_end` | 进行中 | `<Chip label="进行中" color="primary" size="small" />` | 正常 |
+| `planned_start > today` | 未开始 | `<Chip label="未开始" variant="outlined" size="small" />` | 正常 |
+
+- 刷新时机：页面加载、每次编辑保存后、`useSchedule` 数据更新时
+
+#### T1-A.9：前置任务选择器 + 循环依赖检测
+
+- `PredecessorDialog.jsx`：`Dialog` + `List` + `Checkbox`，列出当前项目所有排期任务（排除自身和会导致环的任务）
+- 前端过滤：调用 `schedule-date.js` 中的 `detectCycle(taskId, candidateId, allTasks)` 过滤会导致环的候选项
+- 多选确认 → `PUT /api/schedule-tasks/:id/predecessors { predecessor_ids }`
+- 后端二次校验：执行 `detectCycle()`，返回 400 若检测到环
+
+#### T1-A.10：导出 Excel 按钮
+
+- `ExportButton.jsx`：`Button variant="outlined" startIcon={<FileDownload />}`
+- 点击 → `GET /api/projects/:id/schedule/export`（后端返回 Excel 文件流）
+- 前端使用 `fetch` 获取 blob → `saveAs(blob, filename)`（`file-saver`）
+- 后端实现：`exceljs` 构建 Workbook → 设置列宽 → 填入数据 → 写入响应流
+- 公式导出策略（§六 共享知识增量详述）
+
+#### T1-A.11：保存与版本管理流程
+
+- `SaveVersionButton.jsx`：`Button variant="outlined" startIcon={<Save />}`
+- 点击 → `POST /api/projects/:id/schedule/save` → `Snackbar`「已保存：2026-07-07_Version1」
+- `VersionHistoryDropdown`：工具栏下拉按钮 → `GET /api/projects/:id/schedule/versions` → 弹出 `VersionHistoryDialog`
+- `VersionHistoryDialog.jsx`：列表展示所有版本 → 点击「查看」→ 表格灰显只读 → 「恢复此版本」按钮 → `ConfirmDialog` → `POST restore`
+- 恢复后刷新表格并提示「已恢复至 2026-07-07_Version1」
+
+---
+
+## △ 增量：项目计划排期表 — 六、共享知识增量
+
+### 6.1 日期联动公式总结
+
+| 操作 | 联动规则 | 公式 |
+|------|----------|------|
+| 修改开始日期 | 结束日期联动；工期不变 | `planned_end = new_planned_start + duration_days` |
+| 修改结束日期 | 开始日期不变；工期联动 | `duration_days = planned_end - planned_start` |
+| 修改工期 | 开始日期不变；结束日期联动 | `planned_end = planned_start + new_duration_days` |
+| 多前置任务 | 取所有前置最晚结束日期 +1 天 | `planned_start = MAX(所有前置.planned_end) + 1 天` |
+| 阶段任务 | 聚合子任务最早/最晚 | `planned_start = MIN(子任务.planned_start)`, `planned_end = MAX(子任务.planned_end)` |
+| 级联传播 | BFS 遍历后置依赖链 | 递归应用上述规则直到无更多受影响任务 |
+
+### 6.2 任务类型枚举
+
+| 类型 | 存储值 | 时间行为 | 编辑限制 |
+|------|--------|----------|----------|
+| 普通任务 | `普通任务` | 标准级联联动 | 无限制 |
+| 阶段任务 | `阶段任务` | 聚合型：自动取子任务 MIN/MAX | 开始/结束/工期只读；名称/类型可编辑 |
+| 节点任务 | `节点任务` | 固定 1 天，`is_locked=1` | 开始日期/工期不可变更；仅名称可编辑 |
+
+### 6.3 完成情况计算伪代码
+
+```js
+/**
+ * 根据当前日期自动判定排期任务的完成情况
+ * @param {Object} task - { planned_start, planned_end }
+ * @param {Date} today - 当前日期（默认 new Date()）
+ * @returns {'已完成'|'进行中'|'未开始'}
+ */
+function calcCompletionStatus(task, today = new Date()) {
+  const start = dayjs(task.planned_start).startOf('day');
+  const end   = dayjs(task.planned_end).startOf('day');
+  const now   = dayjs(today).startOf('day');
+
+  if (end.isBefore(now))        return '已完成';
+  if (start.isAfter(now))       return '未开始';
+  // start <= now <= end
+  return '进行中';
+}
+```
+
+### 6.4 前置任务循环依赖检测算法
+
+```
+算法：detectCycle(graph, startId, newEdgeTargetId)
+  输入：
+    graph     — 当前所有排期任务的前置关系 Map<id, predecessor_ids[]>
+    startId   — 被添加前置的任务 ID
+    newEdgeTargetId — 候选前置任务 ID（即准备添加为 startId 的前置）
+  输出：true（存在环）/ false（无环）
+
+  步骤：
+    1. 构建临时的邻接表 tempGraph = clone(graph)
+    2. tempGraph.get(startId).push(newEdgeTargetId)  // 模拟添加新边
+    3. visited = Set()
+    4. stack = [newEdgeTargetId]
+    5. WHILE stack 非空:
+         current = stack.pop()
+         IF current === startId: RETURN true    // 发现环
+         IF visited.has(current): CONTINUE
+         visited.add(current)
+         FOR EACH pred IN tempGraph.get(current):
+           stack.push(pred)
+    6. RETURN false
+```
+
+> **实现位置**：前端 `client/src/utils/schedule-date.js`（用于前置任务选择器过滤候选项） + 后端 `server/src/routes/schedule.js`（PUT predecessors 时二次校验）。
+
+### 6.5 Excel 导出公式映射
+
+排期表导出 Excel 时，将以下三类逻辑关系映射为 Excel 原生公式：
+
+| 关系类型 | 排期逻辑 | Excel 公式（伪代码） |
+|----------|----------|---------------------|
+| 日期级联 | `planned_end = planned_start + duration_days` | `=C2+D2`（C=开始日期列, D=工期列，同行） |
+| 前置依赖 | `planned_start = 前置.planned_end + 1` | `=WORKDAY(INDEX(E:E, MATCH(...)), 1)` |
+| 阶段聚合 | `planned_start = MIN(子任务开始)` / `planned_end = MAX(子任务结束)` | `=MIN(C4:C8)` / `=MAX(E4:E8)` |
+
+### 6.6 新增状态枚举
+
+| 领域 | 枚举值 | 对应数据库字段 |
+|------|--------|---------------|
+| 排期任务类型 | 普通任务, 阶段任务, 节点任务 | `schedule_tasks.task_type` |
+| 排期完成情况 | 已完成, 进行中, 未开始 | `schedule_tasks.completion_status` |
+
+### 6.7 颜色扩展
+
+```js
+// 排期表专用色（追加到 MUI Theme）
+schedule: {
+  phaseRow: '#E3F2FD',       // 阶段任务行背景色（浅蓝 50）
+  completedRow: 'opacity: 0.45', // 已完成行透明度
+  milestoneIcon: '#1565C0',  // 节点任务 ◆ 图标色
+}
+```
+
+---
+
+> **增量架构版本**: v1.0-Δ-schedule | **基于**: architecture.md v1.0 | **下次更新**: 排期表子功能开发完成后。

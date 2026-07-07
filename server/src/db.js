@@ -190,6 +190,37 @@ CREATE INDEX IF NOT EXISTS idx_materials_delivery ON materials(planned_delivery)
 CREATE INDEX IF NOT EXISTS idx_meetings_project ON meetings(project_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_time ON meetings(start_time);
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_project ON weekly_reports(project_id, week_start);
+
+-- =====================================================
+-- M1 增量：项目计划排期表
+-- =====================================================
+
+CREATE TABLE IF NOT EXISTS schedule_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    task_order INTEGER NOT NULL DEFAULT 0,
+    task_type TEXT NOT NULL DEFAULT '普通任务',
+    planned_start TEXT,
+    planned_end TEXT,
+    duration_days INTEGER DEFAULT 1,
+    completion_status TEXT DEFAULT '未开始',
+    predecessor_ids TEXT DEFAULT '[]',
+    is_locked INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS schedule_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    version_name TEXT NOT NULL,
+    tasks_snapshot TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_schedule_tasks_project ON schedule_tasks(project_id, task_order);
+CREATE INDEX IF NOT EXISTS idx_schedule_versions_project ON schedule_versions(project_id);
 `);
 
 export default db;

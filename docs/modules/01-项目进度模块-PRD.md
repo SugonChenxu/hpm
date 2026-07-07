@@ -145,16 +145,406 @@
 - **创建项目**：分步对话框——Step1 基本信息 → Step2 选择模板 → Step3 确认创建
 
 
-项目进度：
+【项目进度】功能开发
 核心功能是进行项目计划的排期，以及后续在项目出现延期的时候，可以调整前置任务完成时间，后续相关任务的排期也快速变化。
+
 我的想法是这样，首先我们会有一个模板，因为每个项目的开发控制流程都差不多，这样可以快速进行项目排期
+
 最后的呈现形式大概率是类似excel表格的形式呈现，表格逐列分别为序号，任务名称，开始时间，完成时间，工期，完成情况，前置任务，逐行位各项任务
 
-任务类型有三种，普通任务，项目组，里程碑
 
-普通任务结束时间，正常为开始时间+工期，修改工期，结束时间自动修改
+前置任务功能：
+功能清单：
+1.一键创建计划：以今日日期为项目开始基准，使用内置模版平移生成全部排期节点；模版来源设置一个文件，后续我自己更改；
+2.表格视图：任务行 序号，任务名称，开始时间，完成时间，工期，完成情况，前置任务
+  任务名：点击进入编辑，回车/失焦保存，空值不删除
+- 开始日期：点击弹出 DatePicker，修改后联动周期和后续节点；
+- 结束日期：点击弹出 DatePicker，与开始日期 + 周期保持联动
+- 周期(天)：点击进入 InputNumber，修改后联动结束日期
+- 完成情况：自动判定，Tag 展示（已完成/进行中/未开始）
+- 前置任务：任务选择前置任务后，开始时间变为前置任务结束时间+1天，具有多个前置任务时，为多个任务的最晚结束时间+1天
+3.右键功能：对任务右键点击，功能包括修改任务类型、升级、降级、前置任务设置、在上方插入任务、在下方插入任务、删除任务
+4.状态自动判定
 
-项目组时间阶段，为组内子任务最长开始时间和最晚结束时间，靠系统自动逻辑判断，不可以认为变更
+| 状态 | 判定规则 | 标签样式 |
+|------|---------|---------|
+| 已完成 | 结束日期 < 今天 | 灰色 Tag + 行 45% 透明度 |
+| 进行中 | 开始日期 ≤ 今天 ≤ 结束日期 | 蓝色 Tag |
+| 未开始 | 开始日期 > 今天 | 灰色 Tag |
+5.任务类型：任务类型有三种，普通任务，阶段任务，节点任务
+	普通任务，默认逻辑
+	阶段任务，开始时间、结束时间，为项目组内所有任务最早开始时间至最晚结束时间
+	节点任务，默认1天，默认锁定时间不可变更
 
+6.日期修改级联：
+	修改开始日期，结束时间自动在开始日期基础上+工期；
+	修改结束日期，开始时间不变，工期变化
+	修改工期，结束时间变化
+	阶段任务，节点任务逻辑按照上述
+7.计划保存：设置计划保存按钮，保存的计划存在本地，每个变更的计划版本按照 日期+VersionX 命名
+8.导出excel：
+  任务名称存文本值，日期存日期值，工期存数值，日期包含函数关系的要体现出函数关系
 
+---
+
+### 2.6 项目计划（Excel 排期表）
+
+> **概述**：在现有项目管理/阶段管理基础上，新增类 Excel 表格的精细化项目排期能力。排期表以「任务行」为粒度管理每个计划条目的时间、工期、依赖与状态，支持一键从模板生成、行内编辑、前置依赖联动、版本快照和 Excel 导出。
+
+---
+
+#### 2.6.1 一键创建计划
+
+| 属性 | 说明 |
+|------|------|
+| **触发** | 在排期页面点击「从模板生成」按钮 |
+| **基准日期** | 以当日日期（`new Date()`）作为项目首任务开始基准 |
+| **模板来源** | `server/src/templates/` 目录下的 JSON 配置文件，支持用户自行新增/修改 |
+| **生成逻辑** | 遍历模板中的任务列表，按 `duration_days` 和 `predecessors`（模板内序号引用）平移计算每个任务节点的 `planned_start` / `planned_end` |
+
+**模板 JSON 结构示例**（`server/src/templates/曙光标准排期.json`）：
+
+```json
+{
+  "name": "曙光硬件产品开发标准排期",
+  "description": "基于曙光标准流程的默认项目排期模板",
+  "tasks": [
+    { "name": "M1 预研阶段",       "task_type": "阶段任务", "duration_days": 20, "predecessors": [] },
+    { "name": "需求分析",          "task_type": "普通任务", "duration_days": 8,  "predecessors": [] },
+    { "name": "技术可行性评估",     "task_type": "普通任务", "duration_days": 5,  "predecessors": [1] },
+    { "name": "TR1 技术评审",      "task_type": "节点任务", "duration_days": 1,  "predecessors": [2] },
+    { "name": "M2 计划阶段",       "task_type": "阶段任务", "duration_days": 15, "predecessors": [] },
+    { "name": "详细设计",          "task_type": "普通任务", "duration_days": 10, "predecessors": [3] },
+    { "name": "DCP1 决策评审",     "task_type": "节点任务", "duration_days": 1,  "predecessors": [5] }
+  ]
+}
+```
+
+> **注意**：模板中的 `predecessors` 使用模板内 tasks 数组**零基索引**。生成时系统自动将索引映射为数据库 ID，并平移日期。
+
+---
+
+#### 2.6.2 Excel 表格排期视图
+
+采用类 Excel 表格（MUI DataGrid / 自研可编辑表格）呈现项目排期。
+
+| 列序号 | 列名 | 数据来源 | 列宽 | 说明 |
+|:--:|------|------|:--:|------|
+| 1 | 序号 | `task_order` | 60px | 自动编号，拖拽/右键调整后重新编号 |
+| 2 | 任务名称 | `name` | 240px | 可点击行内编辑（见 2.6.3） |
+| 3 | 开始时间 | `planned_start` | 130px | DatePicker 编辑 |
+| 4 | 完成时间 | `planned_end` | 130px | DatePicker 编辑 |
+| 5 | 工期 | `duration_days` | 80px | 单位：天，InputNumber 编辑 |
+| 6 | 完成情况 | 自动判定 | 100px | Tag 展示（见 2.6.4） |
+| 7 | 前置任务 | `predecessor_ids` | 160px | 显示前置任务名称列表，点击可跳转 |
+
+> **行维度说明**：此处的「任务」是排期计划条目（`schedule_tasks` 表），与 M2 待办事项模块的 `tasks` 表是**不同实体**——前者是计划层面的排期节点，后者是执行层面的日常工作项。两者通过 `project_id` 和 `phase_id` 关联但不直接耦合。
+
+**额外 UI 元素**：
+- **顶部项目选择器**：`Select` 下拉切换已创建的项目，切换后自动加载对应项目的排期数据
+- **「新建项目」入口**：选择器旁放置 `Button`（outlined），点击跳转 `/projects/new`
+- **工具栏**：`[从模板生成]` `[保存版本]` `[导出 Excel]` 按钮组
+
+---
+
+#### 2.6.3 行内编辑
+
+| 列 | 编辑控件 | 触发方式 | 保存逻辑 | 边界规则 |
+|------|----------|----------|----------|----------|
+| **任务名称** | 内联 `TextField` | 单击单元格进入编辑 | 回车或失焦 → `PUT /api/schedule-tasks/:id` | 空值不执行保存（前端拦截，不清空不删除） |
+| **开始日期** | `DatePicker` (MUI) | 单击弹出日历面板 | 选择日期后即时保存 | 修改后触发级联（见 2.6.8） |
+| **结束日期** | `DatePicker` (MUI) | 单击弹出日历面板 | 选择日期后即时保存 | 与开始日期、工期保持双向联动 |
+| **工期(天)** | `InputNumber` 或 MUI `TextField type="number"` | 单击进入编辑 | 回车或失焦保存 | 修改后自动更新结束日期 = 开始日期 + 工期 |
+| **前置任务** | 弹窗多选（`Dialog` + `Checkbox`列表） | 右键菜单进入 | 确认后保存 | 多选时取最晚结束时间 + 1 天（见 2.6.5） |
+
+**联动规则**：
+- 任一日期/工期字段变更后，前端即时计算受影响值并在 UI 中预览
+- 确认保存时调用 API，后端校验并持久化
+- 阶段任务和节点任务的编辑规则见 2.6.7
+
+---
+
+#### 2.6.4 完成情况自动判定
+
+完全由系统根据日期自动计算，不提供手动修改入口。
+
+| 状态 | 判定规则 | Tag 样式 | 行样式 |
+|------|----------|----------|--------|
+| **已完成** | `planned_end < 今日日期` | `<Chip>` 灰色（MUI `default`） | 整行 `opacity: 0.45` |
+| **进行中** | `planned_start ≤ 今日日期 ≤ planned_end` | `<Chip>` 蓝色（`color="primary"`） | 正常 |
+| **未开始** | `planned_start > 今日日期` | `<Chip>` 灰色（`variant="outlined"`） | 正常 |
+
+> **刷新时机**：页面加载时计算一次；每次保存或编辑后重新计算。不依赖定时刷新——用户操作驱动。
+
+---
+
+#### 2.6.5 前置任务
+
+| 属性 | 说明 |
+|------|------|
+| **设置入口** | 右键菜单 →「前置任务设置」→ 弹出多选对话框，列出当前项目所有排期任务 |
+| **单选逻辑** | 选择任务 A 作为前置 → 当前任务 `planned_start` = 任务 A 的 `planned_end` + 1 天 |
+| **多选逻辑** | 选择多个前置任务 → 取所有前置任务中**最晚的 `planned_end`** + 1 天作为当前任务 `planned_start` |
+| **存储** | `predecessor_ids` 字段，JSON 数组格式，如 `[3, 5, 7]` |
+| **联动** | 前置任务的结束日期变更时，受影响的后置任务开始日期自动级联更新（触发 2.6.8 规则） |
+| **循环依赖防护** | 后端保存时校验——不允许 A→B→A 的环；前端在选择器中自动过滤会导致环的任务 |
+
+---
+
+#### 2.6.6 右键菜单
+
+在任务行上右键点击（`onContextMenu`）弹出 `Menu` 组件，包含以下选项：
+
+| 菜单项 | 图标 | 行为 | 适用任务类型 |
+|--------|------|------|:--:|
+| **修改任务类型** | `SwapHoriz` | 弹出子菜单选择「普通任务」「阶段任务」「节点任务」 | 全部 |
+| **升级** | `ArrowUpward` | `task_order` 减 1（与前一行交换位置） | 全部（首行 disabled） |
+| **降级** | `ArrowDownward` | `task_order` 加 1（与后一行交换位置） | 全部（末行 disabled） |
+| **前置任务设置** | `AccountTree` | 弹出多选对话框设置前置依赖 | 全部 |
+| **在上方插入** | `Add` | 在当前行上方插入空白任务行，`task_order` 后续全部 +1 | 全部 |
+| **在下方插入** | `Add` | 在当前行下方插入空白任务行，`task_order` 后续全部 +1 | 全部 |
+| **删除任务** | `Delete` (红色) | 弹出 `ConfirmDialog` 确认后物理删除 | 全部 |
+
+> **升级/降级规则**：仅影响 `task_order` 排序，不改变父子关系。阶段任务的聚合时间范围在排序变更后重新计算。
+
+---
+
+#### 2.6.7 任务类型
+
+| 类型 | 标识 | 时间行为 | 编辑限制 |
+|------|------|----------|----------|
+| **普通任务** | 默认 | 执行标准级联联动逻辑（2.6.8） | 无限制 |
+| **阶段任务** | 行首加粗 + 背景色微区分 | **聚合型**：`planned_start` = 其下所有子任务的最早开始时间；`planned_end` = 最晚结束时间 | 开始/结束日期只读（自动计算）；工期 = `planned_end - planned_start`（只读）；可修改名称和任务类型 |
+| **节点任务** | 行首特殊图标（◆） | 固定 1 天工期（`duration_days = 1`） | **时间锁定**：开始日期和工期不可变更；`is_locked = 1`；仅名称可编辑 |
+
+**阶段任务的范围界定**：
+- 两个阶段任务之间的所有普通/节点任务视为该阶段的子任务
+- 若为顶层阶段（第一个阶段任务之前），则其范围涵盖从项目开始到该阶段任务之间的所有任务
+- 若为最后一个阶段任务，则其范围涵盖从该阶段任务到项目末尾之间的所有任务
+
+---
+
+#### 2.6.8 日期修改级联逻辑
+
+| 操作 | 联动规则 | 公式 |
+|------|----------|------|
+| **修改开始日期** | 结束日期联动；工期不变 | `planned_end = new_planned_start + duration_days` |
+| **修改结束日期** | 开始日期不变；工期联动 | `duration_days = planned_end - planned_start` |
+| **修改工期** | 开始日期不变；结束日期联动 | `planned_end = planned_start + new_duration_days` |
+
+**级联传播**（修改任一任务的日期后）：
+1. 更新当前任务的时间字段
+2. 检查是否有其他任务以当前任务为前置依赖（`predecessor_ids` 包含当前任务 ID）
+3. 对每个后置任务，重新计算其 `planned_start = max(所有前置任务 planned_end) + 1 天`
+4. 递归传播至所有受影响的后续任务
+5. 重新计算所有阶段任务的聚合时间范围
+
+> **节点任务例外**：节点任务不参与级联传播——其时间固定，不可被联动修改。
+
+---
+
+#### 2.6.9 保存与版本管理
+
+| 属性 | 说明 |
+|------|------|
+| **保存按钮** | 工具栏「保存版本」按钮（`Save` icon） |
+| **存储位置** | SQLite 数据库——当前工作副本存于 `schedule_tasks` 表，历史快照存于 `schedule_versions.tasks_snapshot`（JSON） |
+| **版本命名** | 自动生成，格式 `{当日日期}_Version{N}`，如 `2026-07-07_Version1`；N 为当日已有版本数 +1 |
+| **保存流程** | 1. 将当前 `schedule_tasks` 全部行序列化为 JSON；2. 插入 `schedule_versions` 新行；3. 前端 Snackbar 提示「已保存：2026-07-07_Version1」 |
+| **版本历史** | 工具栏「版本历史」下拉——列出所有已保存版本，点击可查看只读快照（表格灰显，不可编辑） |
+| **恢复版本** | 在版本历史中选择版本 →「恢复此版本」→ 弹出 ConfirmDialog → 确认后用快照数据替换当前 `schedule_tasks`（当前未保存的修改将被覆盖） |
+
+---
+
+#### 2.6.10 导出 Excel
+
+| 属性 | 说明 |
+|------|------|
+| **触发** | 工具栏「导出 Excel」按钮 |
+| **导出内容** | 当前排期表的全部可见列 |
+| **数据格式规则** | 见下表 |
+| **实现方案** | 前端使用 `exceljs` 或 `xlsx` 库在前端生成 `.xlsx` 文件并触发下载 |
+
+| 列 | 导出格式 | 说明 |
+|----|----------|------|
+| 序号 | 数值 | 纯数字 |
+| 任务名称 | 文本 | 纯文本值 |
+| 开始时间 | 日期值（`Short Date` 格式） | 若该单元格存在公式依赖（如 =前置任务结束日期+1），则导出为 `=DATE(...)` 公式 |
+| 完成时间 | 日期值 / 公式 | 若工期由公式决定，导出 `=开始日期+工期` 公式 |
+| 工期 | 数值 | 纯数字（天数） |
+| 完成情况 | 文本 | 「已完成」「进行中」「未开始」 |
+| 前置任务 | 文本 | 前置任务名称，多个用「、」分隔 |
+
+> **公式导出策略**：排期表中存在以下三类公式关系——①日期级联（结束=开始+工期）、②前置依赖（开始=前置结束+1）、③阶段聚合（开始/结束=MIN/MAX子任务日期）。导出的 Excel 应保留这些公式逻辑，使用 `=WORKDAY()` 或 `=DATE()` 等 Excel 原生函数表达，以便用户在 Excel 中修改后仍能联动。
+
+---
+
+### 新增数据模型
+
+#### `schedule_templates`（排期模板——文件存储，非数据库表）
+
+模板以 JSON 文件形式存储于 `server/src/templates/` 目录，格式见 2.6.1。系统读取目录下所有 `.json` 文件作为可选模板列表。
+
+#### `schedule_versions`（排期版本快照）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| project_id | INTEGER FK | 关联 `projects.id` |
+| version_name | TEXT | 版本名，如 `2026-07-07_Version1` |
+| tasks_snapshot | TEXT | JSON 序列化的排期任务快照（完整 `schedule_tasks` 行数据） |
+| created_at | TEXT | 保存时间 ISO8601 |
+
+```sql
+CREATE TABLE schedule_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    version_name TEXT NOT NULL,
+    tasks_snapshot TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX idx_schedule_versions_project ON schedule_versions(project_id);
+```
+
+#### `schedule_tasks`（排期任务——核心表）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| id | INTEGER PK | 自增主键 |
+| project_id | INTEGER FK | 关联 `projects.id` |
+| name | TEXT | 任务名称 |
+| task_order | INTEGER | 排序序号（从 1 开始） |
+| task_type | TEXT | `普通任务` / `阶段任务` / `节点任务` |
+| planned_start | TEXT | 计划开始日期（ISO8601 日期） |
+| planned_end | TEXT | 计划结束日期（ISO8601 日期） |
+| duration_days | INTEGER | 工期（天） |
+| completion_status | TEXT | 自动判定：`已完成` / `进行中` / `未开始`（只读） |
+| predecessor_ids | TEXT | 前置任务 ID 列表，JSON 数组如 `[3,5]`，无前置为 `[]` |
+| is_locked | INTEGER | 0=可编辑 / 1=时间锁定（节点任务专用） |
+| created_at | TEXT | 创建时间 ISO8601 |
+| updated_at | TEXT | 更新时间 ISO8601 |
+
+```sql
+CREATE TABLE schedule_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL DEFAULT '',
+    task_order INTEGER NOT NULL DEFAULT 0,
+    task_type TEXT NOT NULL DEFAULT '普通任务',
+    planned_start TEXT,
+    planned_end TEXT,
+    duration_days INTEGER DEFAULT 1,
+    completion_status TEXT DEFAULT '未开始',
+    predecessor_ids TEXT DEFAULT '[]',
+    is_locked INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX idx_schedule_tasks_project ON schedule_tasks(project_id, task_order);
+```
+
+#### 与现有表的关系
+
+```
+projects 1 ──── * schedule_tasks        （一个项目可有多个排期任务）
+projects 1 ──── * schedule_versions     （一个项目可有多个排期版本）
+phases   ? ──── ? schedule_tasks        （无直接 FK 关系——排期中的"阶段任务"是排期内部层级概念，
+                                          与 phases 表的项目顶层阶段结构独立）
+```
+
+---
+
+### 新增 API 接口
+
+| Method | Path | 说明 |
+|--------|------|------|
+| GET | `/api/projects/:id/schedule` | 获取当前排期任务列表（按 `task_order` 排序） |
+| POST | `/api/projects/:id/schedule/generate` | 一键生成排期——Body: `{ "template_name": "曙光标准排期" }` |
+| PUT | `/api/schedule-tasks/:id` | 更新单个排期任务（行内编辑保存） |
+| POST | `/api/projects/:id/schedule/insert` | 插入新任务——Body: `{ "position": "above"\|"below", "reference_id": 5 }` |
+| DELETE | `/api/schedule-tasks/:id` | 删除排期任务（物理删除，弹出 ConfirmDialog 确认） |
+| PUT | `/api/schedule-tasks/:id/move` | 升级/降级调整排序——Body: `{ "direction": "up"\|"down" }` |
+| PUT | `/api/schedule-tasks/:id/predecessors` | 更新前置任务——Body: `{ "predecessor_ids": [3, 5] }` |
+| GET | `/api/schedule-templates` | 列出 `server/src/templates/` 下所有可用模板 |
+| POST | `/api/projects/:id/schedule/save` | 保存当前版本快照到 `schedule_versions` |
+| GET | `/api/projects/:id/schedule/versions` | 获取版本历史列表 |
+| GET | `/api/projects/:id/schedule/versions/:vid` | 查看指定版本快照详情 |
+| POST | `/api/projects/:id/schedule/versions/:vid/restore` | 恢复指定版本到当前工作区 |
+| GET | `/api/projects/:id/schedule/export` | 导出 Excel 文件（`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`） |
+
+---
+
+### 交叉影响分析
+
+#### 1. 排期「阶段任务」与 `phases` 表的关系
+
+| 维度 | `phases` 表 | 排期「阶段任务」（`schedule_tasks.task_type='阶段任务'`） |
+|------|-------------|----------------------------------------------------------|
+| 层级 | 项目顶层阶段结构（M1~M5） | 排期表内部的层级组织单元 |
+| 来源 | 从 `phase_templates` 实例化 | 从排期模板生成或手动创建 |
+| 用途 | 门禁判定、项目进度百分比、模块关联锚点 | 排期表视图的聚合行，自动汇总子任务时间范围 |
+| 数据关联 | `phases.id` 是 M2 tasks / M3 issues 等的外键 | 无独立外键——仅在排期表内部使用 |
+
+**建议**：两个概念保持独立，互不耦合。排期表生成时可根据 phases 结构建议阶段任务分组，但不强制执行。未来如需关联，可在 `schedule_tasks` 增加 `phase_id` 可空 FK。
+
+#### 2. 完成情况与门禁判定的关系
+
+- 排期完成情况（`completion_status`）：基于**日期**的纯视觉状态标识，用于排期表内行样式渲染
+- 门禁判定（`gates.is_passed`）：基于 **DI 值 + 关联任务完成状态**的条件判定，用于阶段推进决策
+- **两者独立计算，互不依赖**。排期表中节点任务通常对应门禁点，但其完成情况仍仅按日期判定。
+
+#### 3. `schedule_tasks` 与 M2 `tasks` 的区分
+
+| 维度 | `schedule_tasks`（M1 排期） | `tasks`（M2 待办） |
+|------|---------------------------|-------------------|
+| 粒度 | 计划节点（里程碑级） | 日常工作项（操作级） |
+| 时间属性 | `planned_start` / `planned_end` / `duration_days` | `due_date`（单截止日） |
+| 依赖管理 | 内置前置任务图（`predecessor_ids`） | 无内置依赖 |
+| 状态 | 基于日期自动判定 | 基于看板列（kanban_column）手动流转 |
+| 编辑方式 | 行内表格编辑 | Drawer 表单编辑 |
+
+**命名约定**：API 路径中排期任务统一使用 `schedule` / `schedule-tasks` 前缀，M2 任务使用 `tasks` 前缀，避免混淆。
+
+#### 4. 与甘特图（2.4）的关系
+
+- 甘特图（P1 增强）当前以 `phases` 表为数据源
+- 新增排期表后，甘特图可扩展支持以 `schedule_tasks` 为数据源的细粒度视图
+- 建议甘特图增加「排期视图」切换选项，当项目存在 `schedule_tasks` 数据时可选择排期表模式
+- 依赖线可复用 `predecessor_ids` 字段自动绘制
+
+#### 5. 前端路由扩展
+
+新增路由：
+
+```
+/projects/:id/schedule     → 排期表页面 SchedulePage
+```
+
+在 ProjectDetailPage 的子模块 Tabs 中新增「排期」标签。
+
+#### 6. 组件树扩展
+
+```
+SchedulePage
+├── ScheduleToolbar
+│   ├── ProjectSelector (Select 项目切换)
+│   ├── CreateProjectButton (→ /projects/new)
+│   ├── GenerateFromTemplateButton
+│   ├── SaveVersionButton
+│   ├── VersionHistoryDropdown
+│   └── ExportExcelButton
+├── ScheduleTable (MUI DataGrid / 自研可编辑表格)
+│   ├── InlineTextField (任务名称)
+│   ├── InlineDatePicker (开始/结束日期)
+│   ├── InlineInputNumber (工期)
+│   ├── CompletionStatusTag (完成情况 Tag)
+│   └── PredecessorLink (前置任务链接)
+├── PredecessorDialog (前置任务多选弹窗)
+├── VersionHistoryDialog (版本历史查看)
+└── ContextMenu (右键菜单)
+```
+
+---
+
+> **排期模块版本**: v1.0（追加至 M1 PRD） | **依赖**: M1 基础（projects/phases 表） | **被依赖**: 甘特图 P1 增强可复用 `schedule_tasks` 数据源
 

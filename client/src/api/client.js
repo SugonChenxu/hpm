@@ -73,6 +73,42 @@ export const api = {
     get: (id) => request(`/weekly-reports/${id}`),
     update: (id, data) => request(`/weekly-reports/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   },
+  // 排期计划
+  schedule: {
+    list: (projectId) => request(`/projects/${projectId}/schedule`),
+    generate: (projectId, templateName) =>
+      request(`/projects/${projectId}/schedule/generate`, {
+        method: "POST",
+        body: JSON.stringify({ template_name: templateName }),
+      }),
+    update: (id, data) =>
+      request(`/schedule-tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    remove: (id) => request(`/schedule-tasks/${id}`, { method: "DELETE" }),
+    insert: (projectId, data) =>
+      request(`/projects/${projectId}/schedule/insert`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    move: (id, direction) =>
+      request(`/schedule-tasks/${id}/move`, {
+        method: "PUT",
+        body: JSON.stringify({ direction }),
+      }),
+    updatePredecessors: (id, predecessorIds) =>
+      request(`/schedule-tasks/${id}/predecessors`, {
+        method: "PUT",
+        body: JSON.stringify({ predecessor_ids: predecessorIds }),
+      }),
+    templates: () => request("/templates/schedule"),
+    versions: (projectId) => request(`/projects/${projectId}/schedule/versions`),
+    saveVersion: (projectId) =>
+      request(`/projects/${projectId}/schedule/save`, { method: "POST" }),
+    getVersion: (projectId, vid) =>
+      request(`/projects/${projectId}/schedule/versions/${vid}`),
+    restoreVersion: (projectId, vid) =>
+      request(`/projects/${projectId}/schedule/versions/${vid}/restore`, { method: "POST" }),
+    exportUrl: (projectId) => `${BASE}/projects/${projectId}/schedule/export`,
+  },
 };
 
 export default api;
