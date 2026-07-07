@@ -1,0 +1,84 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Box, Grid, Card, CardContent, Typography, Chip, CircularProgress, Button, TextField, MenuItem } from "@mui/material";
+import { Add, Flag } from "@mui/icons-material";
+import api from "../api/client";
+
+const STATUS_COLORS = { "进行中": "primary", "已结项": "success", "已归档": "default" };
+
+export default function DashboardPage() {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState({ status: "", category: "", search: "" });
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    setLoading(true);
+    api.projects.list(filter).then(r => { setProjects(r.data); setLoading(false); }).catch(() => setLoading(false));
+  }, [filter]);
+
+  return (
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Typography variant="h5" fontWeight={700}>项目仪表盘</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={() => navigate("/projects/new")}>新建项目</Button>
+      </Box>
+
+      <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap" }}>
+        <TextField size="small" label="搜索" placeholder="代号或名称" value={filter.search} onChange={e => setFilter(f => ({ ...f, search: e.target.value }))} sx={{ width: 200 }} />
+        <TextField size="small" select label="状态" value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))} sx={{ width: 130 }}>
+          <MenuItem value="">全部</MenuItem>
+          <MenuItem value="进行中">进行中</MenuItem>
+          <MenuItem value="已结项">已结项</MenuItem>
+          <MenuItem value="已归档">已归档</MenuItem>
+        </TextField>
+        <TextField size="small" select label="类别" value={filter.category} onChange={e => setFilter(f => ({ ...f, category: e.target.value }))} sx={{ width: 130 }}>
+          <MenuItem value="">全部</MenuItem>
+          {["新品","OEM","升级","定制","派生","部件引入","独立板卡","机柜机箱","产品维护"].map(c => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+        </TextField>
+        <Box sx={{ flexGrow: 1 }} />
+        <StatsBar projects={projects} />
+      </Box>
+
+      {loading ? <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} /> : projects.length === 0 ? (
+        <Card sx={{ textAlign: "center", py: 8 }}>
+          <Typography color="text.secondary">暂无项目，点击「新建项目」开始</Typography>
+        </Card>
+      ) : (
+        <Grid container spacing={2}>
+          {projects.map(p => (
+            <Grid item xs={12} sm={6} md={4} key={p.id}>
+              <Card sx={{ cursor: "pointer", "&:hover": { boxShadow: 4 } }} onClick={() => navigate(`/projects/${p.id}`)}>
+                <CardContent>
+                  <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <Box>
+                      <Typography variant="subtitle2" color="text.secondary">{p.code}</Typography>
+                      <Typography variant="h6" fontWeight={700}>{p.name}</Typography>
+                    </Box>
+                    <Chip label={p.status} color={STATUS_COLORS[p.status] || "default"} size="small" />
+                  </Box>
+                  <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
+                    <Chip label={p.category} size="small" variant="outlined" />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                      更新于 {new Date(p.updated_at).toLocaleDateString("zh-CN")}
+                    </Typography>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      )}
+    </Box>
+  );
+}
+
+function StatsBar({ projects }) {
+  const active = projects.filter(p => p.status === "进行中").length;
+  return (
+    <Box sx={{ display: "flex", gap: 1.5 }}>
+      <Chip icon={<Flag />} label={`总数 ${projects.length}`} variant="outlined" />
+      <Chip label={`进行中 ${active}`} color="primary" variant="outlined" />
+    </Box>
+  );
+}

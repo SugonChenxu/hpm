@@ -48,3 +48,6 @@ coverage/
 # Cache
 .cache/
 *.tsbuildinfo
+*.db
+*.db-shm
+*.db-wal
