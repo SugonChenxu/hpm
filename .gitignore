@@ -51,3 +51,6 @@ coverage/
 *.db
 *.db-shm
 *.db-wal
+server/*.db
+server/*.db-shm
+server/*.db-wal
