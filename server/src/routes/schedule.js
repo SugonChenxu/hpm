@@ -42,12 +42,12 @@ function addDays(dateStr, days) {
 }
 
 /**
- * 计算两个日期之间的天数差（end - start）
+ * 计算两个日期之间的天数（含首尾），即实际工期天数
  */
 function daysBetween(startStr, endStr) {
   const s = new Date(startStr + "T00:00:00");
   const e = new Date(endStr + "T00:00:00");
-  return Math.round((e - s) / (1000 * 60 * 60 * 24));
+  return Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
 }
 
 /**
@@ -237,7 +237,7 @@ function cascadePropagation(tasks, changedTaskId) {
       if (predEnds.length > 0) {
         const maxEnd = predEnds.sort().reverse()[0];
         task.planned_start = addDays(maxEnd, 1);
-        task.planned_end = addDays(task.planned_start, task.duration_days);
+        task.planned_end = addDays(task.planned_start, Math.max(0, task.duration_days - 1));
       }
     }
   }
@@ -390,7 +390,7 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
         // 对于阶段任务，duration_days 暂时设为 0，后续聚合计算
         const effectiveDuration = taskType === "阶段任务" ? 0 : Math.max(1, durationDays);
         const plannedStart = baseDate;
-        const plannedEnd = taskType === "阶段任务" ? baseDate : addDays(plannedStart, effectiveDuration);
+        const plannedEnd = taskType === "阶段任务" ? baseDate : addDays(plannedStart, Math.max(0, effectiveDuration - 1));
 
         const result = insertStmt.run(
           id, tmpl.name, i + 1, taskType,
@@ -450,7 +450,7 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
           if (predEnds.length > 0) {
             const maxEnd = predEnds.sort().reverse()[0];
             task.planned_start = addDays(maxEnd, 1);
-            task.planned_end = addDays(task.planned_start, task.duration_days);
+            task.planned_end = addDays(task.planned_start, Math.max(0, task.duration_days - 1));
           }
         }
       }
@@ -584,7 +584,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
           updates.planned_start = body.planned_start;
           fields.push("planned_start = ?");
           const dur = body.duration_days !== undefined ? body.duration_days : task.duration_days;
-          updates.planned_end = addDays(body.planned_start, dur);
+          updates.planned_end = addDays(body.planned_start, Math.max(0, dur - 1));
           fields.push("planned_end = ?");
         }
         if (body.planned_end !== undefined && body.planned_start === undefined) {
@@ -598,7 +598,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
           const dur = Math.max(1, body.duration_days);
           updates.duration_days = dur;
           fields.push("duration_days = ?");
-          updates.planned_end = addDays(task.planned_start, dur);
+          updates.planned_end = addDays(task.planned_start, Math.max(0, dur - 1));
           fields.push("planned_end = ?");
         }
       }
@@ -923,7 +923,7 @@ router.put("/schedule-tasks/:id/predecessors", (req, res) => {
         if (predEnds.length > 0) {
           const maxEnd = predEnds.sort().reverse()[0];
           const newStart = addDays(maxEnd, 1);
-          const newEnd = addDays(newStart, task.duration_days);
+          const newEnd = addDays(newStart, Math.max(0, task.duration_days - 1));
 
           db.prepare(`
             UPDATE schedule_tasks SET planned_start = ?, planned_end = ?, updated_at = datetime('now','localtime')

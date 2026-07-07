@@ -2,10 +2,10 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import {
   Box, TextField, Chip, Typography, Button, Popover,
   Checkbox, List, ListItemButton, ListItemIcon, ListItemText,
-  Card, IconButton, Tooltip,
+  Card, IconButton,
 } from "@mui/material";
 import {
-  ExpandMore, ChevronRight, Today, Circle,
+  ExpandMore, ChevronRight,
 } from "@mui/icons-material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -441,6 +441,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
     if (isEditing && type === "date") {
       return (
         <DatePicker
+          open={editCell !== null && editCell.field === field}
           autoFocus
           value={editValue ? dayjs(editValue) : null}
           onChange={(newVal) => {
@@ -457,12 +458,13 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
               sx: { width: 120 },
             },
             layout: { sx: { fontSize: "0.875rem" } },
+            actionBar: { actions: ["today"] },
           }}
         />
       );
     }
 
-    // 日期显示 —— 添加「今天」快捷按钮
+    // 日期显示
     if (type === "date") {
       return (
         <Box
@@ -470,7 +472,6 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: 0.5,
             cursor: "pointer",
             minHeight: 28,
             "&:hover": { bgcolor: "action.hover" },
@@ -483,19 +484,6 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
           >
             {displayValue}
           </Typography>
-          <Tooltip title="设为今天">
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                savedScrollY.current = window.scrollY;
-                handleDateSave(task.id, field, dayjs().format("YYYY-MM-DD"));
-              }}
-              sx={{ p: 0, minWidth: 20, opacity: 0.4, "&:hover": { opacity: 1 } }}
-            >
-              <Today fontSize="inherit" sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Tooltip>
         </Box>
       );
     }

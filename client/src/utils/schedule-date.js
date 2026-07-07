@@ -4,9 +4,9 @@ import dayjs from "dayjs";
  * 排期日期工具函数
  * 所有日期计算基于 dayjs，输出 ISO 日期字符串 YYYY-MM-DD
  *
- * 日期约定：开始日期 + N 天工期 = 结束日期
- * 例：21 日开始，工期 5 天 → 结束 = 26 日
- *     addDays("2026-07-21", 5) → "2026-07-26"
+ * 日期约定：开始日期 + (N-1) 天 = 结束日期（含首尾）
+ * 例：21 日开始，工期 5 天 → 结束 = 25 日
+ *     addDays("2026-07-21", 5) → "2026-07-25"
  */
 
 /** 格式化日期为 YYYY-MM-DD */
@@ -19,14 +19,14 @@ export function toDayjs(dateStr) {
   return dayjs(dateStr).startOf("day");
 }
 
-/** 日期加 N 天 */
+/** 日期加 (days-1) 天——用于「开始日期 + 工期天数 = 结束日期」的含首尾计算 */
 export function addDays(dateStr, days) {
-  return dayjs(dateStr).add(days, "day").format("YYYY-MM-DD");
+  return dayjs(dateStr).add(days - 1, "day").format("YYYY-MM-DD");
 }
 
-/** 两个日期之间的天数差（end - start），不含首日 */
+/** 两个日期之间的天数（含首尾），即实际工期天数 */
 export function daysBetween(startStr, endStr) {
-  return dayjs(endStr).diff(dayjs(startStr), "day");
+  return dayjs(endStr).diff(dayjs(startStr), "day") + 1;
 }
 
 /**
@@ -91,7 +91,8 @@ export function calcStartFromPredecessors(task, allTasks) {
   if (predEnds.length === 0) return task.planned_start;
 
   const maxEnd = predEnds.sort().reverse()[0];
-  return addDays(maxEnd, 1);
+  // 前置任务结束日期的下一天作为开始日期（直接使用 dayjs 避免 addDays 的 -1 内部修正）
+  return dayjs(maxEnd).add(1, "day").format("YYYY-MM-DD");
 }
 
 /**
