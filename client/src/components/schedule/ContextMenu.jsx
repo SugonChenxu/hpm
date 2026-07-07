@@ -1,18 +1,16 @@
 import { useState } from "react";
 import {
   Menu, MenuItem, ListItemIcon, ListItemText, Divider,
+  Box, Typography,
 } from "@mui/material";
 import {
-  SwapHoriz, FormatIndentDecrease, FormatIndentIncrease, AccountTree, Add, Delete,
+  SwapHoriz, FormatIndentDecrease, FormatIndentIncrease,
+  AccountTree, Add, Delete, Palette,
 } from "@mui/icons-material";
 
 /**
  * 右键菜单组件
- * 7 项主菜单 + 1 个子菜单（修改任务类型）
- *
- * 升级/降级使用树形缩进语义：
- * - 降级 (Indent)：将当前任务变成紧邻上方兄弟任务的子任务
- * - 升级 (Outdent)：将子任务提升到与父任务平级
+ * 8 项主菜单 + 1 个子菜单（修改任务类型）+ 背景色选项
  */
 export default function ContextMenu({
   open,
@@ -26,22 +24,28 @@ export default function ContextMenu({
   onPredecessors,
   onInsert,
   onDelete,
+  onBgColor,
 }) {
   const [typeAnchorEl, setTypeAnchorEl] = useState(null);
+  const [colorAnchorEl, setColorAnchorEl] = useState(null);
 
   if (!task) return null;
 
-  // 查找同父级的兄弟任务，判断是否为第一个兄弟（不能降级）
   const taskParentKey = task.parent_id || null;
   const siblings = tasks.filter(
     (t) => (t.parent_id || null) === taskParentKey
   );
   const siblingIndex = siblings.findIndex((t) => t.id === task.id);
   const isFirstSibling = siblingIndex <= 0;
-  // 顶级任务不能升级
   const isTopLevel = task.parent_id === null || task.parent_id === undefined;
 
   const taskTypes = ["普通任务", "阶段任务", "节点任务"];
+
+  const presetColors = [
+    "#FFFFFF", "#FFF8E1", "#E8F0FE", "#E8F5E9",
+    "#FCE4EC", "#F3E5F5", "#E0F7FA", "#FFF3E0",
+    "#EFEBE9", "#ECEFF1",
+  ];
 
   return (
     <Menu
@@ -60,7 +64,6 @@ export default function ContextMenu({
         <ListItemText>修改任务类型</ListItemText>
       </MenuItem>
 
-      {/* 子菜单 */}
       <Menu
         open={Boolean(typeAnchorEl)}
         anchorEl={typeAnchorEl}
@@ -87,7 +90,7 @@ export default function ContextMenu({
 
       <Divider />
 
-      {/* 降级 (Indent) — 成为上方兄弟任务的子任务 */}
+      {/* 降级 */}
       <MenuItem
         onClick={() => { onClose(); onIndent(task.id); }}
         disabled={isFirstSibling}
@@ -97,7 +100,7 @@ export default function ContextMenu({
         <ListItemText>降级</ListItemText>
       </MenuItem>
 
-      {/* 升级 (Outdent) — 提升到父任务平级 */}
+      {/* 升级 */}
       <MenuItem
         onClick={() => { onClose(); onOutdent(task.id); }}
         disabled={isTopLevel}
@@ -117,6 +120,89 @@ export default function ContextMenu({
         <ListItemIcon><AccountTree fontSize="small" /></ListItemIcon>
         <ListItemText>前置任务设置</ListItemText>
       </MenuItem>
+
+      {/* 背景色 */}
+      <MenuItem
+        onClick={(e) => setColorAnchorEl(e.currentTarget)}
+        dense
+      >
+        <ListItemIcon><Palette fontSize="small" /></ListItemIcon>
+        <ListItemText>背景色</ListItemText>
+      </MenuItem>
+
+      <Menu
+        open={Boolean(colorAnchorEl)}
+        anchorEl={colorAnchorEl}
+        onClose={() => setColorAnchorEl(null)}
+        anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box sx={{ px: 1.5, py: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            选择背景色（子任务自动继承）
+          </Typography>
+        </Box>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, px: 1.5, pb: 1, maxWidth: 160 }}>
+          {presetColors.map((color) => (
+            <Box
+              key={color}
+              onClick={() => {
+                setColorAnchorEl(null);
+                onClose();
+                onBgColor(task.id, color === "#FFFFFF" ? "" : color);
+              }}
+              sx={{
+                width: 24,
+                height: 24,
+                borderRadius: "50%",
+                backgroundColor: color,
+                border: "2px solid",
+                borderColor: task.bg_color === color || (!task.bg_color && color === "#FFFFFF")
+                  ? "primary.main" : "divider",
+                cursor: "pointer",
+                "&:hover": { transform: "scale(1.2)" },
+                transition: "transform 0.15s",
+              }}
+            />
+          ))}
+        </Box>
+        <Box sx={{ px: 1.5, pb: 1 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box
+              component="input"
+              type="color"
+              defaultValue={task.bg_color || "#FFFFFF"}
+              sx={{ width: 28, height: 28, border: "none", cursor: "pointer", p: 0 }}
+              onChange={(e) => {
+                // on change triggered on picker close
+              }}
+              onBlur={(e) => {
+                const val = e.target.value;
+                setColorAnchorEl(null);
+                onClose();
+                onBgColor(task.id, val === "#ffffff" ? "" : val);
+              }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              自定义颜色
+            </Typography>
+          </Box>
+        </Box>
+        {(task.bg_color) && (
+          <Box sx={{ px: 1.5, pb: 1 }}>
+            <MenuItem
+              dense
+              onClick={() => {
+                setColorAnchorEl(null);
+                onClose();
+                onBgColor(task.id, "");
+              }}
+              sx={{ color: "error.main", fontSize: "0.8rem" }}
+            >
+              清除背景色
+            </MenuItem>
+          </Box>
+        )}
+      </Menu>
 
       <Divider />
 

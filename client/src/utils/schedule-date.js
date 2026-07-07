@@ -3,6 +3,10 @@ import dayjs from "dayjs";
 /**
  * 排期日期工具函数
  * 所有日期计算基于 dayjs，输出 ISO 日期字符串 YYYY-MM-DD
+ *
+ * 日期约定：开始日期 + N 天工期 = 结束日期
+ * 例：21 日开始，工期 5 天 → 结束 = 26 日
+ *     addDays("2026-07-21", 5) → "2026-07-26"
  */
 
 /** 格式化日期为 YYYY-MM-DD */
@@ -20,29 +24,31 @@ export function addDays(dateStr, days) {
   return dayjs(dateStr).add(days, "day").format("YYYY-MM-DD");
 }
 
-/** 两个日期之间的天数差（end - start） */
+/** 两个日期之间的天数差（end - start），不含首日 */
 export function daysBetween(startStr, endStr) {
   return dayjs(endStr).diff(dayjs(startStr), "day");
 }
 
 /**
- * 修改开始日期 → 结束日期 = 新开始 + 工期 - 1
+ * 修改开始日期 → 结束日期 = 新开始 + 工期
+ * 例：start=21, duration=5 → end=26
  */
 export function updateStartDate(task, newStart) {
   const duration = task.duration_days || 1;
   return {
     ...task,
     planned_start: newStart,
-    planned_end: addDays(newStart, duration - 1),
+    planned_end: addDays(newStart, duration),
   };
 }
 
 /**
- * 修改结束日期 → 工期 = 新结束 - 开始日期 + 1
+ * 修改结束日期 → 工期 = 新结束 - 开始日期
+ * 例：start=21, newEnd=26 → duration=5
  */
 export function updateEndDate(task, newEnd) {
   const start = task.planned_start;
-  const duration = Math.max(1, daysBetween(start, newEnd) + 1);
+  const duration = Math.max(1, daysBetween(start, newEnd));
   return {
     ...task,
     planned_end: newEnd,
@@ -51,14 +57,15 @@ export function updateEndDate(task, newEnd) {
 }
 
 /**
- * 修改工期 → 结束日期 = 开始日期 + 新工期 - 1
+ * 修改工期 → 结束日期 = 开始日期 + 新工期
+ * 例：start=21, newDuration=5 → end=26
  */
 export function updateDuration(task, newDuration) {
   const dur = Math.max(1, Number(newDuration));
   return {
     ...task,
     duration_days: dur,
-    planned_end: addDays(task.planned_start, dur - 1),
+    planned_end: addDays(task.planned_start, dur),
   };
 }
 
@@ -126,7 +133,7 @@ export function propagateChanges(tasks, changedTaskId) {
     const newStart = calcStartFromPredecessors(t, [...taskMap.values()]);
     if (newStart !== t.planned_start) {
       t.planned_start = newStart;
-      t.planned_end = addDays(newStart, (t.duration_days || 1) - 1);
+      t.planned_end = addDays(newStart, t.duration_days || 1);
     }
   }
 
@@ -138,46 +145,64 @@ export function propagateChanges(tasks, changedTaskId) {
 
 /**
  * 重新计算所有阶段任务的聚合日期
+ * 使用树形结构：阶段任务的 start = MIN(所有子孙任务的 start)
+ *              阶段任务的 end   = MAX(所有子孙任务的 end)
  */
 export function recalcPhaseAggregation(taskMap) {
   const tasks = [...taskMap.values()].sort(
     (a, b) => a.task_order - b.task_order
   );
 
-  // 找到所有阶段任务索引
-  const phaseIndices = [];
-  tasks.forEach((t, i) => {
-    if (t.task_type === "阶段任务") {
-      phaseIndices.push(i);
-    }
-  });
+  // 构建 parent_id → children 映射
+  const childrenMap = new Map();
+  for (const t of tasks) {
+    const pid = t.parent_id || 0;
+    if (!childrenMap.has(pid)) childrenMap.set(pid, []);
+    childrenMap.get(pid).push(t);
+  }
 
-  if (phaseIndices.length === 0) return;
-
-  for (let pi = 0; pi < phaseIndices.length; pi++) {
-    const phaseIdx = phaseIndices[pi];
-    const phaseTask = tasks[phaseIdx];
-
-    const startIdx = phaseIdx + 1;
-    const endIdx =
-      pi + 1 < phaseIndices.length ? phaseIndices[pi + 1] : tasks.length;
-
-    const childTasks = tasks
-      .slice(startIdx, endIdx)
-      .filter((t) => t.task_type !== "阶段任务" && t.planned_start);
-
-    if (childTasks.length > 0) {
-      const starts = childTasks.map((t) => t.planned_start).sort();
-      const ends = childTasks.map((t) => t.planned_end).sort().reverse();
-
-      phaseTask.planned_start = starts[0];
-      phaseTask.planned_end = ends[0];
-      phaseTask.duration_days = Math.max(
-        1,
-        daysBetween(phaseTask.planned_start, phaseTask.planned_end) + 1
+  for (const task of tasks) {
+    if (task.task_type === "阶段任务") {
+      const { minStart, maxEnd } = collectDescendantDates(
+        task.id, childrenMap, new Set()
       );
+      if (minStart) {
+        task.planned_start = minStart;
+      }
+      if (maxEnd) {
+        task.planned_end = maxEnd;
+        task.duration_days = Math.max(1, daysBetween(task.planned_start, task.planned_end));
+      }
     }
   }
+}
+
+/** 递归收集某任务的子孙日期极值 */
+function collectDescendantDates(taskId, childrenMap, visited) {
+  if (visited.has(taskId)) return { minStart: null, maxEnd: null };
+  visited.add(taskId);
+
+  const children = childrenMap.get(taskId) || [];
+  let minStart = null;
+  let maxEnd = null;
+
+  for (const child of children) {
+    if (child.planned_start && (!minStart || child.planned_start < minStart)) {
+      minStart = child.planned_start;
+    }
+    if (child.planned_end && (!maxEnd || child.planned_end > maxEnd)) {
+      maxEnd = child.planned_end;
+    }
+    const sub = collectDescendantDates(child.id, childrenMap, visited);
+    if (sub.minStart && (!minStart || sub.minStart < minStart)) {
+      minStart = sub.minStart;
+    }
+    if (sub.maxEnd && (!maxEnd || sub.maxEnd > maxEnd)) {
+      maxEnd = sub.maxEnd;
+    }
+  }
+
+  return { minStart, maxEnd };
 }
 
 /**

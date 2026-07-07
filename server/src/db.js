@@ -208,6 +208,8 @@ CREATE TABLE IF NOT EXISTS schedule_tasks (
     predecessor_ids TEXT DEFAULT '[]',
     parent_id INTEGER REFERENCES schedule_tasks(id) ON DELETE SET NULL,
     is_locked INTEGER DEFAULT 0,
+    notes TEXT DEFAULT '',
+    bg_color TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
@@ -226,22 +228,41 @@ CREATE INDEX IF NOT EXISTS idx_schedule_versions_project ON schedule_versions(pr
 `);
 
 // =====================================================
-// 数据库迁移：为已有数据库添加 parent_id 列
+// 数据库迁移
 // =====================================================
+
+// 迁移：parent_id 列
 try {
   db.exec(`ALTER TABLE schedule_tasks ADD COLUMN parent_id INTEGER REFERENCES schedule_tasks(id) ON DELETE SET NULL`);
 } catch (e) {
-  // 列已存在（SQLite 不支持 IF NOT EXISTS 的 ALTER TABLE ADD COLUMN）
   if (!e.message.includes("duplicate column name")) {
     console.warn("Migration parent_id:", e.message);
   }
 }
 
-// 为已有数据库创建 parent_id 索引（CREATE INDEX IF NOT EXISTS 已在上方处理，此处为兜底）
+// 迁移：parent_id 索引
 try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_schedule_tasks_parent ON schedule_tasks(parent_id)`);
 } catch (e) {
   console.warn("Migration idx_schedule_tasks_parent:", e.message);
+}
+
+// 迁移：notes 列
+try {
+  db.exec(`ALTER TABLE schedule_tasks ADD COLUMN notes TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration notes:", e.message);
+  }
+}
+
+// 迁移：bg_color 列
+try {
+  db.exec(`ALTER TABLE schedule_tasks ADD COLUMN bg_color TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration bg_color:", e.message);
+  }
 }
 
 export default db;

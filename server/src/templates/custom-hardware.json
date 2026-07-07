@@ -1,0 +1,272 @@
+{
+  "name": "定制硬件产品开发排期模板",
+  "description": "基于实际项目流程简化的开发排期模板，含 M1-M5 核心阶段，38 个计划节点",
+  "tasks": [
+    {
+      "name": "M1 预研阶段",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": null,
+      "predecessor_refs": []
+    },
+    {
+      "name": "L3 立项筹备",
+      "task_type": "普通任务",
+      "duration_days": 1,
+      "parent_ref": 0,
+      "predecessor_refs": []
+    },
+    {
+      "name": "L4 概要设计",
+      "task_type": "普通任务",
+      "duration_days": 7,
+      "parent_ref": 0,
+      "predecessor_refs": [1]
+    },
+    {
+      "name": "L5 开发计划",
+      "task_type": "普通任务",
+      "duration_days": 7,
+      "parent_ref": 0,
+      "predecessor_refs": [2]
+    },
+    {
+      "name": "M2 计划阶段",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": null,
+      "predecessor_refs": [3]
+    },
+    {
+      "name": "M3 研发测试阶段",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": null,
+      "predecessor_refs": [4]
+    },
+    {
+      "name": "L6 详细设计",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": 5,
+      "predecessor_refs": []
+    },
+    {
+      "name": "板卡详设",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": 6,
+      "predecessor_refs": []
+    },
+    {
+      "name": "原理图",
+      "task_type": "普通任务",
+      "duration_days": 21,
+      "parent_ref": 7,
+      "predecessor_refs": [2]
+    },
+    {
+      "name": "Layout",
+      "task_type": "普通任务",
+      "duration_days": 30,
+      "parent_ref": 7,
+      "predecessor_refs": [8]
+    },
+    {
+      "name": "基材备料",
+      "task_type": "普通任务",
+      "duration_days": 60,
+      "parent_ref": 7,
+      "predecessor_refs": [2]
+    },
+    {
+      "name": "BOM备料",
+      "task_type": "普通任务",
+      "duration_days": 45,
+      "parent_ref": 7,
+      "predecessor_refs": [8]
+    },
+    {
+      "name": "PCB洗板",
+      "task_type": "普通任务",
+      "duration_days": 28,
+      "parent_ref": 7,
+      "predecessor_refs": [9, 10]
+    },
+    {
+      "name": "PCBA打板",
+      "task_type": "普通任务",
+      "duration_days": 10,
+      "parent_ref": 7,
+      "predecessor_refs": [12, 11]
+    },
+    {
+      "name": "结构详设",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": 6,
+      "predecessor_refs": []
+    },
+    {
+      "name": "结构设计",
+      "task_type": "普通任务",
+      "duration_days": 10,
+      "parent_ref": 14,
+      "predecessor_refs": [2]
+    },
+    {
+      "name": "结构打样",
+      "task_type": "普通任务",
+      "duration_days": 30,
+      "parent_ref": 14,
+      "predecessor_refs": [15]
+    },
+    {
+      "name": "散热详设",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": 6,
+      "predecessor_refs": []
+    },
+    {
+      "name": "散热设计",
+      "task_type": "普通任务",
+      "duration_days": 10,
+      "parent_ref": 17,
+      "predecessor_refs": [2]
+    },
+    {
+      "name": "散热打样",
+      "task_type": "普通任务",
+      "duration_days": 30,
+      "parent_ref": 17,
+      "predecessor_refs": [18]
+    },
+    {
+      "name": "L7 Power On",
+      "task_type": "普通任务",
+      "duration_days": 20,
+      "parent_ref": 6,
+      "predecessor_refs": [13]
+    },
+    {
+      "name": "M4 试制阶段",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": null,
+      "predecessor_refs": [5]
+    },
+    {
+      "name": "L9 DVT",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": 21,
+      "predecessor_refs": []
+    },
+    {
+      "name": "组装评审",
+      "task_type": "普通任务",
+      "duration_days": 2,
+      "parent_ref": 22,
+      "predecessor_refs": []
+    },
+    {
+      "name": "改版项测试",
+      "task_type": "普通任务",
+      "duration_days": 14,
+      "parent_ref": 22,
+      "predecessor_refs": []
+    },
+    {
+      "name": "非改版项测试",
+      "task_type": "普通任务",
+      "duration_days": 50,
+      "parent_ref": 22,
+      "predecessor_refs": [24]
+    },
+    {
+      "name": "Debug",
+      "task_type": "普通任务",
+      "duration_days": 30,
+      "parent_ref": 22,
+      "predecessor_refs": [25]
+    },
+    {
+      "name": "板卡改版",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": 21,
+      "predecessor_refs": []
+    },
+    {
+      "name": "A02原理图改版",
+      "task_type": "普通任务",
+      "duration_days": 14,
+      "parent_ref": 27,
+      "predecessor_refs": []
+    },
+    {
+      "name": "A02Layout",
+      "task_type": "普通任务",
+      "duration_days": 7,
+      "parent_ref": 27,
+      "predecessor_refs": [28]
+    },
+    {
+      "name": "A02洗板",
+      "task_type": "普通任务",
+      "duration_days": 30,
+      "parent_ref": 27,
+      "predecessor_refs": [29]
+    },
+    {
+      "name": "A02打板",
+      "task_type": "普通任务",
+      "duration_days": 7,
+      "parent_ref": 27,
+      "predecessor_refs": [30]
+    },
+    {
+      "name": "L13 NPI导入",
+      "task_type": "普通任务",
+      "duration_days": 7,
+      "parent_ref": 21,
+      "predecessor_refs": [26]
+    },
+    {
+      "name": "M5 新品导入阶段",
+      "task_type": "阶段任务",
+      "duration_days": 0,
+      "parent_ref": null,
+      "predecessor_refs": [21]
+    },
+    {
+      "name": "L14 直通率爬坡",
+      "task_type": "普通任务",
+      "duration_days": 90,
+      "parent_ref": 33,
+      "predecessor_refs": [32]
+    },
+    {
+      "name": "L12 批量测试",
+      "task_type": "普通任务",
+      "duration_days": 20,
+      "parent_ref": 33,
+      "predecessor_refs": []
+    },
+    {
+      "name": "批量测试Debug",
+      "task_type": "普通任务",
+      "duration_days": 14,
+      "parent_ref": 33,
+      "predecessor_refs": [35]
+    },
+    {
+      "name": "质量抽测＆质量评审",
+      "task_type": "普通任务",
+      "duration_days": 14,
+      "parent_ref": 33,
+      "predecessor_refs": [36]
+    }
+  ]
+}

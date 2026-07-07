@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   Box, Typography, Button, Select, MenuItem, FormControl, Snackbar, Alert,
   CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions,
-  List, ListItemButton, ListItemText,
+  List, ListItemButton, ListItemText, Paper,
 } from "@mui/material";
 import {
   Add, Save, FileDownload, AutoAwesome, History,
@@ -11,7 +11,6 @@ import {
 import api from "../api/client";
 import ScheduleTable from "../components/schedule/ScheduleTable";
 import ContextMenu from "../components/schedule/ContextMenu";
-import PredecessorDialog from "../components/schedule/PredecessorDialog";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
 import { calcCompletionStatus } from "../utils/schedule-date";
 
@@ -29,10 +28,6 @@ export default function SchedulePage() {
   // 右键菜单
   const [contextMenu, setContextMenu] = useState(null);
 
-  // 前置任务对话框
-  const [predecessorOpen, setPredecessorOpen] = useState(false);
-  const [predecessorTask, setPredecessorTask] = useState(null);
-
   // 版本历史
   const [versionOpen, setVersionOpen] = useState(false);
 
@@ -40,6 +35,9 @@ export default function SchedulePage() {
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [generateConfirm, setGenerateConfirm] = useState(false);
+
+  // 右键菜单触发前置任务 Popover
+  const [predTriggerTaskId, setPredTriggerTaskId] = useState(null);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
@@ -94,18 +92,16 @@ export default function SchedulePage() {
   // 编辑保存
   const handleTaskUpdate = async (taskId, data) => {
     try {
-      const res = await api.schedule.update(taskId, data);
-      // 重新加载以获取级联结果
+      await api.schedule.update(taskId, data);
       await loadSchedule();
       setSnackbar({ open: true, message: "已保存", severity: "success" });
-      return res;
     } catch (err) {
       setSnackbar({ open: true, message: err.message || "保存失败", severity: "error" });
       throw err;
     }
   };
 
-  // 降级 (Indent) — 将当前任务变成紧邻上方兄弟任务的子任务
+  // 降级
   const handleIndent = async (taskId) => {
     try {
       const res = await api.schedule.indent(id, taskId);
@@ -116,7 +112,7 @@ export default function SchedulePage() {
     }
   };
 
-  // 升级 (Outdent) — 将子任务提升到与父任务平级
+  // 升级
   const handleOutdent = async (taskId) => {
     try {
       const res = await api.schedule.outdent(id, taskId);
@@ -160,12 +156,7 @@ export default function SchedulePage() {
     }
   };
 
-  // 前置任务对话框
-  const handlePredecessorOpen = (task) => {
-    setPredecessorTask(task);
-    setPredecessorOpen(true);
-  };
-
+  // 前置任务保存（从 Popover 调用）
   const handlePredecessorSave = async (taskId, predecessorIds) => {
     try {
       await api.schedule.updatePredecessors(taskId, predecessorIds);
@@ -173,12 +164,24 @@ export default function SchedulePage() {
       setSnackbar({ open: true, message: "前置任务已更新", severity: "success" });
     } catch (err) {
       setSnackbar({ open: true, message: err.message || "更新失败", severity: "error" });
+      throw err;
+    }
+  };
+
+  // 背景色保存
+  const handleBgColorSave = async (taskId, color) => {
+    try {
+      await api.schedule.update(taskId, { bg_color: color });
+      await loadSchedule();
+      setSnackbar({ open: true, message: "背景色已更新", severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "更新失败", severity: "error" });
+      throw err;
     }
   };
 
   // 一键生成
   const handleGenerateClick = async () => {
-    // 加载模板列表
     try {
       const res = await api.schedule.templates();
       setTemplates(res.data || []);
@@ -186,7 +189,6 @@ export default function SchedulePage() {
         setSnackbar({ open: true, message: "无可用模板", severity: "warning" });
         return;
       }
-      // 如果已有数据，先确认
       if (tasks.length > 0) {
         setGenerateConfirm(true);
       }
@@ -248,14 +250,24 @@ export default function SchedulePage() {
   }
 
   return (
-    <Box>
-      {/* 顶部工具栏 */}
-      <Box
+    <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
+      {/* 页面标题 */}
+      {project && (
+        <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
+          [{project.code}] {project.name} — 项目排期表
+        </Typography>
+      )}
+
+      {/* 工具栏 — Paper 包裹 */}
+      <Paper
+        elevation={1}
         sx={{
+          borderRadius: 2,
+          p: 1.5,
+          mb: 2,
           display: "flex",
           alignItems: "center",
-          gap: 1.5,
-          mb: 2,
+          gap: 1,
           flexWrap: "wrap",
         }}
       >
@@ -274,7 +286,6 @@ export default function SchedulePage() {
           </Select>
         </FormControl>
 
-        {/* 新建项目 */}
         <Button
           size="small"
           variant="outlined"
@@ -283,7 +294,6 @@ export default function SchedulePage() {
           新建项目
         </Button>
 
-        {/* 从模板生成 */}
         <Button
           size="small"
           variant="contained"
@@ -293,7 +303,6 @@ export default function SchedulePage() {
           从模板生成
         </Button>
 
-        {/* 保存版本 */}
         <Button
           size="small"
           variant="outlined"
@@ -304,7 +313,6 @@ export default function SchedulePage() {
           {saving ? "保存中..." : "保存版本"}
         </Button>
 
-        {/* 版本历史 */}
         <Button
           size="small"
           variant="outlined"
@@ -314,7 +322,6 @@ export default function SchedulePage() {
           版本历史
         </Button>
 
-        {/* 导出 */}
         <Button
           size="small"
           variant="outlined"
@@ -324,13 +331,7 @@ export default function SchedulePage() {
         >
           导出 Excel
         </Button>
-
-        {project && (
-          <Typography variant="body2" color="text.secondary" sx={{ ml: "auto" }}>
-            [{project.code}] {project.name}
-          </Typography>
-        )}
-      </Box>
+      </Paper>
 
       {/* 排期表格 */}
       <ScheduleTable
@@ -338,6 +339,10 @@ export default function SchedulePage() {
         projectId={id}
         onContextMenu={handleContextMenu}
         onTaskUpdate={handleTaskUpdate}
+        onPredecessorSave={handlePredecessorSave}
+        onBgColorSave={handleBgColorSave}
+        predTriggerTaskId={predTriggerTaskId}
+        onPredTriggerHandled={() => setPredTriggerTaskId(null)}
       />
 
       {/* 右键菜单 */}
@@ -354,18 +359,12 @@ export default function SchedulePage() {
         onChangeType={handleChangeType}
         onIndent={handleIndent}
         onOutdent={handleOutdent}
-        onPredecessors={handlePredecessorOpen}
+        onPredecessors={(task) => {
+          setPredTriggerTaskId(task.id);
+        }}
         onInsert={handleInsert}
         onDelete={handleDelete}
-      />
-
-      {/* 前置任务选择器 */}
-      <PredecessorDialog
-        open={predecessorOpen}
-        task={predecessorTask}
-        tasks={tasks}
-        onClose={() => setPredecessorOpen(false)}
-        onSave={handlePredecessorSave}
+        onBgColor={handleBgColorSave}
       />
 
       {/* 版本历史 */}
