@@ -45,7 +45,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
 
     setLocalTasks((prev) => [...prev, tempTask]);
     setNewTitle("");
-    inputRef.current?.focus();
+    setTimeout(() => inputRef.current?.focus(), 0);
 
     try {
       const res = await api.tasks.create({ project_id: projectId, title: trimmed, priority: "low", kanban_column: "待开始" });
@@ -82,7 +82,6 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
         <TextField inputRef={inputRef} size="small" fullWidth placeholder="输入任务，回车新增" value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTask(); } }}
-          disabled={adding}
           sx={{ "& .MuiOutlinedInput-root": { bgcolor: "grey.50", borderRadius: 1, "& fieldset": { borderColor: "divider" } }, "& .MuiInputBase-input": { fontSize: "0.85rem", py: 0.75 } }} />
       </Box>
       <Box sx={{ flex: 1, overflowY: "auto" }}>
