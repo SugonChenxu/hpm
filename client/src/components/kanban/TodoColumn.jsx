@@ -45,6 +45,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
 
     setLocalTasks((prev) => [...prev, tempTask]);
     setNewTitle("");
+    inputRef.current?.focus();
 
     try {
       const res = await api.tasks.create({ project_id: projectId, title: trimmed, priority: "low", kanban_column: "待开始" });
@@ -55,7 +56,6 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
     } finally {
       setAdding(false);
       restore(containerRef, savedScroll);
-      inputRef.current?.focus();
     }
   };
 
