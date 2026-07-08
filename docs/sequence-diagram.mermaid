@@ -1,89 +1,103 @@
 sequenceDiagram
     actor User
-    participant Page as TaskKanbanPage
-    participant API as api/client.js
-    participant Server as Express
+    participant Page as IssueDashboardPage
+    participant Hook as useIssueDashboard
+    participant API as api client
+    participant Express as Express Server
+    participant Cache as CacheService
+    participant Adapter as MantisAdapter
+    participant Mantis as Mantis API
     participant DB as SQLite
 
-    Note over User,DB: === 1. 加载项目看板 ===
+    User->>Page: 进入 /issues?projectId=1
+    Page->>Hook: useIssueDashboard(projectId)
 
-    User->>Page: 选择项目
-    Page->>Page: setProjectId(id)
-    Page->>API: GET /api/tasks?project_id=X
-    API->>Server: HTTP GET
-    Server->>DB: SELECT * FROM tasks WHERE project_id=X AND deleted_at IS NULL ORDER BY sort_order
-    DB-->>Server: Task[]
-    Server-->>API: {ok, data: Task[]}
-    API-->>Page: Task[]
+    Note over Hook: 并发请求并行加载
 
-    par 并行加载
-        Page->>API: GET /api/projects/X
-        API->>Server: HTTP GET
-        Server->>DB: SELECT * FROM projects WHERE id=X
-        DB-->>Server: Project
-        Server-->>API: {ok, data: Project}
-        API-->>Page: Project
-    and
-        Page->>API: GET /api/projects/X/kanban-stats
-        API->>Server: HTTP GET
-        Server->>DB: SELECT COUNT...
-        DB-->>Server: stats
-        Server-->>API: {ok, data: KanbanStats}
-        API-->>Page: KanbanStats
+    par 并行请求
+        Hook->>API: GET /issues/summary?project_id=1
+        API->>Express: HTTP GET
+        Express->>Cache: getCache(1, "summary")
+        alt 缓存命中且未过期
+            Cache-->>Express: { total: 127, resolved: 89, rate: 70.1 }
+        else 缓存未命中
+            Express->>Adapter: fetchIssues(projectId)
+            Adapter->>Mantis: GET /api/rest/issues?project_id=xxx
+            Mantis-->>Adapter: issues[]
+            Adapter-->>Express: issues[]
+            Express->>DB: 更新 issues 表
+            Express->>Cache: setCache(1, "summary", result)
+            Express-->>API: { ok: true, data: {...} }
+        end
+        API-->>Hook: summary data
+
+        Hook->>API: GET /issues/di-trend?project_id=1
+        API->>Express: HTTP GET
+        Express->>Cache: getCache(1, "di_trend")
+        alt 缓存命中
+            Cache-->>Express: cached trend data
+        else 缓存未命中
+            Express->>DB: SELECT ... FROM issues WHERE DI>0 ORDER BY synced_at
+            DB-->>Express: rows[]
+            Express->>Cache: setCache(1, "di_trend", result)
+        end
+        Express-->>API: { ok: true, data: [...] }
+        API-->>Hook: di_trend data
+
+        Hook->>API: GET /issues/category-stats?project_id=1
+        API->>Express: HTTP GET
+        Express->>Cache: getCache(1, "category_stats")
+        alt 缓存命中
+            Cache-->>Express: cached stats
+        else 缓存未命中
+            Express->>DB: SELECT category, COUNT(*) FROM issues GROUP BY category
+            DB-->>Express: rows[]
+            Express->>Cache: setCache(1, "category_stats", result)
+        end
+        Express-->>API: { ok: true, data: [...] }
+        API-->>Hook: category_stats data
     end
 
-    Page->>Page: 拆分为 todoTasks / doneTasks
-    Page->>Page: localStorage 读取折叠状态
-    Page->>Page: 渲染 KanbanProjectView
+    Hook-->>Page: { stats, diTrend, categoryStats, loading: false }
 
-    Note over User,DB: === 2. 展开子任务 ===
+    Page->>Page: 渲染 StatsCards + DITrendChart + CategoryBarChart
 
-    User->>Page: 点击 ▶ 箭头
-    Page->>Page: setExpanded(true)
-    Page->>API: GET /api/tasks/{taskId}/subtasks
-    API->>Server: HTTP GET
-    Server->>DB: SELECT * FROM subtasks WHERE task_id=? AND deleted_at IS NULL ORDER BY sort_order
-    DB-->>Server: Subtask[]
-    Server-->>API: {ok, data: Subtask[]}
-    API-->>Page: Subtask[]
-    Page->>Page: 渲染 SubtaskList，自动聚焦输入框
+    Note over Hook: 报告加载
 
-    Note over User,DB: === 3. 新增子任务（快速录入 + 乐观更新） ===
+    Hook->>API: GET /issues/report?project_id=1
+    API->>Express: HTTP GET
+    Express->>DB: 查询 issues 聚合
+    DB-->>Express: rows
+    Express->>Express: 按模板渲染报告文本
+    Express-->>API: { ok: true, data: "BUG情况：\n..." }
+    API-->>Hook: report text
+    Hook-->>Page: reportText
+    Page->>Page: 渲染 ReportPanel
 
-    User->>Page: 输入文字 + 回车
-    Page->>Page: 乐观插入本地状态
-    Page->>Page: 清空输入框，保持光标
-    Page->>API: POST /api/tasks/{taskId}/subtasks {title}
-    API->>Server: HTTP POST
-    Server->>DB: INSERT INTO subtasks (task_id, title, sort_order) VALUES (?, ?, ?)
-    DB-->>Server: {id, ...}
-    Server-->>API: {ok, data: Subtask}
-    API-->>Page: Subtask（含真实 id）
-    Page->>Page: 用服务端数据更新本地记录
+    Note over User,Page: ── 手动刷新流程 ──
 
-    Note over User,DB: === 4. 拖拽排序（乐观更新 + 滚动保持） ===
+    User->>Page: 点击「手动刷新」按钮
+    Page->>Hook: refresh()
+    Hook->>API: POST /cache/invalidate { project_id: 1 }
+    API->>Express: HTTP POST
+    Express->>Cache: invalidateCache(1)
+    Express-->>API: { ok: true }
 
-    User->>Page: 拖拽任务卡片到新位置
-    Page->>Page: onDragEnd → 计算新 sort_order
-    Page->>Page: 记录 scrollTop
-    Page->>Page: 乐观重排本地 tasks[] 数组
-    Page->>API: PUT /api/tasks/{taskId}/reorder {sort_order, project_id}
-    API->>Server: HTTP PUT
-    Server->>DB: BEGIN TRANSACTION; 重新计算 sort_order; COMMIT
-    DB-->>Server: OK
-    Server-->>API: {ok, data: Task}
-    API-->>Page: OK
-    Page->>Page: requestAnimationFrame 恢复 scrollTop
+    Hook->>API: POST /mantis/sync { project_id: 1 }
+    API->>Express: HTTP POST
+    Express->>Adapter: fetchIssues(projectId)
+    Adapter->>Mantis: GET /api/rest/issues (force)
+    Mantis-->>Adapter: issues[]
+    Adapter-->>Express: issues[]
+    Express->>Cache: setCache -- 回填所有缓存键
+    Express-->>API: { ok: true, sync_summary: {...} }
+    API-->>Hook: sync done
 
-    Note over User,DB: === 5. 切换完成状态（乐观更新 + 自动折叠） ===
+    Hook->>Hook: 重新 load()
+    Hook-->>Page: 更新全部数据
 
-    User->>Page: 点击 ✓ 按钮
-    Page->>Page: 乐观移动：todo→done
-    Page->>API: PUT /api/tasks/{id}/toggle-complete
-    API->>Server: HTTP PUT
-    Server->>DB: UPDATE tasks SET completed_at=?, kanban_column=?, status=? WHERE id=?
-    DB-->>Server: OK
-    Server-->>API: {ok, data: Task}
-    API-->>Page: Task（含 completed_at）
-    Page->>Page: 检查全部完成 → 自动折叠
-    Page->>Page: localStorage.setItem('kanban-collapsed-{pid}', 'true')
+    Note over User,Page: ── 一键复制报告 ──
+
+    User->>Page: 点击「一键复制」
+    Page->>Page: navigator.clipboard.writeText(reportText)
+    Page->>Page: toast.success("已复制到剪贴板")

@@ -1,191 +1,189 @@
 classDiagram
     direction TB
 
-    %% ==================== 数据模型 ====================
-
-    class Project {
-        +INTEGER id PK
-        +TEXT code
-        +TEXT name
-        +TEXT category
-        +TEXT status
-        +INTEGER template_id FK
-        +TEXT theme_color
-        +TEXT created_at
-        +TEXT updated_at
+    %% ── 数据库模型 ──
+    class Issue {
+        +Integer id PK
+        +Integer project_id FK
+        +Integer phase_id FK
+        +String code UK
+        +Integer mantis_id
+        +String source
+        +String title
+        +String description
+        +String severity
+        +String status
+        +String assignee
+        +Float di_weight
+        +String category
+        +String resolution
+        +String mantis_updated_at
+        +String synced_at
+        +String created_at
+        +String updated_at
     }
 
-    class Task {
-        +INTEGER id PK
-        +INTEGER project_id FK
-        +INTEGER phase_id FK
-        +TEXT title
-        +TEXT description
-        +TEXT priority
-        +TEXT assignee
-        +TEXT kanban_column
-        +TEXT due_date
-        +TEXT status
-        +INTEGER sort_order
-        +TEXT completed_at
-        +TEXT created_at
-        +TEXT updated_at
-        +TEXT deleted_at
+    class SyncCache {
+        +Integer id PK
+        +Integer project_id FK
+        +String cache_key
+        +String cache_data
+        +String cached_at
+        +Integer ttl_seconds
     }
 
-    class Subtask {
-        +INTEGER id PK
-        +INTEGER task_id FK
-        +TEXT title
-        +INTEGER is_completed
-        +INTEGER sort_order
-        +TEXT created_at
-        +TEXT updated_at
-        +TEXT deleted_at
+    class MantisConnection {
+        +Integer id PK
+        +String server_url
+        +String api_token
+        +String project_mapping
+        +Integer sync_interval_min
+        +Integer is_active
+        +String last_sync_at
+        +String last_sync_status
     }
 
-    class KanbanStats {
-        +INTEGER total
-        +INTEGER todo
-        +INTEGER done
-        +INTEGER subtasks_total
-        +INTEGER subtasks_done
+    Issue --> SyncCache : "project_id 关联缓存"
+
+    %% ── 后端适配器与服务 ──
+    class MantisAdapter {
+        -String baseUrl
+        -String apiToken
+        +fetchProjects() MantisProject[]
+        +fetchIssues(projectId) MantisIssue[]
+        +testConnection() Boolean
+        -request(endpoint, params) Response
+        -handleError(error) MantisError
     }
 
-    Project "1" -- "*" Task : project_id
-    Task "1" -- "*" Subtask : task_id
+    class CacheService {
+        +get(projectId, cacheKey) Object|null
+        +set(projectId, cacheKey, data, ttl) void
+        +invalidate(projectId, cacheKey) void
+        +isValid(cachedAt, ttl) Boolean
+    }
 
-    %% ==================== 前端组件 ====================
+    class IssueReportService {
+        +generateReport(projectId) ReportData
+        +calcDI(issues) Float
+        +calcCategoryStats(issues) CategoryStats
+        +calcSummary(issues) Summary
+    }
 
-    class TaskKanbanPage {
-        -projectId: number|null
-        -tasks: Task[]
-        -project: Project|null
-        -loading: boolean
-        +load() void
+    MantisAdapter ..> MantisConnection : 读取配置
+    MantisAdapter ..> Issue : 同步写入
+    CacheService ..> SyncCache : 读写缓存
+    IssueReportService ..> Issue : 查询聚合
+
+    %% ── 前端页面与组件 ──
+    class IssueDashboardPage {
+        -String projectId
+        -StatsData stats
+        -TrendDataPoint[] diTrend
+        -CategoryStat[] categoryStats
+        -String reportText
+        -String errorType
+        -Boolean loading
+        +loadAll() void
+        +handleRefresh() void
+        +handleCopy() void
         +render() JSX
     }
 
-    class KanbanGlobalView {
-        -tasks: Task[]
-        -columns: string[]
+    class StatsCards {
+        +Integer totalIssues
+        +Integer resolvedCount
+        +Float resolutionRate
+        +Boolean loading
         +render() JSX
     }
 
-    class KanbanProjectView {
-        -tasks: Task[]
-        -project: Project
-        -collapsed: boolean
-        -themeColor: string
-        +onToggleCollapse() void
+    class DITrendChart {
+        +TrendDataPoint[] data
+        +Boolean loading
         +render() JSX
     }
 
-    class TodoColumn {
-        -tasks: Task[]
-        -projectId: number
-        +onDragEnd(event) void
-        +onAddTask(title) void
+    class CategoryBarChart {
+        +CategoryStat[] data
+        +Boolean loading
         +render() JSX
     }
 
-    class DoneColumn {
-        -tasks: Task[]
+    class ReportPanel {
+        +String reportText
+        +Boolean loading
+        +onCopy() void
         +render() JSX
     }
 
-    class TaskCard {
-        -task: Task
-        -isDragging: boolean
+    class ErrorState {
+        +String type
+        +Function onRetry
+        +Function onGoToConfig
         +render() JSX
     }
 
-    class TaskItem {
-        -task: Task
-        -expanded: boolean
-        -subtasks: Subtask[]
-        +onToggleExpand() void
-        +onToggleComplete() void
+    class RefreshBar {
+        +String projectId
+        +String lastUpdated
+        +Function onRefresh
+        +Function onProjectChange
+        +Boolean loading
         +render() JSX
     }
 
-    class SubtaskList {
-        -subtasks: Subtask[]
-        -taskId: number
-        +onAdd(title) void
-        +onToggle(id) void
-        +onDelete(id) void
-        +render() JSX
+    IssueDashboardPage *-- StatsCards : 组合
+    IssueDashboardPage *-- DITrendChart : 组合
+    IssueDashboardPage *-- CategoryBarChart : 组合
+    IssueDashboardPage *-- ReportPanel : 组合
+    IssueDashboardPage *-- ErrorState : 条件渲染
+    IssueDashboardPage *-- RefreshBar : 组合
+
+    %% ── 数据流类型 ──
+    class TrendDataPoint {
+        +String date
+        +Float di
     }
 
-    class SubtaskItem {
-        -subtask: Subtask
-        +onToggle() void
-        +onDelete() void
-        +render() JSX
+    class CategoryStat {
+        +String category
+        +Integer count
     }
 
-    class PriorityChip {
-        +COLOR_MAP: object
-        +LABEL_MAP: object
-        +render() JSX
+    class StatsData {
+        +Integer total
+        +Integer resolved
+        +Float rate
     }
 
-    class CollapsedProjectHeader {
-        -project: Project
-        -taskCount: number
-        +onExpand() void
-        +render() JSX
+    class MantisProject {
+        +Integer id
+        +String name
+        +String description
     }
 
-    class KanbanStatsBar {
-        -total: number
-        -done: number
-        -subtaskStats: object
-        +render() JSX
+    DITrendChart ..> TrendDataPoint : 使用
+    CategoryBarChart ..> CategoryStat : 使用
+    StatsCards ..> StatsData : 使用
+
+    %% ── 自定义 hooks ──
+    class useIssueDashboard {
+        +StatsData stats
+        +TrendDataPoint[] diTrend
+        +CategoryStat[] categoryStats
+        +String reportText
+        +Boolean loading
+        +String error
+        +String errorType
+        +String lastUpdated
+        +Function refresh()
     }
 
-    class useOptimistic {
-        +data: T
-        +mutate(updater) void
-        -snapshot: T
+    class useDedupRequest {
+        +Map~String,Promise~ pending
+        +Function dedup(key, fn)
     }
 
-    class useKanbanScroll {
-        +capture() number
-        +restore(scrollTop) void
-        -containerRef: RefObject
-    }
-
-    %% 组件组合关系
-
-    TaskKanbanPage --> KanbanGlobalView : projectId=null
-    TaskKanbanPage --> KanbanProjectView : projectId≠null
-    KanbanProjectView --> TodoColumn
-    KanbanProjectView --> DoneColumn
-    KanbanProjectView --> CollapsedProjectHeader : collapsed=true
-    KanbanProjectView --> KanbanStatsBar
-    TodoColumn --> TaskCard : @dnd-kit sortable
-    DoneColumn --> TaskCard
-    TaskCard --> TaskItem
-    TaskCard --> PriorityChip
-    TaskItem --> SubtaskList
-    SubtaskList --> SubtaskItem
-
-    TaskKanbanPage ..> useOptimistic : uses
-    TodoColumn ..> useKanbanScroll : uses
-    TaskItem ..> useOptimistic : uses
-    SubtaskList ..> useOptimistic : uses
-
-    %% 组件 → API 映射
-
-    KanbanGlobalView ..> Task : GET/PUT /api/tasks
-    KanbanProjectView ..> KanbanStats : GET /api/projects/:id/kanban-stats
-    TodoColumn ..> Task : POST /api/tasks, PUT /api/tasks/:id/reorder
-    SubtaskList ..> Subtask : POST /api/tasks/:id/subtasks
-    SubtaskItem ..> Subtask : PUT /api/subtasks/:id, DELETE /api/subtasks/:id
-    TaskItem ..> Task : PUT /api/tasks/:id/toggle-complete
-
-    %% 优先级常量
-
-    note for PriorityChip "urgent→#cf1322 紧急\nhigh→#ff4d4f 高\nmedium→#faad14 中\nlow→#52c41a 低"
+    IssueDashboardPage ..> useIssueDashboard : 使用
+    useIssueDashboard ..> useDedupRequest : 使用

@@ -5,7 +5,12 @@
  * Loading 时刷新按钮显示旋转动画。
  */
 
-import { Box, TextField, MenuItem, IconButton, Typography } from "@mui/material";
+import { Box, TextField, MenuItem, IconButton, Typography, keyframes } from "@mui/material";
+
+const spin = keyframes`
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+`;
 import RefreshIcon from "@mui/icons-material/Refresh";
 
 /**
@@ -61,13 +66,7 @@ export default function RefreshBar({
         title="手动刷新"
       >
         <RefreshIcon
-          sx={{
-            animation: loading ? "spin 1s linear infinite" : "none",
-            "@keyframes spin": {
-              "0%": { transform: "rotate(0deg)" },
-              "100%": { transform: "rotate(360deg)" },
-            },
-          }}
+          sx={{ animation: loading ? `${spin} 1s linear infinite` : "none" }}
         />
       </IconButton>
 

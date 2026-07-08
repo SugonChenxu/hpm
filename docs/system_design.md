@@ -1,296 +1,290 @@
-# 看板模块 — 系统设计文档
+# M3 故障管理模块 — 系统架构设计 + 任务分解
 
-> **版本**: 1.0  
-> **日期**: 2025-07-07  
-> **Architect**: Bob  
-> **关联 PRD**: `docs/modules/02-待办事项模块-PRD.md`
+> **基准 PRD**: `docs/modules/03-故障管理模块-PRD.md` v1.1  
+> **基准架构**: `docs/architecture.md` v1.0  
+> **日期**: 2026-07-08  
+> **设计者**: Bob (Architect)
 
 ---
 
 ## Part A: 系统设计
 
-### 1. 实现方案
+---
+
+### 1. 实现方案与框架选型
 
 #### 1.1 核心技术挑战
 
-| 挑战 | 分析 | 决策 |
-|------|------|------|
-| **拖拽排序** | 需要高性能、可访问的 DnD 库，支持触控和键盘 | `@dnd-kit/core` + `@dnd-kit/sortable`（现代化、轻量、TypeScript友好、可访问） |
-| **乐观更新** | 拖拽/完成/新增操作需要即时反馈，不可等待服务端响应 | 自定义 `useOptimistic` hook：先改本地状态 → 发 API → 失败时回滚 |
-| **滚动位置保持** | 新增/排序后页面不应跳动，已完成列不应因新增而滚动 | 操作前记录 `scrollTop`，操作后在 `requestAnimationFrame` 中恢复 |
-| **折叠状态持久化** | 全部完成后折叠，刷新页面后状态不丢失 | `localStorage` 键 `kanban-collapsed-{projectId}` |
-| **优先级迁移** | 现有数据 P0/P1/P2 → urgent/high/medium/low | 服务端迁移脚本：P0→urgent, P1→high, P2→medium |
-| **双布局切换** | 项目看板用新双栏，全局视图保留四列 | `projectId` 有无决定渲染 `KanbanProjectView` 或 `KanbanGlobalView` |
+| # | 挑战 | 解决方案 |
+|---|------|---------|
+| C1 | Mantis REST API 鉴权与数据拉取 | 后端 Adapter 模式封装 `axios` 调用，Bearer Token 鉴权，统一错误映射 |
+| C2 | 缓存策略（TTL 5min + 手动刷新强制穿透） | 新增 `sync_cache` 表，后端中间件先查缓存 → 未命中则拉取 Mantis → 回填缓存；手动刷新走 `Cache-Control: no-cache` header |
+| C3 | DI 趋势折线图（过滤 DI=0，缩放+t tooltip） | `recharts` `<LineChart>` + `<Brush>` 缩放 + `<Tooltip>` |
+| C4 | 缺陷分类柱状图（4 维度，0 条不渲染） | `recharts` `<BarChart>`，数据层预过滤 count=0 的分类 |
+| C5 | 前端请求去重（同项目同接口并发合并） | 前端自定义 hook 内用 `useRef` 存 Promise，实现 dedup |
+| C6 | 4 种异常友好提示 | 前端统一的 `ErrorState` 组件按错误码渲染不同提示文案+图标 |
 
-#### 1.2 框架与库选型
+#### 1.2 框架选型（增量）
 
-| 层 | 技术 | 版本 | 理由 |
-|----|------|------|------|
-| 前端框架 | React | ^18.3.1 | 已有 |
-| UI 组件库 | MUI | ^5.15.0 | 已有，一致性 |
-| 样式 | Emotion + Tailwind CSS | 已有 | 已有配套 |
-| 路由 | react-router-dom | ^6.23.0 | 已有，URL 参数驱动项目选择 |
-| 拖拽 | @dnd-kit/core | ^6.1.0 | 新增，轻量无依赖，支持 sortable/accessible |
-| 拖拽排序 | @dnd-kit/sortable | ^8.0.0 | @dnd-kit 配套排序预设 |
-| 拖拽工具 | @dnd-kit/utilities | ^3.2.0 | CSS transform 辅助 |
-| 后端框架 | Express | ^4.19.2 | 已有 |
-| 数据库 | better-sqlite3 | ^11.1.2 | 已有，同步 API 适合单机应用 |
+| 层 | 选型 | 说明 |
+|---|------|------|
+| **前端图表** | `recharts` ^2.12 | React 原生声明式图表，MUI 风格契合 |
+| **后端 HTTP** | `axios` ^1.7（server 侧） | 对 Mantis REST API 发请求，已有生态 |
+| **缓存层** | SQLite `sync_cache` 表 | 无额外依赖，利用现有 SQLite |
+| **剪贴板** | `navigator.clipboard.writeText()` | 原生 API，无需额外包 |
 
 #### 1.3 架构模式
 
-```
-┌─────────────────────────────────────────────────┐
-│                   TaskKanbanPage                 │
-│  ┌─────────────────┐  ┌───────────────────────┐ │
-│  │ KanbanGlobalView │  │  KanbanProjectView   │ │
-│  │  (四列看板)      │  │  ┌───────┬─────────┐ │ │
-│  │  projectId=null  │  │  │TodoCol│DoneCol  │ │ │
-│  └─────────────────┘  │  │(排序) │(倒序)   │ │ │
-│                        │  └───────┴─────────┘ │ │
-│                        └───────────────────────┘ │
-│  ┌─────────────────────────────────────────────┐ │
-│  │        TaskItem → SubtaskList → SubtaskItem │ │
-│  └─────────────────────────────────────────────┘ │
-│  ┌────────────┐ ┌──────────────┐ ┌────────────┐ │
-│  │useOptimistic│ │useScrollPos │ │PriorityChip│ │
-│  └────────────┘ └──────────────┘ └────────────┘ │
-└─────────────────────────────────────────────────┘
-```
+- **前端**：自底向上 → Page 层组合 Compound Components（MetricCards + TrendChart + CategoryChart + ReportPanel）
+- **后端**：Router → Cache Middleware → MantisAdapter → SQLite（Adapter 模式已在架构文档中定义）
+- **数据流**：`Mantis API → MantisAdapter → sync_cache / issues 表 → Express Route → JSON Response → React State → recharts`
 
 ---
 
 ### 2. 文件列表
 
-#### 2.1 新建文件
+#### 2.1 新增文件
 
 ```
-client/src/components/kanban/PriorityChip.jsx       # 四级优先级标签
-client/src/components/kanban/KanbanGlobalView.jsx    # 全部项目四列看板
-client/src/components/kanban/KanbanProjectView.jsx   # 项目双栏看板（主入口）
-client/src/components/kanban/TodoColumn.jsx          # 待办栏（可拖拽排序）
-client/src/components/kanban/DoneColumn.jsx          # 已完成栏（completed_at 倒序）
-client/src/components/kanban/TaskCard.jsx            # 任务卡片（含拖拽手柄）
-client/src/components/kanban/TaskItem.jsx            # 任务项（展开/折叠容器）
-client/src/components/kanban/SubtaskList.jsx         # 子任务列表
-client/src/components/kanban/SubtaskItem.jsx         # 单个子任务行
-client/src/components/kanban/CollapsedProjectHeader.jsx # 折叠态项目名称
-client/src/components/kanban/KanbanStatsBar.jsx      # 看板统计条
-client/src/components/kanban/index.js                # barrel 导出
-client/src/hooks/useOptimistic.js                    # 乐观更新 hook
-client/src/hooks/useKanbanScroll.js                  # 滚动位置保持 hook
+# 后端
+server/src/adapters/mantis.js              # [新增] Mantis REST API 适配器（鉴权+拉取+错误处理）
+server/src/routes/mantis.js                # [新增] Mantis 相关路由（projects/sync/cache/invalidate）
+
+# 前端
+client/src/pages/IssueDashboardPage.jsx    # [新增] 故障仪表盘主页面（替代旧 IssueListPage 的图表视图）
+client/src/components/issue/StatsCards.jsx # [新增] 全局统计卡片（故障总数/已解决/解决率）
+client/src/components/issue/DITrendChart.jsx # [新增] DI 趋势折线图（recharts LineChart）
+client/src/components/issue/CategoryBarChart.jsx # [新增] 缺陷分类柱状图（recharts BarChart）
+client/src/components/issue/ReportPanel.jsx # [新增] 自动报告生成 + 一键复制面板
+client/src/components/issue/ErrorState.jsx  # [新增] 统一异常状态组件（4种异常场景）
+client/src/components/issue/RefreshBar.jsx  # [新增] 顶部操作栏（项目选择+刷新+时间戳）
+client/src/hooks/useIssueDashboard.js       # [新增] 故障仪表盘数据 hook（含缓存+去重+轮询）
+client/src/hooks/useDedupRequest.js         # [新增] 通用请求去重 hook
+client/src/api/mantis.js                    # [新增] Mantis 相关 API 封装
 ```
 
 #### 2.2 修改文件
 
 ```
-client/package.json                                  # 添加 @dnd-kit/* 依赖
-client/src/api/client.js                             # 添加 subtask/reorder/toggle/stats API
-client/src/pages/TaskKanbanPage.jsx                  # 完全重写，路由分发
-server/src/db.js                                     # 新增 subtasks 表 + ALTER 迁移 + 优先级迁移
-server/src/routes/tasks.js                           # 新增 subtask CRUD + reorder + toggle-complete
-server/src/routes/projects.js                        # 新增 kanban-stats 路由
-server/src/index.js                                  # 注册 subtasks 路由
+# 后端
+server/src/db.js                           # [修改] 新增 sync_cache 表 + issues/mantis_connection 字段迁移
+server/src/routes/issues.js                # [修改] 新增 di-trend/category-stats/summary/report 端点
+server/src/index.js                        # [修改] 挂载 mantis 路由
+
+# 前端
+client/src/App.jsx                         # [修改] /issues 路由指向新 IssueDashboardPage
+client/src/api/client.js                   # [修改] 新增 issues 相关 API 方法 + mantis API
+client/package.json                        # [修改] 新增 recharts 依赖
+server/package.json                        # [修改] 新增 axios 依赖
 ```
 
 ---
 
 ### 3. 数据结构和接口
 
-#### 3.1 数据库 ER 图（Mermaid classDiagram）
-
-```mermaid
-classDiagram
-    direction LR
-
-    class Project {
-        +INTEGER id PK
-        +TEXT code
-        +TEXT name
-        +TEXT category
-        +TEXT status
-        +INTEGER template_id FK
-        +TEXT theme_color ★
-        +TEXT created_at
-        +TEXT updated_at
-    }
-
-    class Task {
-        +INTEGER id PK
-        +INTEGER project_id FK
-        +INTEGER phase_id FK
-        +TEXT title
-        +TEXT description
-        +TEXT priority ★★
-        +TEXT assignee
-        +TEXT kanban_column
-        +TEXT due_date
-        +TEXT status
-        +INTEGER sort_order ★
-        +TEXT completed_at ★
-        +TEXT created_at
-        +TEXT updated_at
-        +TEXT deleted_at
-    }
-
-    class Subtask {
-        +INTEGER id PK
-        +INTEGER task_id FK
-        +TEXT title
-        +INTEGER is_completed
-        +INTEGER sort_order
-        +TEXT created_at
-        +TEXT updated_at
-        +TEXT deleted_at
-    }
-
-    Project "1" -- "*" Task : project_id
-    Task "1" -- "*" Subtask : task_id
-```
-
-> ★ 新增字段 | ★★ 值变更：P0/P1/P2 → urgent/high/medium/low
-
-#### 3.2 前端组件类图
+#### 3.1 类图（Mermaid classDiagram）
 
 ```mermaid
 classDiagram
     direction TB
 
-    class TaskKanbanPage {
-        -projectId: number|null
-        -tasks: Task[]
-        -project: Project|null
-        -loading: boolean
-        +load(): void
-        +render(): JSX
+    %% ── 数据库模型 ──
+    class Issue {
+        +Integer id PK
+        +Integer project_id FK
+        +Integer phase_id FK
+        +String code UK
+        +Integer mantis_id
+        +String source
+        +String title
+        +String description
+        +String severity
+        +String status
+        +String assignee
+        +Float di_weight
+        +String category
+        +String resolution
+        +String mantis_updated_at
+        +String synced_at
+        +String created_at
+        +String updated_at
     }
 
-    class KanbanGlobalView {
-        -tasks: Task[]
-        -columns: string[]
-        +render(): JSX
+    class SyncCache {
+        +Integer id PK
+        +Integer project_id FK
+        +String cache_key
+        +String cache_data
+        +String cached_at
+        +Integer ttl_seconds
     }
 
-    class KanbanProjectView {
-        -tasks: Task[]
-        -project: Project
-        -collapsed: boolean
-        -themeColor: string
-        +onToggleCollapse(): void
-        +render(): JSX
+    class MantisConnection {
+        +Integer id PK
+        +String server_url
+        +String api_token
+        +String project_mapping
+        +Integer sync_interval_min
+        +Integer is_active
+        +String last_sync_at
+        +String last_sync_status
     }
 
-    class TodoColumn {
-        -tasks: Task[]
-        -projectId: number
-        +onDragEnd(event): void
-        +onAddTask(title): void
-        +render(): JSX
+    Issue --> SyncCache : "project_id 关联缓存键"
+
+    %% ── 后端适配器与服务 ──
+    class MantisAdapter {
+        -String baseUrl
+        -String apiToken
+        +fetchProjects() MantisProject[]
+        +fetchIssues(projectId) MantisIssue[]
+        +testConnection() Boolean
+        -request(endpoint, params) Response
+        -handleError(error) MantisError
     }
 
-    class DoneColumn {
-        -tasks: Task[]
-        +render(): JSX
+    class CacheService {
+        +get(projectId, cacheKey) Object|null
+        +set(projectId, cacheKey, data, ttl) void
+        +invalidate(projectId, cacheKey) void
+        +isValid(cachedAt, ttl) Boolean
     }
 
-    class TaskCard {
-        -task: Task
-        -isDragging: boolean
-        +render(): JSX
+    class IssueReportService {
+        +generateReport(projectId) ReportData
+        +calcDI(issues) Float
+        +calcCategoryStats(issues) CategoryStats
+        +calcSummary(issues) Summary
     }
 
-    class TaskItem {
-        -task: Task
-        -expanded: boolean
-        -subtasks: Subtask[]
-        +onToggleExpand(): void
-        +onToggleComplete(): void
-        +render(): JSX
+    MantisAdapter ..> MantisConnection : "读取配置"
+    MantisAdapter ..> Issue : "同步写入"
+    CacheService ..> SyncCache : "读写缓存"
+    IssueReportService ..> Issue : "查询聚合"
+
+    %% ── 前端模型 ──
+    class IssueDashboardPage {
+        -String projectId
+        -StatsData stats
+        -TrendData[] diTrend
+        -CategoryData[] categoryStats
+        -String reportText
+        -String errorType
+        -Boolean loading
+        +render() JSX
     }
 
-    class SubtaskList {
-        -subtasks: Subtask[]
-        -taskId: number
-        +onAdd(title): void
-        +onToggle(id): void
-        +onDelete(id): void
-        +render(): JSX
+    class StatsCards {
+        +Integer totalIssues
+        +Integer resolvedCount
+        +Float resolutionRate
+        +render() JSX
     }
 
-    class SubtaskItem {
-        -subtask: Subtask
-        +onToggle(): void
-        +onDelete(): void
-        +render(): JSX
+    class DITrendChart {
+        +TrendDataPoint[] data
+        +render() JSX
     }
 
-    class PriorityChip {
-        -priority: string
-        +COLOR_MAP: object
-        +LABEL_MAP: object
-        +render(): JSX
+    class CategoryBarChart {
+        +CategoryStat[] data
+        +render() JSX
     }
 
-    class CollapsedProjectHeader {
-        -project: Project
-        -taskCount: number
-        +onExpand(): void
-        +render(): JSX
+    class ReportPanel {
+        +String reportText
+        +onCopy() void
+        +render() JSX
     }
 
-    class KanbanStatsBar {
-        -total: number
-        -done: number
-        -subtaskStats: object
-        +render(): JSX
+    class ErrorState {
+        +String type
+        +Function onRetry
+        +render() JSX
     }
 
-    TaskKanbanPage --> KanbanGlobalView : projectId=null
-    TaskKanbanPage --> KanbanProjectView : projectId≠null
-    KanbanProjectView --> TodoColumn
-    KanbanProjectView --> DoneColumn
-    KanbanProjectView --> CollapsedProjectHeader : collapsed
-    KanbanProjectView --> KanbanStatsBar
-    TodoColumn --> TaskCard
-    DoneColumn --> TaskCard
-    TaskCard --> TaskItem
-    TaskCard --> PriorityChip
-    TaskItem --> SubtaskList
-    SubtaskList --> SubtaskItem
+    class RefreshBar {
+        +String projectId
+        +String lastUpdated
+        +Function onRefresh
+        +Function onProjectChange
+        +Boolean loading
+        +render() JSX
+    }
+
+    IssueDashboardPage *-- StatsCards
+    IssueDashboardPage *-- DITrendChart
+    IssueDashboardPage *-- CategoryBarChart
+    IssueDashboardPage *-- ReportPanel
+    IssueDashboardPage *-- ErrorState
+    IssueDashboardPage *-- RefreshBar
+
+    %% ── 数据流类型 ──
+    class TrendDataPoint {
+        +String date
+        +Float di
+    }
+
+    class CategoryStat {
+        +String category
+        +Integer count
+    }
+
+    class StatsData {
+        +Integer total
+        +Integer resolved
+        +Float rate
+    }
+
+    class MantisProject {
+        +Integer id
+        +String name
+        +String description
+    }
+
+    DITrendChart ..> TrendDataPoint : "使用"
+    CategoryBarChart ..> CategoryStat : "使用"
+    StatsCards ..> StatsData : "使用"
 ```
 
-#### 3.3 优先级映射表
+#### 3.2 关键接口设计
 
-| 存储值 | 显示文本 | 颜色 | 旧值映射 |
-|--------|----------|------|----------|
-| `urgent` | 紧急 | `#cf1322` | ← P0 |
-| `high` | 高 | `#ff4d4f` | ← P1 |
-| `medium` | 中 | `#faad14` | ← P2 (默认) |
-| `low` | 低 | `#52c41a` | — (手动降级) |
+**MantisAdapter**:
 
-#### 3.4 API 接口清单
+```
+MantisAdapter(baseUrl: string, apiToken: string)
+  ├── fetchProjects() → { id, name, description }[]
+  ├── fetchIssues(projectId: number) → MantisIssueRaw[]
+  ├── testConnection() → boolean
+  └── _request(method, path, params) → axios response
+```
 
-| Method | Path | 说明 | 请求体 | 响应 |
-|--------|------|------|--------|------|
-| GET | `/api/tasks?project_id=` | 任务列表（已有，增加 subtask_count） | — | `{ok, data: Task[]}` |
-| POST | `/api/tasks` | 创建任务（已有，增加 sort_order 自动计算） | `{project_id, title, priority, ...}` | `{ok, data: Task}` |
-| PUT | `/api/tasks/:id` | 更新任务（已有） | 部分字段 | `{ok, data: Task}` |
-| DELETE | `/api/tasks/:id` | 软删除（已有） | — | `{ok}` |
-| **POST** | **`/api/tasks/:id/subtasks`** | **新增子任务** | `{title}` | `{ok, data: Subtask}` |
-| **GET** | **`/api/tasks/:id/subtasks`** | **获取子任务列表** | — | `{ok, data: Subtask[]}` |
-| **PUT** | **`/api/subtasks/:id`** | **更新子任务（标题/完成状态）** | `{title?, is_completed?}` | `{ok, data: Subtask}` |
-| **DELETE** | **`/api/subtasks/:id`** | **删除子任务（软删除）** | — | `{ok}` |
-| **PUT** | **`/api/tasks/:id/reorder`** | **调整任务排序** | `{sort_order, project_id}` | `{ok, data: Task}` |
-| **PUT** | **`/api/tasks/:id/toggle-complete`** | **切换完成状态** | — | `{ok, data: Task}` |
-| **GET** | **`/api/projects/:id/kanban-stats`** | **项目看板统计** | — | `{ok, data: KanbanStats}` |
+**CacheService** (在 issues 路由内以函数实现):
 
-**KanbanStats 结构**:
-```json
-{
-  "total": 12,
-  "todo": 5,
-  "done": 7,
-  "subtasks_total": 24,
-  "subtasks_done": 18
+```
+getCache(projectId, cacheKey) → parsed JSON | null
+setCache(projectId, cacheKey, data, ttl=300)
+invalidateCache(projectId, cacheKey?)
+isCacheValid(cachedAt, ttl) → boolean
+```
+
+**前端 API 扩展** (追加到 `client/src/api/client.js`):
+
+```js
+issues: {
+  diTrend: (projectId) => request(`/issues/di-trend?project_id=${projectId}`),
+  categoryStats: (projectId) => request(`/issues/category-stats?project_id=${projectId}`),
+  summary: (projectId) => request(`/issues/summary?project_id=${projectId}`),
+  report: (projectId) => request(`/issues/report?project_id=${projectId}`),
+}
+mantis: {
+  projects: () => request("/mantis/projects"),
+  sync: (projectId) => request(`/mantis/sync`, { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
+  connection: () => request("/mantis/connection"),
+  updateConnection: (data) => request("/mantis/connection", { method: "PUT", body: JSON.stringify(data) }),
+}
+cache: {
+  invalidate: (projectId) => request("/cache/invalidate", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
 }
 ```
 
@@ -298,166 +292,137 @@ classDiagram
 
 ### 4. 程序调用流程
 
-#### 4.1 加载项目看板
+#### 4.1 页面加载完整流程（时序图）
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Page as TaskKanbanPage
-    participant API as api/client.js
-    participant Server as Express
+    participant Page as IssueDashboardPage
+    participant Hook as useIssueDashboard
+    participant API as api client
+    participant Express as Express Server
+    participant Cache as CacheService
+    participant Adapter as MantisAdapter
+    participant Mantis as Mantis API
     participant DB as SQLite
 
-    User->>Page: 选择项目
-    Page->>Page: setProjectId(id)
-    Page->>API: GET /api/tasks?project_id=X
-    API->>Server: HTTP GET
-    Server->>DB: SELECT * FROM tasks WHERE project_id=X AND deleted_at IS NULL ORDER BY sort_order
-    DB-->>Server: Task[]
-    Server-->>API: {ok, data: Task[]}
-    API-->>Page: Task[]
+    User->>Page: 进入 /issues?projectId=1
+    Page->>Hook: useIssueDashboard(projectId)
 
-    par 并行加载
-        Page->>API: GET /api/projects/X
-        API->>Server: HTTP GET
-        Server->>DB: SELECT * FROM projects WHERE id=X
-        DB-->>Server: Project
-        Server-->>API: {ok, data: Project}
-        API-->>Page: Project
-    and
-        Page->>API: GET /api/projects/X/kanban-stats
-        API->>Server: HTTP GET
-        Server->>DB: SELECT COUNT...
-        DB-->>Server: stats
-        Server-->>API: {ok, data: KanbanStats}
-        API-->>Page: KanbanStats
+    Note over Hook: 并发请求 3 个端点（去重合并）
+
+    par 并行请求
+        Hook->>API: GET /issues/summary?project_id=1
+        API->>Express: HTTP GET
+        Express->>Cache: getCache(1, "summary")
+        alt 缓存命中且未过期
+            Cache-->>Express: { total: 127, resolved: 89, rate: 70.1 }
+        else 缓存未命中
+            Express->>Adapter: fetchIssues(projectId)
+            Adapter->>Mantis: GET /api/rest/issues?project_id=xxx
+            Mantis-->>Adapter: issues[]
+            Adapter-->>Express: issues[]
+            Express->>DB: 更新 issues 表
+            Express->>Cache: setCache(1, "summary", result)
+            Express-->>API: { ok: true, data: {...} }
+        end
+        API-->>Hook: summary data
+
+        Hook->>API: GET /issues/di-trend?project_id=1
+        API->>Express: HTTP GET
+        Express->>Cache: getCache(1, "di_trend")
+        alt 缓存命中
+            Cache-->>Express: cached trend data
+        else 缓存未命中
+            Express->>DB: SELECT ... FROM issues WHERE DI>0 ORDER BY synced_at
+            DB-->>Express: rows[]
+            Express->>Cache: setCache(1, "di_trend", result)
+        end
+        Express-->>API: { ok: true, data: [...] }
+        API-->>Hook: di_trend data
+
+        Hook->>API: GET /issues/category-stats?project_id=1
+        API->>Express: HTTP GET
+        Express->>Cache: getCache(1, "category_stats")
+        alt 缓存命中
+            Cache-->>Express: cached stats
+        else 缓存未命中
+            Express->>DB: SELECT category, COUNT(*) FROM issues GROUP BY category
+            DB-->>Express: rows[]
+            Express->>Cache: setCache(1, "category_stats", result)
+        end
+        Express-->>API: { ok: true, data: [...] }
+        API-->>Hook: category_stats data
     end
 
-    Page->>Page: 拆分为 todoTasks / doneTasks
-    Page->>Page: localStorage 读取折叠状态
-    Page->>Page: 渲染 KanbanProjectView
+    Hook-->>Page: { stats, diTrend, categoryStats, loading: false }
+
+    Page->>Page: 渲染 StatsCards + DITrendChart + CategoryBarChart
+
+    Note over Hook: 并行请求 report（独立于图表）
+    Hook->>API: GET /issues/report?project_id=1
+    API->>Express: HTTP GET
+    Express->>DB: 查询 issues 聚合
+    DB-->>Express: rows
+    Express->>Express: 按模板渲染报告文本
+    Express-->>API: { ok: true, data: "BUG情况：\n..." }
+    API-->>Hook: report text
+    Hook-->>Page: reportText
+    Page->>Page: 渲染 ReportPanel
 ```
 
-#### 4.2 展开子任务
+#### 4.2 手动刷新流程
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Item as TaskItem
-    participant API as api/client.js
-    participant Server as Express
-    participant DB as SQLite
+    participant Bar as RefreshBar
+    participant Page as IssueDashboardPage
+    participant API as api client
+    participant Express as Express
+    participant Cache as CacheService
+    participant Adapter as MantisAdapter
+    participant Mantis as Mantis API
 
-    User->>Item: 点击 ▶ 箭头
-    Item->>Item: setExpanded(true)
-    Item->>API: GET /api/tasks/{taskId}/subtasks
-    API->>Server: HTTP GET
-    Server->>DB: SELECT * FROM subtasks WHERE task_id=? AND deleted_at IS NULL ORDER BY sort_order
-    DB-->>Server: Subtask[]
-    Server-->>API: {ok, data: Subtask[]}
-    API-->>Item: Subtask[]
-    Item->>Item: 渲染 SubtaskList，自动聚焦输入框
+    User->>Bar: 点击「手动刷新」按钮
+    Bar->>Bar: setLoading(true)
+
+    Bar->>API: POST /cache/invalidate { project_id: 1 }
+    API->>Express: HTTP POST
+    Express->>Cache: invalidateCache(1) -- 清除该项目所有缓存
+    Express-->>API: { ok: true }
+
+    Bar->>API: POST /mantis/sync { project_id: 1 }
+    API->>Express: HTTP POST
+    Express->>Adapter: fetchIssues(projectId)
+    Adapter->>Mantis: GET /api/rest/issues (force)
+    Mantis-->>Adapter: issues[]
+    Adapter-->>Express: issues[]
+    Express->>Cache: setCache -- 回填所有缓存键
+    Express-->>API: { ok: true, data: { sync_summary: {...} } }
+    API-->>Bar: sync done
+
+    Bar->>Page: 触发全部数据重新加载
+    Page->>Page: loadAll()
+    Bar->>Bar: setLoading(false), 更新 lastUpdated
 ```
 
-#### 4.3 新增子任务（快速录入）
+#### 4.3 一键复制报告流程
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant List as SubtaskList
-    participant Hook as useOptimistic
-    participant API as api/client.js
-    participant Server as Express
-    participant DB as SQLite
+    participant Panel as ReportPanel
+    participant Browser as navigator.clipboard
 
-    User->>List: 输入文字 + 回车
-    List->>Hook: addSubtask({taskId, title})
-    Hook->>Hook: 乐观插入本地状态
-    Hook->>List: re-render（新子任务已出现）
-    List->>List: 清空输入框，保持光标
-
-    Hook->>API: POST /api/tasks/{taskId}/subtasks {title}
-    API->>Server: HTTP POST
-    Server->>DB: INSERT INTO subtasks (task_id, title, sort_order) VALUES (?, ?, ?)
-    DB-->>Server: {id, ...}
-    Server-->>API: {ok, data: Subtask}
-    API-->>Hook: Subtask（含真实 id）
-    Hook->>Hook: 用服务端数据更新本地记录
-
-    alt 请求失败
-        API-->>Hook: Error
-        Hook->>Hook: 回滚本地状态
-        Hook->>List: re-render（移除乐观条目）
-    end
-```
-
-#### 4.4 拖拽排序
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Col as TodoColumn
-    participant DnD as @dnd-kit
-    participant Hook as useOptimistic
-    participant API as api/client.js
-    participant Server as Express
-    participant DB as SQLite
-
-    User->>Col: 拖拽任务卡片到新位置
-    DnD->>DnD: onDragStart → 记录原始顺序
-    DnD->>DnD: onDragEnd → 计算新位置
-    DnD->>Col: {active, over}
-
-    Col->>Hook: reorderTask(taskId, newSortOrder)
-    Hook->>Hook: 乐观重排本地 tasks[] 数组
-    Hook->>Col: re-render
-
-    Col->>Col: 记录 scrollTop（操作前）
-    Col->>API: PUT /api/tasks/{taskId}/reorder {sort_order, project_id}
-    API->>Server: HTTP PUT
-    Server->>DB: BEGIN TRANSACTION; 重新计算该 project 所有 task 的 sort_order; COMMIT
-    DB-->>Server: OK
-    Server-->>API: {ok, data: Task}
-    API-->>Col: OK
-    Col->>Col: requestAnimationFrame 恢复 scrollTop
-
-    alt 请求失败
-        API-->>Col: Error
-        Hook->>Hook: 回滚到原始顺序
-        Col->>Col: 恢复 scrollTop
-    end
-```
-
-#### 4.5 切换完成状态
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Item as TaskItem
-    participant Hook as useOptimistic
-    participant API as api/client.js
-    participant Server as Express
-    participant DB as SQLite
-
-    User->>Item: 点击 ✓ 按钮
-    Item->>Hook: toggleComplete(task)
-
-    Hook->>Hook: 乐观移动：todo→done（或反向）
-    Hook->>Item: re-render（任务已移动到另一栏）
-
-    Hook->>API: PUT /api/tasks/{id}/toggle-complete
-    API->>Server: HTTP PUT
-    Server->>DB: UPDATE tasks SET completed_at=?, kanban_column=?, status=? WHERE id=?
-    DB-->>Server: OK
-    Server-->>API: {ok, data: Task}
-    API-->>Hook: Task（含 completed_at）
-
-    Hook->>Hook: 检查是否全部完成 → 自动折叠
-    Hook->>Hook: localStorage.setItem('kanban-collapsed-{pid}', 'true')
-
-    alt 请求失败
-        API-->>Hook: Error
-        Hook->>Hook: 移回原始栏
+    User->>Panel: 点击「一键复制」
+    Panel->>Browser: navigator.clipboard.writeText(reportText)
+    alt 复制成功
+        Browser-->>Panel: resolve
+        Panel->>Panel: toast.success("已复制到剪贴板")
+    else 复制失败
+        Browser-->>Panel: reject
+        Panel->>Panel: toast.error("复制失败，请手动选择文本")
     end
 ```
 
@@ -465,312 +430,294 @@ sequenceDiagram
 
 ### 5. 待明确事项
 
-| # | 事项 | 当前假设 |
-|---|------|----------|
-| 1 | 全部完成后折叠，如果后续新增任务/取消完成，是否自动展开？ | **是**，新增或取消完成时自动展开 |
-| 2 | 已完成栏的任务是否可以取消完成（移回待办）？ | **是**，点击 ✓ 切换回待办 |
-| 3 | 全局四列看板是否也使用新优先级标签？ | **是**，全局视图同步使用新四级标签 |
-| 4 | 子任务全部完成时，父任务是否自动完成？ | **否**，子任务完成不影响父任务状态（PRD 未提及联动） |
-| 5 | P2→medium 迁移时，哪些降为 low？ | **全部先映射为 medium**，用户手动降级 |
-| 6 | kanban_columns 表（旧四列配置）是否保留？ | **保留**，全局视图仍然使用 |
+| # | 问题 | 假设/处理方式 |
+|---|------|-------------|
+| Q1 | Mantis "缺陷分类"字段名 | **假设**：Mantis 自定义字段 key 为 `category`，映射值 BIOS/BMC/HW/Perf/Other。设计为可配置映射表，默认映射写在 MantisAdapter 中 |
+| Q2 | "已解决"统计口径 | **假设**：`status IN ('已解决', '已关闭')` = resolved（PRD 的 resolution 字段辅助标记） |
+| Q3 | Mantis 项目列表 API 端点 | **假设**：`GET /api/rest/projects`（基于 Mantis REST API 标准），暂不分页 |
+| Q4 | DI 趋势图时间范围 | **默认展示全部历史数据**，通过 `<Brush>` 支持用户缩放 |
+| Q5 | 多项目切换时是否前端内存缓存 | **不缓存**，每次切换重新请求（但后端 sync_cache 层生效，秒级返回） |
+| Q6 | "遗留BUG"口径 | **假设**：`status NOT IN ('已关闭')`（即新建+处理中+已解决但未关闭），与 report 统计数据一致 |
 
 ---
 
 ## Part B: 任务分解
 
-### 6. 依赖包
+---
+
+### 6. 依赖包清单（增量）
 
 ```
-@dnd-kit/core@^6.1.0         # 拖拽核心（DnD context, sensors）
-@dnd-kit/sortable@^8.0.0     # 可排序列表预设
-@dnd-kit/utilities@^3.2.0    # CSS transform 工具函数
-```
+# 前端新增 (client/package.json)
+- recharts@^2.12.0: 声明式图表库（LineChart + BarChart + Tooltip + Brush）
 
-> 已有依赖无需重复安装：react@^18.3.1, @mui/material@^5.15.0, @mui/icons-material@^5.15.0, react-router-dom@^6.23.0, express@^4.19.2, better-sqlite3@^11.1.2
+# 后端新增 (server/package.json)
+- axios@^1.7.0: 对 Mantis REST API 发 HTTP 请求
+```
 
 ---
 
 ### 7. 任务列表
 
-#### T01: 项目基础设施 + 数据库迁移 + API 骨架
+| Task ID | 任务名称 | 源文件 | 依赖 | 优先级 |
+|---------|---------|--------|------|--------|
+| **T01** | 项目基础设施 | 见下方 | — | P0 |
+| **T02** | 后端 API 层 | 见下方 | T01 | P0 |
+| **T03** | 前端数据层 + API 封装 | 见下方 | T02 | P0 |
+| **T04** | 前端核心组件（图表+统计+报告） | 见下方 | T03 | P0 |
+| **T05** | 前端页面集成 + 异常处理 + 联调 | 见下方 | T04 | P0 |
 
-| 属性 | 内容 |
-|------|------|
-| **Task ID** | T01 |
-| **优先级** | P0 |
-| **依赖** | 无 |
-| **源文件** | `client/package.json`, `server/src/db.js`, `server/src/routes/tasks.js`, `server/src/routes/projects.js`, `server/src/index.js`, `client/src/api/client.js` |
+#### T01 — 项目基础设施
 
-**工作内容**:
+**源文件**:
+```
+# 新增
+server/src/adapters/mantis.js              # Mantis REST API 适配器
 
-1. **`client/package.json`** — 添加 `@dnd-kit/core`、`@dnd-kit/sortable`、`@dnd-kit/utilities` 依赖声明
-2. **`server/src/db.js`** — 添加数据库迁移：
-   - `ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0`
-   - `ALTER TABLE tasks ADD COLUMN completed_at TEXT`
-   - `ALTER TABLE projects ADD COLUMN theme_color TEXT DEFAULT '#1565C0'`
-   - `CREATE TABLE IF NOT EXISTS subtasks (id INTEGER PK, task_id INTEGER FK, title TEXT, is_completed INTEGER DEFAULT 0, sort_order INTEGER DEFAULT 0, created_at TEXT, updated_at TEXT, deleted_at TEXT)`
-   - 添加索引：`idx_subtasks_task`, `idx_tasks_sort`
-   - **优先级数据迁移脚本**：`UPDATE tasks SET priority='urgent' WHERE priority='P0'` → `UPDATE tasks SET priority='high' WHERE priority='P1'` → `UPDATE tasks SET priority='medium' WHERE priority='P2'`
-3. **`server/src/routes/tasks.js`** — 添加新路由骨架（每个端点返回 `{ok:true, data:"TODO"}`）：
-   - `POST /api/tasks/:id/subtasks`
-   - `GET /api/tasks/:id/subtasks`
-   - `PUT /api/subtasks/:id`
-   - `DELETE /api/subtasks/:id`
-   - `PUT /api/tasks/:id/reorder`
-   - `PUT /api/tasks/:id/toggle-complete`
-   - 修改现有 `GET /api/tasks` 按 `sort_order` 排序（非全局视图时）
-   - 修改现有 `POST /api/tasks` 自动计算 `sort_order`
-4. **`server/src/routes/projects.js`** — 添加 `GET /api/projects/:id/kanban-stats` 骨架
-5. **`server/src/index.js`** — 注册新路由（如有 subtasks 独立路由）
-6. **`client/src/api/client.js`** — 添加前端 API 方法：
-   - `api.tasks.subtasks.list(taskId)`
-   - `api.tasks.subtasks.create(taskId, data)`
-   - `api.tasks.subtasks.update(id, data)`
-   - `api.tasks.subtasks.remove(id)`
-   - `api.tasks.reorder(id, data)`
-   - `api.tasks.toggleComplete(id)`
-   - `api.projects.kanbanStats(projectId)`
+# 修改
+server/src/db.js                           # 新增 sync_cache 表 + issues/mantis_connection 迁移
+server/package.json                        # 新增 axios 依赖
+client/package.json                        # 新增 recharts 依赖
+```
 
----
+**内容**:
+1. `server/package.json` — 添加 `axios` 依赖并 `npm install`
+2. `client/package.json` — 添加 `recharts` 依赖并 `npm install`
+3. `server/src/db.js` — 追加 DDL:
+   - `sync_cache` 表（id/project_id/cache_key/cache_data/cached_at/ttl_seconds）
+   - `issues` 表迁移：新增 `category` TEXT, `resolution` TEXT
+   - `mantis_connection` 表迁移：新增 `last_sync_at` TEXT, `last_sync_status` TEXT
+   - 新索引：`idx_sync_cache_project_key`
+4. `server/src/adapters/mantis.js` — MantisAdapter 类:
+   - 构造函数读取 `mantis_connection` 表配置
+   - `fetchProjects()` — GET 拉取项目列表
+   - `fetchIssues(projectId)` — GET 拉取 issues（含 category 字段映射）
+   - `testConnection()` — 验证 API Token 有效性
+   - 统一错误处理：鉴权失败 → 401 / 超时 → 408 / 其他 → 500
+   - `_request(method, path, params)` — axios 封装（Bearer Token、超时 30s）
 
-#### T02: 后端 API 完整实现
+**验收**:
+- `sync_cache` 表和字段迁移在 SQLite 中执行无误
+- MantisAdapter 可实例化，testConnection 返回 boolean
 
-| 属性 | 内容 |
-|------|------|
-| **Task ID** | T02 |
-| **优先级** | P0 |
-| **依赖** | T01 |
-| **源文件** | `server/src/routes/tasks.js`, `server/src/routes/projects.js`, `server/src/db.js` |
+#### T02 — 后端 API 层
 
-**工作内容**:
+**源文件**:
+```
+# 新增
+server/src/routes/mantis.js                # Mantis 路由（projects/sync/cache）
 
-1. **`server/src/routes/tasks.js`** — 实现全部新增路由：
-   - `POST /api/tasks/:id/subtasks`：验证 task 存在 → 计算 sort_order(MAX+1) → INSERT → 返回新 subtask
-   - `GET /api/tasks/:id/subtasks`：按 sort_order ASC 查询，排除 deleted
-   - `PUT /api/subtasks/:id`：更新 title/is_completed，自动 updated_at
-   - `DELETE /api/subtasks/:id`：软删除
-   - `PUT /api/tasks/:id/reorder`：接收 `{sort_order, project_id}` → 事务中重新计算该项目所有未完成任务 sort_order（按新顺序重排）
-   - `PUT /api/tasks/:id/toggle-complete`：若已完成→清空 completed_at，kanban_column='待开始'；若未完成→completed_at=now，kanban_column='已完成'，status='已完成'
-   - 修改 `GET /api/tasks`：当 `project_id` 存在时按 `sort_order ASC` 排序；不存在时保持原有 `priority, due_date` 排序
-   - 修改 `POST /api/tasks`：自动计算 `sort_order = MAX(sort_order) + 1`（同项目）
-2. **`server/src/routes/projects.js`** — 实现 `GET /api/projects/:id/kanban-stats`：
-   - 查询 total/todo/done 任务数
-   - 查询 subtasks_total/subtasks_done
-   - 返回 KanbanStats JSON
-3. **`server/src/db.js`** — 确保数据迁移幂等（try/catch duplicate column），优先级迁移仅执行一次（加哨兵标记）
+# 修改
+server/src/routes/issues.js                # 新增 4 个聚合端点
+server/src/index.js                        # 挂载 mantisRouter
+```
 
----
+**内容**:
+1. `server/src/routes/issues.js` — 新增端点:
+   - `GET /issues/di-trend?project_id=` — 查询 issues 表 WHERE DI>0，按 synced_at 分组，返回 `[{date, di}]`
+   - `GET /issues/category-stats?project_id=` — `SELECT category, COUNT(*) FROM issues WHERE project_id=? AND category IS NOT NULL GROUP BY category` → `[{category, count}]`
+   - `GET /issues/summary?project_id=` — 聚合 total/resolved/rate
+   - `GET /issues/report?project_id=` — 按模板渲染文本（统计用 summary 数据 + category 分组）
+   - 所有端点内置缓存逻辑：先查 `sync_cache` → 命中返回 / 未命中查询后回填
+2. `server/src/routes/mantis.js` — 新增路由:
+   - `GET /mantis/projects` — 调用 MantisAdapter.fetchProjects()
+   - `POST /mantis/sync` — 调用 MantisAdapter.fetchIssues() + 写入 issues 表 + 回填所有缓存
+   - `GET /mantis/connection` — 读取 mantis_connection 配置
+   - `PUT /mantis/connection` — 更新配置
+   - `POST /cache/invalidate` — 清除指定 project_id 的缓存
+3. `server/src/index.js` — 新增 `import mantisRouter from "./routes/mantis.js"` + `app.use("/api", mantisRouter)`
 
-#### T03: 看板核心组件库
+**验收**:
+- 所有 6 个新端点返回 `{ ok: true, data: ... }` 格式
+- 缓存命中时后端日志可见 "cache hit"
+- `POST /cache/invalidate` 后缓存被清除
 
-| 属性 | 内容 |
-|------|------|
-| **Task ID** | T03 |
-| **优先级** | P0 |
-| **依赖** | T01（需要 API 方法签名 + 包依赖） |
-| **源文件** | `client/src/hooks/useOptimistic.js`, `client/src/hooks/useKanbanScroll.js`, `client/src/components/kanban/PriorityChip.jsx`, `client/src/components/kanban/SubtaskItem.jsx`, `client/src/components/kanban/SubtaskList.jsx`, `client/src/components/kanban/TaskItem.jsx`, `client/src/components/kanban/TaskCard.jsx`, `client/src/components/kanban/CollapsedProjectHeader.jsx`, `client/src/components/kanban/KanbanStatsBar.jsx`, `client/src/components/kanban/index.js` |
+#### T03 — 前端数据层 + API 封装
 
-**工作内容**:
+**源文件**:
+```
+# 新增
+client/src/api/mantis.js                    # Mantis API 封装
+client/src/hooks/useDedupRequest.js         # 请求去重 hook
 
-1. **`useOptimistic.js`** — 通用乐观更新 hook：
-   - 接受 `initState` + `apiCall` 函数
-   - 返回 `{data, setOptimistic, error, isPending}`
-   - 核心模式：`setOptimistic(newData)` → `await apiCall()` → catch 时回滚
-2. **`useKanbanScroll.js`** — 滚动位置保持 hook：
-   - `capture(containerRef)` → 记录 scrollTop
-   - `restore(containerRef)` → requestAnimationFrame 恢复
-   - 返回 `{capture, restore}`
-3. **`PriorityChip.jsx`** — 四级优先级标签：
-   - 颜色映射：`{urgent:'#cf1322', high:'#ff4d4f', medium:'#faad14', low:'#52c41a'}`
-   - 显示映射：`{urgent:'紧急', high:'高', medium:'中', low:'低'}`
-   - MUI Chip 组件，可配置 size
-4. **`SubtaskItem.jsx`** — 子任务行：
-   - Checkbox（is_completed 切换） + 标题文本 + 删除按钮
-   - 已完成态：文字删除线 + 灰色
-5. **`SubtaskList.jsx`** — 子任务列表容器：
-   - 渲染 SubtaskItem 列表
-   - 底部快速录入：输入框 + 回车新增（`POST /api/tasks/:id/subtasks`）
-   - 新增后清空输入框，自动聚焦保持
-   - 乐观更新
-6. **`TaskItem.jsx`** — 任务项容器：
-   - 标题行 + ▶ 展开箭头 + ✓ 完成按钮 + PriorityChip
-   - 展开/折叠动画（MUI Collapse）
-   - 展开时加载子任务（`GET /api/tasks/:id/subtasks`）
-   - toggleComplete 乐观更新
-7. **`TaskCard.jsx`** — 任务卡片（包裹 TaskItem，含拖拽手柄）：
-   - 使用 `@dnd-kit/sortable` 的 `useSortable`
-   - 拖拽手柄图标（:: 六点）
-   - 拖拽中视觉反馈（阴影 + 半透明）
-8. **`CollapsedProjectHeader.jsx`** — 折叠态：
-   - 显示项目名称（theme_color 为顶条色）
-   - 显示 "N 项任务全部完成"
-   - 点击展开按钮
-9. **`KanbanStatsBar.jsx`** — 统计条：
-   - 进度条（done/total）
-   - 子任务完成统计
-10. **`index.js`** — barrel 导出所有组件
+# 修改
+client/src/api/client.js                    # 追加 issues/mantis/cache API 方法
+```
 
----
+**内容**:
+1. `client/src/api/client.js` — 追加 API 方法:
+   - `issues.diTrend(projectId)`, `issues.categoryStats(projectId)`, `issues.summary(projectId)`, `issues.report(projectId)`
+   - `mantis.projects()`, `mantis.sync(projectId)`, `mantis.connection()`, `mantis.updateConnection(data)`
+   - `cache.invalidate(projectId)`
+2. `client/src/api/mantis.js` — 导出命名函数（与 client.js 解耦，方便测试）
+3. `client/src/hooks/useDedupRequest.js` — 通用请求去重:
+   ```js
+   // 同一 key 的并发请求合并为单次调用
+   function useDedupRequest() {
+     const pending = useRef(new Map());
+     const dedup = useCallback((key, fn) => {
+       if (pending.current.has(key)) return pending.current.get(key);
+       const promise = fn().finally(() => pending.current.delete(key));
+       pending.current.set(key, promise);
+       return promise;
+     }, []);
+     return dedup;
+   }
+   ```
 
-#### T04: 页面视图集成 + 拖拽交互
+**验收**:
+- `npm run dev` 前端无报错
+- 浏览器 Network 面板可看到 API 调用
 
-| 属性 | 内容 |
-|------|------|
-| **Task ID** | T04 |
-| **优先级** | P0 |
-| **依赖** | T02 (后端 API), T03 (组件库) |
-| **源文件** | `client/src/components/kanban/TodoColumn.jsx`, `client/src/components/kanban/DoneColumn.jsx`, `client/src/components/kanban/KanbanGlobalView.jsx`, `client/src/components/kanban/KanbanProjectView.jsx`, `client/src/pages/TaskKanbanPage.jsx` |
+#### T04 — 前端核心组件（图表+统计+报告）
 
-**工作内容**:
+**源文件**:
+```
+# 新增 (全部)
+client/src/components/issue/StatsCards.jsx
+client/src/components/issue/DITrendChart.jsx
+client/src/components/issue/CategoryBarChart.jsx
+client/src/components/issue/ReportPanel.jsx
+client/src/components/issue/ErrorState.jsx
+client/src/components/issue/RefreshBar.jsx
+client/src/hooks/useIssueDashboard.js
+```
 
-1. **`TodoColumn.jsx`** — 待办栏：
-   - `@dnd-kit/core` 的 `DndContext` + `SortableContext` 包裹
-   - 渲染 TaskCard 列表（`useSortable`）
-   - `onDragEnd`：计算新 sort_order → 调用 `PUT /api/tasks/:id/reorder`
-   - 顶部快速录入：输入框 + 回车新增（`POST /api/tasks`，自动 sort_order）
-   - 乐观更新 + 滚动保持
-   - 底部 "N 项待办" 计数
-2. **`DoneColumn.jsx`** — 已完成栏：
-   - 按 `completed_at DESC` 排序（最新完成的在最上面）
-   - 点击 ✓ 可取消完成（移回 TodoColumn）
-   - 显示完成时间（如"3 分钟前"）
-3. **`KanbanGlobalView.jsx`** — 全部项目四列看板：
-   - 保留原四列逻辑：待开始 → 进行中 → 待验证 → 已完成
-   - 使用新 PriorityChip（四级标签）
-   - 不复用 TodoColumn/DoneColumn（结构与项目看板不同）
-4. **`KanbanProjectView.jsx`** — 项目双栏看板主入口：
-   - 读取 `project.theme_color` 作为顶部装饰条颜色
-   - 读取 localStorage `kanban-collapsed-{projectId}` 决定初始折叠状态
-   - 折叠态：渲染 CollapsedProjectHeader
-   - 展开态：渲染 KanbanStatsBar + TodoColumn + DoneColumn
-   - 全部完成 → 自动折叠，写入 localStorage
-   - 新增任务/取消完成 → 自动展开，清除 localStorage 折叠标记
-5. **`TaskKanbanPage.jsx`** — 页面入口（重写）：
-   - 读取 `searchParams.get("projectId")`
-   - `projectId === null` → 渲染 `KanbanGlobalView`
-   - `projectId !== null` → 渲染 `KanbanProjectView`
-   - 数据加载：`GET /api/tasks` + `GET /api/projects/:id` + `GET /api/projects/:id/kanban-stats`（并行）
+**内容**:
 
----
+1. **StatsCards.jsx** — 3 张 MUI Card 横向排列:
+   - 故障总数（`total`，大字号数字）
+   - 已解决（`resolved`，success 色）
+   - 解决率（`rate`，百分比，保留 1 位小数）
+   - Props: `{ total, resolved, rate, loading }`
+   - Loading 态：MUI `<Skeleton variant="rectangular" height={80} />`
 
-#### T05: 集成收尾 + 边界处理 + 全局样式
+2. **DITrendChart.jsx** — recharts `<LineChart>`:
+   - X 轴 = `date`（dayjs 格式化为 MM-DD），Y 轴 = `di`
+   - `<Tooltip>` 显示精确日期 + DI 值
+   - `<Brush>` 支持缩放
+   - 数据层过滤 DI=0 的数据点
+   - DI 全为 0 时显示空状态
+   - Props: `{ data: TrendDataPoint[], loading }`
 
-| 属性 | 内容 |
-|------|------|
-| **Task ID** | T05 |
-| **优先级** | P1 |
-| **依赖** | T04 |
-| **源文件** | `client/src/pages/TaskKanbanPage.jsx`, `client/src/components/kanban/KanbanGlobalView.jsx`, `client/src/components/kanban/KanbanProjectView.jsx`, `server/src/db.js`, `server/src/routes/tasks.js` |
+3. **CategoryBarChart.jsx** — recharts `<BarChart>`:
+   - X 轴 = 分类（BIOS/BMC/HW/Perf），Y 轴 = 数量
+   - 4 色柱子（蓝/橙/绿/紫）
+   - `<Tooltip>` 显示分类名 + 精确数量
+   - 过滤 count=0 的柱子
+   - Props: `{ data: CategoryStat[], loading }`
 
-**工作内容**:
+4. **ReportPanel.jsx** — 报告面板:
+   - 预格式化文本框（`<Paper>` + `<Typography>` 等宽字体）
+   - 「一键复制」按钮 → `navigator.clipboard.writeText()`
+   - 复制成功 → MUI `<Snackbar>` toast "已复制到剪贴板"
+   - Props: `{ reportText, loading }`
 
-1. **全局视图四列看板完整交互**：
-   - 拖拽卡片到不同列 → 更新 kanban_column（复用已有 `PUT /api/tasks/:id`）
-   - 列间拖拽（`DndContext` 跨列）
-   - 统计各列任务数
-2. **边界情况处理**：
-   - 空状态：无任务时显示引导文案"请选择项目后添加待办任务"
-   - 全部项目无任务："暂无待办任务"
-   - 加载态：Skeleton / CircularProgress
-   - 错误态：Snackbar 提示 + 回滚
-   - 网络断开：乐观更新保留，失败提示不丢失数据
-3. **自动折叠逻辑完善**：
-   - `useEffect` 监听 tasks 变化 → 检测全部完成 → 折叠
-   - 防抖：避免频繁切换
-4. **数据迁移验证**：
-   - 确保迁移脚本幂等
-   - 在 `npm run dev` 首次启动时自动执行
-   - 现有 seed 数据兼容
-5. **样式收尾**：
-   - TodoColumn/DoneColumn 等高布局
-   - 滚动条美化
-   - 拖拽中视觉反馈动画
-   - 响应式适配（移动端折叠为单列）
-6. **整合测试**：手动验证所有交互流程
+5. **ErrorState.jsx** — 统一异常组件:
+   - `type` prop: `"auth_failed"` | `"timeout"` | `"no_projects"` | `"di_all_zero"`
+   - 每种类型渲染对应图标+文案+操作按钮（重试/去配置）
+   - Props: `{ type, onRetry, onGoToConfig }`
+
+6. **RefreshBar.jsx** — 顶部操作栏:
+   - 复用 `ProjectSelector` 组件
+   - 「手动刷新」按钮（`<IconButton>` + 旋转动画 loading）
+   - 「上次更新: YYYY-MM-DD HH:mm」时间戳展示
+   - Props: `{ projectId, lastUpdated, loading, onRefresh, onProjectChange }`
+
+7. **useIssueDashboard.js** — 数据管理 hook:
+   - 输入 `projectId`
+   - 输出 `{ stats, diTrend, categoryStats, reportText, loading, error, errorType, refresh, lastUpdated }`
+   - 内部并发调用 4 个 API + 去重
+   - `refresh()` 方法：先 `POST /cache/invalidate` → `POST /mantis/sync` → 重新 load
+   - 错误分类：HTTP 401 → `auth_failed`, 408 → `timeout`, 200+空 → `no_data`
+
+**验收**:
+- 各组件可独立渲染（Mock 数据）
+- DITrendChart 过滤 DI=0 数据点
+- ReportPanel 复制按钮功能正常，toast 可见
+
+#### T05 — 前端页面集成 + 异常处理 + 联调
+
+**源文件**:
+```
+# 新增
+client/src/pages/IssueDashboardPage.jsx    # 故障仪表盘主页面
+
+# 修改
+client/src/App.jsx                         # /issues 路由指向新页面
+```
+
+**内容**:
+
+1. **IssueDashboardPage.jsx** — 组装所有子组件:
+   ```
+   IssueDashboardPage
+   ├── RefreshBar (项目切换 + 手动刷新 + 时间戳)
+   ├── StatsCards (3 张统计卡片)
+   ├── DITrendChart + CategoryBarChart (左右/上下排列)
+   ├── ReportPanel (报告 + 复制)
+   └── ErrorState (条件渲染，覆盖 loading/error/empty 状态)
+   ```
+   - 状态机: `loading` → `error` → `empty` → `data`
+   - 使用 `useSearchParams` 读取 `projectId`（与现有 ProjectSelector 一致）
+   - 未选项目时显示「请选择项目」引导提示
+   - 切换项目 → 重新加载全部数据
+   - 滚动位置锁定（复用 useKanbanScroll pattern）
+
+2. **App.jsx** — `import IssueDashboardPage from "./pages/IssueDashboardPage"`，路由 `/issues` 指向新页面（保留旧 IssueListPage 备用或删除）
+
+**验收**:
+- 完整流程：选项目 → 自动加载图表+统计+报告 → 切换项目 → 联动刷新
+- 手动刷新按钮带 loading 动画
+- 异常场景覆盖：鉴权失败 / 超时 / 无数据 / DI全为0
+- 报告一键复制，toast 提示
 
 ---
 
 ### 8. 共享知识
 
-#### 8.1 API 规范
 ```
-- 所有 API 响应统一格式：{ ok: true, data: ... } 或 { ok: false, error: "..." }
-- 所有日期/时间字段使用 ISO 8601 格式（SQLite datetime('now','localtime')）
-- 软删除：设置 deleted_at 字段，查询时过滤 deleted_at IS NULL
-- HTTP 状态码：200 成功, 201 创建, 400 参数错误, 404 不存在, 500 服务器错误
-```
+# ── API 响应格式（沿用现有约定）──
+成功: { ok: true, data: {...} }
+列表: { ok: true, data: [...] }
+错误: { ok: false, error: "描述" }
 
-#### 8.2 乐观更新模式
-```javascript
-// useOptimistic hook 核心模式
-function useOptimistic(initialData, apiCall) {
-  const [data, setData] = useState(initialData);
-  const [snapshot, setSnapshot] = useState(null);
+# ── 日期格式 ──
+全部 API 传输 ISO8601: "2026-07-08" 或 "2026-07-08T10:30:00"
+前端展示: dayjs 格式化
 
-  const mutate = async (optimisticUpdater) => {
-    setSnapshot(data);                          // 1. 快照
-    setData(optimisticUpdater(data));           // 2. 乐观更新
-    try {
-      await apiCall();                          // 3. API 调用
-    } catch (err) {
-      setData(snapshot);                        // 4. 回滚
-      throw err;
-    }
-  };
-  return { data, mutate };
-}
-```
+# ── DI 值计算（保持不变）──
+DI_WEIGHTS = { Critical: 10, Major: 3, Minor: 1, Trivial: 0.1 }
+DI = SUM(未关闭缺陷 di_weight)
 
-#### 8.3 滚动保持策略
-```javascript
-// useKanbanScroll hook 核心模式
-function useKanbanScroll(containerRef) {
-  const capture = () => containerRef.current?.scrollTop;
-  const restore = (saved) => {
-    if (saved != null && containerRef.current) {
-      requestAnimationFrame(() => {
-        containerRef.current.scrollTop = saved;
-      });
-    }
-  };
-  return { capture, restore };
-}
-// 使用：capture() → 乐观更新 → restore(saved)
-```
+# ── 严重度颜色 ──
+Critical → #D32F2F (error), Major → #ED6C02 (warning), Minor → #1565C0 (info), Trivial → #757575 (default)
 
-#### 8.4 折叠状态
-```
-- localStorage key: "kanban-collapsed-{projectId}"
-- value: "true" | "false" (字符串)
-- 读取：localStorage.getItem(`kanban-collapsed-${projectId}`) === "true"
-- 写入：localStorage.setItem(`kanban-collapsed-${projectId}`, "true")
-- 清除：localStorage.removeItem(`kanban-collapsed-${projectId}`)
-```
+# ── 分类颜色（柱状图）──
+BIOS → #1565C0, BMC → #ED6C02, HW → #2E7D32, Perf → #6A1B9A
 
-#### 8.5 优先级常量（前端共享）
-```javascript
-export const PRIORITY_MAP = {
-  urgent:  { label: '紧急', color: '#cf1322' },
-  high:    { label: '高',   color: '#ff4d4f' },
-  medium:  { label: '中',   color: '#faad14' },
-  low:     { label: '低',   color: '#52c41a' },
-};
-export const PRIORITY_OPTIONS = ['urgent', 'high', 'medium', 'low'];
-```
+# ── 缓存键命名 ──
+sync_cache.cache_key 枚举: "di_trend" | "category_stats" | "summary"
+TTL 默认: 300 秒
 
-#### 8.6 数据库迁移约定
-```sql
--- 所有 ALTER TABLE 必须 try/catch "duplicate column name"
--- 优先级迁移通过检查旧值是否存在来判断是否已执行
--- 迁移哨兵：创建 _migrations 表记录已执行迁移
-```
+# ── Mantis API 配置 ──
+Base URL: https://mantis.sugon.com/api/rest
+鉴权: Bearer Token (api_token 字段)
+超时: 30 秒
 
-#### 8.7 拖拽交互约定
-```
-- 待办栏内拖拽：更新 sort_order（调用 PUT /api/tasks/:id/reorder）
-- 全局视图跨列拖拽：更新 kanban_column（调用 PUT /api/tasks/:id）
-- 已完成栏不参与拖拽排序（固定按 completed_at 倒序）
-- 拖拽手柄区域：TaskCard 左侧 24px 六点图标
+# ── 报告模板 ──
+模板: "BUG情况：\n项目BUG状况：当前项目DI={di}、BUG={total}条、已解决={resolved}条，解决率={rate}%\n遗留BUG {unresolved}条：BIOS-{bios}、BMC-{bmc}、HW-{hw}、Pef-{perf}\n"
+遗留BUG = status NOT IN ('已关闭')，即新建 + 处理中 + 已解决但未关闭
+
+# ── 错误类型枚举 ──
+"auth_failed"   → 鉴权失败，请检查 API Token
+"timeout"       → 请求超时，请检查网络后重试
+"no_projects"   → 当前账号下暂无 Mantis 项目数据
+"di_all_zero"   → DI 值均为 0，无趋势数据可展示（图表正常显示但提示）
+"no_data"       → 暂无数据
+
+# ── 前端请求去重 key 格式 ──
+`${projectId}:${endpoint}` → 例: "1:summary", "1:di_trend"
 ```
 
 ---
@@ -779,60 +726,18 @@ export const PRIORITY_OPTIONS = ['urgent', 'high', 'medium', 'low'];
 
 ```mermaid
 graph TD
-    T01["T01: 基础设施 + DB迁移 + API骨架"]
-    T02["T02: 后端API完整实现"]
-    T03["T03: 看板核心组件库"]
-    T04["T04: 页面视图集成 + 拖拽"]
-    T05["T05: 集成收尾 + 边界处理"]
+    T01["T01: 项目基础设施<br/>DB迁移 + 依赖 + Adapter"] --> T02["T02: 后端 API 层<br/>6个端点 + mantis路由"]
+    T02 --> T03["T03: 前端数据层 + API 封装<br/>api/client.js + hooks"]
+    T03 --> T04["T04: 前端核心组件<br/>StatsCards + Charts + ReportPanel + ErrorState"]
+    T04 --> T05["T05: 页面集成 + 异常处理<br/>IssueDashboardPage + App路由"]
 
-    T01 --> T02
-    T01 --> T03
-    T02 --> T04
-    T03 --> T04
-    T04 --> T05
+    style T01 fill:#E3F2FD
+    style T02 fill:#E8F5E9
+    style T03 fill:#FFF3E0
+    style T04 fill:#F3E5F5
+    style T05 fill:#FFEBEE
 ```
-
-> **并行可能**：T02 与 T03 可并行开发（都只依赖 T01），后端和前端的同学可同时开工。
 
 ---
 
-## 附录：新增 subtasks 表 DDL
-
-```sql
-CREATE TABLE IF NOT EXISTS subtasks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    is_completed INTEGER DEFAULT 0,
-    sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now','localtime')),
-    updated_at TEXT DEFAULT (datetime('now','localtime')),
-    deleted_at TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id, sort_order);
-```
-
-## 附录：projects 表 ALTER
-
-```sql
--- theme_color 迁移（幂等）
--- try/catch duplicate column
-ALTER TABLE projects ADD COLUMN theme_color TEXT DEFAULT '#1565C0';
-```
-
-## 附录：tasks 表 ALTER
-
-```sql
--- sort_order 迁移（幂等）
-ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0;
--- completed_at 迁移（幂等）
-ALTER TABLE tasks ADD COLUMN completed_at TEXT;
-
--- 优先级数据迁移（仅执行一次，检查是否有 P0 值存在）
--- UPDATE tasks SET priority = 'urgent' WHERE priority = 'P0';
--- UPDATE tasks SET priority = 'high'   WHERE priority = 'P1';
--- UPDATE tasks SET priority = 'medium' WHERE priority = 'P2';
-
-CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks(project_id, sort_order);
-```
+> **架构版本**: M3-v1.0 | **基于**: `docs/architecture.md` v1.0 + `docs/modules/03-故障管理模块-PRD.md` v1.1
