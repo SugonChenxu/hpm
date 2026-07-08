@@ -32,6 +32,11 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
   const containerRef = useRef(null);
   const { capture, restore } = useKanbanScroll();
 
+  /** 单任务字段更新（优先级、标题等），同步到父组件 */
+  const handleTaskUpdate = (taskId, updates) => {
+    onTasksChange(tasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
@@ -183,11 +188,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
               strategy={verticalListSortingStrategy}
             >
               {tasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggleComplete={onToggleComplete}
-                />
+                <TaskCard key={task.id} task={task} onToggleComplete={onToggleComplete} onTaskUpdate={handleTaskUpdate} />
               ))}
             </SortableContext>
           </DndContext>
