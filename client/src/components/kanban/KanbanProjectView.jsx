@@ -148,42 +148,32 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
       {/* 统计条 */}
       <KanbanStatsBar stats={stats} />
 
-      {/* 空状态 */}
-      {tasks.length === 0 ? (
-        <Box sx={{ textAlign: "center", py: 6 }}>
-          <Typography color="text.secondary">
-            请选择项目后添加待办任务
-          </Typography>
-        </Box>
-      ) : (
-        /* 双栏布局 */
-        <Box
-          sx={{
-            display: "flex",
-            gap: 2,
-            alignItems: "stretch",
-            minHeight: 400,
+      {/* 双栏布局 — 始终显示，空任务时 TodoColumn 内部有空状态引导 */}
+      <Box
+        sx={{
+          display: "flex",
+          gap: 2,
+          alignItems: "stretch",
+          minHeight: 400,
+        }}
+      >
+        <TodoColumn
+          tasks={todoTasks}
+          projectId={project?.id}
+          onTasksChange={(newTodos) => {
+            const doneSet = new Set(doneTasks.map((d) => d.id));
+            const todoInNewOrder = newTodos.filter((nt) => !doneSet.has(nt.id));
+            handleTasksChange([...todoInNewOrder, ...doneTasks]);
           }}
-        >
-          <TodoColumn
-            tasks={todoTasks}
-            projectId={project?.id}
-            onTasksChange={(newTodos) => {
-              // 重建全量任务列表：todo 任务按新顺序排列，done 任务保持原序
-              const doneSet = new Set(doneTasks.map((d) => d.id));
-              const todoInNewOrder = newTodos.filter((nt) => !doneSet.has(nt.id));
-              handleTasksChange([...todoInNewOrder, ...doneTasks]);
-            }}
-            onToggleComplete={handleToggleComplete}
-          />
+          onToggleComplete={handleToggleComplete}
+        />
 
-          <DoneColumn
-            tasks={doneTasks}
-            onUndo={handleToggleComplete}
-            onDelete={handleDelete}
-          />
-        </Box>
-      )}
+        <DoneColumn
+          tasks={doneTasks}
+          onUndo={handleToggleComplete}
+          onDelete={handleDelete}
+        />
+      </Box>
     </Box>
   );
 }
