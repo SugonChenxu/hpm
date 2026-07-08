@@ -76,10 +76,36 @@ router.put("/projects/:id", (req, res) => {
   res.json({ ok: true, data: db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id) });
 });
 
-// 归档项目
+// 删除项目（级联清除所有关联数据）
 router.delete("/projects/:id", (req, res) => {
-  db.prepare("UPDATE projects SET status='已归档', updated_at=datetime('now','localtime') WHERE id=?").run(req.params.id);
-  res.json({ ok: true });
+  const { id } = req.params;
+  const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+  if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
+
+  const tx = db.transaction(() => {
+    // 子任务
+    db.prepare("DELETE FROM subtasks WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").run(id);
+    // 任务
+    db.prepare("DELETE FROM tasks WHERE project_id = ?").run(id);
+    // 阶段
+    db.prepare("DELETE FROM phases WHERE project_id = ?").run(id);
+    // 故障
+    db.prepare("DELETE FROM issues WHERE project_id = ?").run(id);
+    // 物料
+    db.prepare("DELETE FROM materials WHERE project_id = ?").run(id);
+    // 会议
+    db.prepare("DELETE FROM meetings WHERE project_id = ?").run(id);
+    // 周报
+    db.prepare("DELETE FROM weekly_reports WHERE project_id = ?").run(id);
+    // 排期相关
+    try { db.prepare("DELETE FROM schedule_tasks WHERE project_id = ?").run(id); } catch (_) {}
+    try { db.prepare("DELETE FROM schedule_versions WHERE project_id = ?").run(id); } catch (_) {}
+    // 项目本身
+    db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+  });
+  tx();
+
+  res.json({ ok: true, message: `项目及其全部关联数据已删除` });
 });
 
 // ── 看板统计 ──────────────────────────────────────────

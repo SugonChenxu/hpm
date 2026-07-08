@@ -11,8 +11,14 @@ import {
   Button,
   TextField,
   MenuItem,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from "@mui/material";
-import { Add, Flag } from "@mui/icons-material";
+import { Add, Flag, DeleteOutline } from "@mui/icons-material";
 import api from "../api/client";
 
 const STATUS_COLORS = { 进行中: "primary", 已结项: "success", 已归档: "default" };
@@ -23,17 +29,25 @@ export default function DashboardPage() {
   const [filter, setFilter] = useState({ status: "", category: "", search: "" });
   const navigate = useNavigate();
   const { openCreateDialog } = useOutletContext();
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true);
-    api.projects
-      .list(filter)
-      .then((r) => {
-        setProjects(r.data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [filter]);
+    api.projects.list(filter).then(r => { setProjects(r.data); setLoading(false); }).catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [filter]);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.projects.archive(deleteTarget.id);
+      setDeleteTarget(null);
+      load();
+    } catch {} finally { setDeleting(false); }
+  };
 
   return (
     <Box>
@@ -127,9 +141,16 @@ export default function DashboardPage() {
           {projects.map((p) => (
             <Grid item xs={12} sm={6} md={4} key={p.id}>
               <Card
-                sx={{ cursor: "pointer", "&:hover": { boxShadow: 4 } }}
+                sx={{ cursor: "pointer", "&:hover": { boxShadow: 4 }, position: "relative" }}
                 onClick={() => navigate(`/plans?projectId=${p.id}`)}
               >
+                <IconButton
+                  size="small"
+                  sx={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}
+                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
+                >
+                  <DeleteOutline sx={{ fontSize: 18, color: "text.disabled" }} />
+                </IconButton>
                 <CardContent>
                   <Box
                     sx={{
@@ -169,6 +190,23 @@ export default function DashboardPage() {
           ))}
         </Grid>
       )}
+
+      {/* 删除确认弹窗 */}
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle>确认删除项目</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            确定要删除项目「{deleteTarget?.code} {deleteTarget?.name}」及其全部关联数据（阶段、任务、子任务、故障、物料、会议、周报）吗？
+            此操作不可撤销。
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>取消</Button>
+          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
+            {deleting ? "删除中..." : "永久删除"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
