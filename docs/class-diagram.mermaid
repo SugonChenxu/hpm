@@ -1,0 +1,80 @@
+classDiagram
+    direction TB
+
+    class ProjectContext {
+        +projects: Project[]
+        +loading: boolean
+        +error: string|null
+        +refreshProjects(): Promise~void~
+        +Provider: React.FC
+    }
+
+    class ProjectSelectorProps {
+        +label: string
+        +size: "small"|"medium"
+    }
+    note for ProjectSelectorProps "组件内部使用 useSearchParams()\n不通过 props 传递 projectId"
+
+    class SidebarProps {
+        +onCreateClick: () => void
+    }
+
+    class CreateProjectDialogProps {
+        +open: boolean
+        +onClose: () => void
+        +onCreated: () => void
+    }
+
+    class PlansPage {
+        +projectId: number|null (from useSearchParams)
+        +tab: "timeline"|"schedule" (from useSearchParams)
+        +projects: Project[] (from ProjectContext)
+    }
+
+    class TaskKanbanPage {
+        +projectId: number|null (from useSearchParams)
+        +projects: Project[] (from ProjectContext)
+        +tasks: Task[]
+        +currentProject: Project|null
+    }
+
+    class IssueListPage {
+        +projectId: number|null
+        +projects: Project[]
+        +issues: Issue[]
+    }
+
+    class MaterialListPage {
+        +projectId: number|null
+        +projects: Project[]
+        +materials: Material[]
+    }
+
+    class MeetingListPage {
+        +projectId: number|null
+        +projects: Project[]
+        +meetings: Meeting[]
+    }
+
+    class WeeklyReportPage {
+        +projectId: number|null
+        +projects: Project[]
+        +reports: WeeklyReport[]
+    }
+
+    ProjectContext <.. ProjectSelector : 消费 projects
+    ProjectContext <.. PlansPage : 消费 projects
+    ProjectContext <.. TaskKanbanPage : 消费 projects
+    ProjectContext <.. IssueListPage : 消费 projects
+    ProjectContext <.. MaterialListPage : 消费 projects
+    ProjectContext <.. MeetingListPage : 消费 projects
+    ProjectContext <.. WeeklyReportPage : 消费 projects
+
+    ProjectSelector ..> PlansPage : 使用
+    ProjectSelector ..> TaskKanbanPage : 使用
+    ProjectSelector ..> IssueListPage : 使用
+    ProjectSelector ..> MaterialListPage : 使用
+    ProjectSelector ..> MeetingListPage : 使用
+    ProjectSelector ..> WeeklyReportPage : 使用
+
+    CreateProjectDialog ..> ProjectContext : 创建后调用 refreshProjects

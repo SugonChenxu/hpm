@@ -1,29 +1,32 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { ProjectProvider } from "./context/ProjectContext";
 import Layout from "./components/layout/Layout";
 import DashboardPage from "./pages/DashboardPage";
-import ProjectDetailPage from "./pages/ProjectDetailPage";
+import SchedulePage from "./pages/SchedulePage";
 import TaskKanbanPage from "./pages/TaskKanbanPage";
 import IssueListPage from "./pages/IssueListPage";
 import MaterialListPage from "./pages/MaterialListPage";
 import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
-import CreateProjectPage from "./pages/CreateProjectPage";
-import SchedulePage from "./pages/SchedulePage";
+import RedirectLegacyRoutes from "./components/layout/RedirectLegacyRoutes";
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/projects/new" element={<CreateProjectPage />} />
-        <Route path="/projects/:id" element={<ProjectDetailPage />} />
-        <Route path="/projects/:id/tasks" element={<TaskKanbanPage />} />
-        <Route path="/projects/:id/issues" element={<IssueListPage />} />
-        <Route path="/projects/:id/materials" element={<MaterialListPage />} />
-        <Route path="/projects/:id/meetings" element={<MeetingListPage />} />
-        <Route path="/projects/:id/weekly" element={<WeeklyReportPage />} />
-        <Route path="/projects/:id/schedule" element={<SchedulePage />} />
-      </Route>
-    </Routes>
+    <ProjectProvider>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/plans" element={<SchedulePage />} />
+          <Route path="/todos" element={<TaskKanbanPage />} />
+          <Route path="/issues" element={<IssueListPage />} />
+          <Route path="/materials" element={<MaterialListPage />} />
+          <Route path="/meetings" element={<MeetingListPage />} />
+          <Route path="/reports" element={<WeeklyReportPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+        {/* Legacy nested route catch-all for /projects/* */}
+        <Route path="/projects/*" element={<RedirectLegacyRoutes />} />
+      </Routes>
+    </ProjectProvider>
   );
 }

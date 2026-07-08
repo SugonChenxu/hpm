@@ -1,59 +1,83 @@
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import {
-  Box, Typography, Button, Select, MenuItem, FormControl, Snackbar, Alert,
-  CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions,
-  List, ListItemButton, ListItemText, Paper,
+  Box,
+  Typography,
+  Button,
+  Snackbar,
+  Alert,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItemButton,
+  ListItemText,
+  Paper,
+  Card,
 } from "@mui/material";
 import {
-  Add, Save, FileDownload, AutoAwesome, History,
+  Save,
+  FileDownload,
+  AutoAwesome,
+  History,
 } from "@mui/icons-material";
 import api from "../api/client";
+import { useProjectContext } from "../context/ProjectContext";
+import ProjectSelector from "../components/common/ProjectSelector";
 import ScheduleTable from "../components/schedule/ScheduleTable";
 import ContextMenu from "../components/schedule/ContextMenu";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
 import { calcCompletionStatus } from "../utils/schedule-date";
 
 export default function SchedulePage() {
-  const { id } = useParams();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get("projectId") || null;
+  const { projects } = useProjectContext();
 
-  // 状态
+  // Project info (for title display)
   const [project, setProject] = useState(null);
-  const [projects, setProjects] = useState([]);
+
+  // Schedule tasks
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // 右键菜单
+  // Context menu
   const [contextMenu, setContextMenu] = useState(null);
 
-  // 版本历史
+  // Version history
   const [versionOpen, setVersionOpen] = useState(false);
 
-  // 模板选择
+  // Template selection
   const [templateOpen, setTemplateOpen] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [generateConfirm, setGenerateConfirm] = useState(false);
 
-  // 右键菜单触发前置任务 Popover
+  // Predecessor trigger
   const [predTriggerTaskId, setPredTriggerTaskId] = useState(null);
 
   // Snackbar
-  const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
-  // 加载项目列表
-  useEffect(() => {
-    api.projects.list({}).then((r) => setProjects(r.data || [])).catch(() => {});
-  }, []);
-
-  // 加载项目详情和排期数据
+  // Load project detail and schedule data
   const loadSchedule = useCallback(async () => {
+    if (!projectId) {
+      setProject(null);
+      setTasks([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [projRes, schedRes] = await Promise.all([
-        api.projects.get(id),
-        api.schedule.list(id),
+        api.projects.get(Number(projectId)),
+        api.schedule.list(Number(projectId)),
       ]);
       setProject(projRes.data);
       const data = (schedRes.data || []).map((t) => ({
@@ -62,22 +86,21 @@ export default function SchedulePage() {
       }));
       setTasks(data);
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "加载失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "加载失败",
+        severity: "error",
+      });
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [projectId]);
 
   useEffect(() => {
     loadSchedule();
   }, [loadSchedule]);
 
-  // 项目切换
-  const handleProjectChange = (newId) => {
-    navigate(`/projects/${newId}/schedule`);
-  };
-
-  // 右键菜单
+  // Context menu handlers
   const handleContextMenu = (event, task) => {
     event.preventDefault();
     setContextMenu({
@@ -89,98 +112,157 @@ export default function SchedulePage() {
 
   const handleCloseContextMenu = () => setContextMenu(null);
 
-  // 编辑保存
+  // Task update
   const handleTaskUpdate = async (taskId, data) => {
     try {
       await api.schedule.update(taskId, data);
       await loadSchedule();
       setSnackbar({ open: true, message: "已保存", severity: "success" });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "保存失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "保存失败",
+        severity: "error",
+      });
       throw err;
     }
   };
 
-  // 降级
+  // Indent (demote)
   const handleIndent = async (taskId) => {
     try {
-      const res = await api.schedule.indent(id, taskId);
+      const res = await api.schedule.indent(Number(projectId), taskId);
       setTasks(res.data || []);
-      setSnackbar({ open: true, message: "已降级（增加缩进）", severity: "success" });
+      setSnackbar({
+        open: true,
+        message: "已降级（增加缩进）",
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "降级失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "降级失败",
+        severity: "error",
+      });
     }
   };
 
-  // 升级
+  // Outdent (promote)
   const handleOutdent = async (taskId) => {
     try {
-      const res = await api.schedule.outdent(id, taskId);
+      const res = await api.schedule.outdent(Number(projectId), taskId);
       setTasks(res.data || []);
-      setSnackbar({ open: true, message: "已升级（减少缩进）", severity: "success" });
+      setSnackbar({
+        open: true,
+        message: "已升级（减少缩进）",
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "升级失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "升级失败",
+        severity: "error",
+      });
     }
   };
 
-  // 插入任务
+  // Insert task
   const handleInsert = async (position, refTask) => {
     try {
-      await api.schedule.insert(id, { position, reference_id: refTask.id });
+      await api.schedule.insert(Number(projectId), {
+        position,
+        reference_id: refTask.id,
+      });
       await loadSchedule();
-      setSnackbar({ open: true, message: "已插入新任务", severity: "success" });
+      setSnackbar({
+        open: true,
+        message: "已插入新任务",
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "插入失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "插入失败",
+        severity: "error",
+      });
     }
   };
 
-  // 删除任务
+  // Delete task
   const handleDelete = async (taskId) => {
     try {
       await api.schedule.remove(taskId);
       await loadSchedule();
       setSnackbar({ open: true, message: "已删除", severity: "success" });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "删除失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "删除失败",
+        severity: "error",
+      });
     }
   };
 
-  // 修改任务类型
+  // Change task type
   const handleChangeType = async (taskId, newType) => {
     try {
       await api.schedule.update(taskId, { task_type: newType });
       await loadSchedule();
-      setSnackbar({ open: true, message: `已改为${newType}`, severity: "success" });
+      setSnackbar({
+        open: true,
+        message: `已改为${newType}`,
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "修改失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "修改失败",
+        severity: "error",
+      });
     }
   };
 
-  // 前置任务保存（从 Popover 调用）
+  // Predecessor save
   const handlePredecessorSave = async (taskId, predecessorIds) => {
     try {
       await api.schedule.updatePredecessors(taskId, predecessorIds);
       await loadSchedule();
-      setSnackbar({ open: true, message: "前置任务已更新", severity: "success" });
+      setSnackbar({
+        open: true,
+        message: "前置任务已更新",
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "更新失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "更新失败",
+        severity: "error",
+      });
       throw err;
     }
   };
 
-  // 背景色保存
+  // Background color save
   const handleBgColorSave = async (taskId, color) => {
     try {
       await api.schedule.update(taskId, { bg_color: color });
       await loadSchedule();
-      setSnackbar({ open: true, message: "背景色已更新", severity: "success" });
+      setSnackbar({
+        open: true,
+        message: "背景色已更新",
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "更新失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "更新失败",
+        severity: "error",
+      });
       throw err;
     }
   };
 
-  // 一键生成
+  // Generate from template
   const handleGenerateClick = async () => {
     try {
       const res = await api.schedule.templates();
@@ -194,24 +276,39 @@ export default function SchedulePage() {
       }
       setTemplateOpen(true);
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "加载模板失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "加载模板失败",
+        severity: "error",
+      });
     }
   };
 
   const handleTemplateSelect = async (templateName) => {
     setTemplateOpen(false);
     try {
-      const res = await api.schedule.generate(id, templateName);
+      const res = await api.schedule.generate(
+        Number(projectId),
+        templateName
+      );
       setTasks(res.data || []);
-      setSnackbar({ open: true, message: `已从模板生成排期，共 ${(res.data || []).length} 个节点`, severity: "success" });
+      setSnackbar({
+        open: true,
+        message: `已从模板生成排期，共 ${(res.data || []).length} 个节点`,
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "生成失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "生成失败",
+        severity: "error",
+      });
     }
   };
 
-  // 导出
+  // Export
   const handleExport = () => {
-    const url = api.schedule.exportUrl(id);
+    const url = api.schedule.exportUrl(Number(projectId));
     const link = window.document.createElement("a");
     link.href = url;
     link.download = `${project?.code || "项目"}_排期表.xlsx`;
@@ -221,44 +318,90 @@ export default function SchedulePage() {
     setSnackbar({ open: true, message: "正在导出...", severity: "info" });
   };
 
-  // 保存版本
+  // Save version
   const handleSaveVersion = async () => {
     setSaving(true);
     try {
-      const res = await api.schedule.saveVersion(id);
-      setSnackbar({ open: true, message: `已保存：${res.data.version_name}`, severity: "success" });
+      const res = await api.schedule.saveVersion(Number(projectId));
+      setSnackbar({
+        open: true,
+        message: `已保存：${res.data.version_name}`,
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "保存失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "保存失败",
+        severity: "error",
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  // 版本恢复
+  // Restore version
   const handleRestore = async (vid) => {
     try {
-      const res = await api.schedule.restoreVersion(id, vid);
+      const res = await api.schedule.restoreVersion(Number(projectId), vid);
       setTasks(res.data || []);
-      setSnackbar({ open: true, message: "版本已恢复", severity: "success" });
+      setSnackbar({
+        open: true,
+        message: "版本已恢复",
+        severity: "success",
+      });
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "恢复失败", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: err.message || "恢复失败",
+        severity: "error",
+      });
     }
   };
 
-  if (loading) {
-    return <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />;
+  // --- Render: no project selected ---
+  if (!projectId) {
+    return (
+      <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
+        <Box sx={{ mb: 2 }}>
+          <ProjectSelector />
+        </Box>
+        <Card sx={{ textAlign: "center", py: 8 }}>
+          <Typography color="text.secondary">
+            请从上方选择项目以查看排期计划
+          </Typography>
+        </Card>
+      </Box>
+    );
   }
 
+  // --- Render: loading ---
+  if (loading) {
+    return (
+      <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
+        <Box sx={{ mb: 2 }}>
+          <ProjectSelector />
+        </Box>
+        <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />
+      </Box>
+    );
+  }
+
+  // --- Render: schedule table ---
   return (
     <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
-      {/* 页面标题 */}
+      {/* Project selector */}
+      <Box sx={{ mb: 2 }}>
+        <ProjectSelector />
+      </Box>
+
+      {/* Page title */}
       {project && (
         <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
           [{project.code}] {project.name} — 项目排期表
         </Typography>
       )}
 
-      {/* 工具栏 — Paper 包裹 */}
+      {/* Toolbar */}
       <Paper
         elevation={1}
         sx={{
@@ -271,29 +414,6 @@ export default function SchedulePage() {
           flexWrap: "wrap",
         }}
       >
-        {/* 项目选择器 */}
-        <FormControl size="small" sx={{ minWidth: 220 }}>
-          <Select
-            value={id || ""}
-            onChange={(e) => handleProjectChange(e.target.value)}
-            displayEmpty
-          >
-            {projects.map((p) => (
-              <MenuItem key={p.id} value={String(p.id)}>
-                [{p.code}] {p.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => navigate("/projects/new")}
-        >
-          新建项目
-        </Button>
-
         <Button
           size="small"
           variant="contained"
@@ -333,10 +453,10 @@ export default function SchedulePage() {
         </Button>
       </Paper>
 
-      {/* 排期表格 */}
+      {/* Schedule table */}
       <ScheduleTable
         tasks={tasks}
-        projectId={id}
+        projectId={Number(projectId)}
         onContextMenu={handleContextMenu}
         onTaskUpdate={handleTaskUpdate}
         onPredecessorSave={handlePredecessorSave}
@@ -345,7 +465,7 @@ export default function SchedulePage() {
         onPredTriggerHandled={() => setPredTriggerTaskId(null)}
       />
 
-      {/* 右键菜单 */}
+      {/* Context menu */}
       <ContextMenu
         open={contextMenu !== null}
         anchorPosition={
@@ -367,16 +487,21 @@ export default function SchedulePage() {
         onBgColor={handleBgColorSave}
       />
 
-      {/* 版本历史 */}
+      {/* Version history dialog */}
       <VersionHistoryDialog
         open={versionOpen}
-        projectId={id}
+        projectId={Number(projectId)}
         onClose={() => setVersionOpen(false)}
         onRestore={handleRestore}
       />
 
-      {/* 模板选择对话框 */}
-      <Dialog open={templateOpen} onClose={() => setTemplateOpen(false)} maxWidth="sm" fullWidth>
+      {/* Template selection dialog */}
+      <Dialog
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>选择排期模板</DialogTitle>
         <DialogContent>
           {generateConfirm && (
@@ -386,7 +511,12 @@ export default function SchedulePage() {
           )}
           <List>
             {templates.map((t) => (
-              <ListItemButton key={t.file} onClick={() => handleTemplateSelect(t.file.replace(".json", ""))}>
+              <ListItemButton
+                key={t.file}
+                onClick={() =>
+                  handleTemplateSelect(t.file.replace(".json", ""))
+                }
+              >
                 <ListItemText
                   primary={t.name}
                   secondary={`${t.description}（${t.task_count} 个节点）`}

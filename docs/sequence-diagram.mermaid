@@ -1,0 +1,23 @@
+sequenceDiagram
+    actor User
+    participant Sidebar
+    participant Router
+    participant TaskKanbanPage
+    participant ProjectSelector
+    participant ProjectContext
+    participant API
+
+    User->>Sidebar: 点击「待办事项」
+    Sidebar->>Router: navigate("/todos")
+    Router->>TaskKanbanPage: 渲染（projectId=null 初始）
+    TaskKanbanPage->>ProjectContext: 消费 projects（已缓存）
+    TaskKanbanPage->>API: api.tasks.list({})（无 project_id → 全部）
+    API-->>TaskKanbanPage: 全部任务数据
+    TaskKanbanPage->>TaskKanbanPage: 渲染全部任务 + ProjectSelector
+
+    User->>ProjectSelector: 选择「HG4-001」项目
+    ProjectSelector->>Router: setSearchParams({projectId: "5"})
+    Router->>TaskKanbanPage: 重渲染（projectId="5"）
+    TaskKanbanPage->>API: api.tasks.list({project_id: 5})
+    API-->>TaskKanbanPage: 项目 5 的任务数据
+    TaskKanbanPage->>TaskKanbanPage: 渲染过滤后的任务

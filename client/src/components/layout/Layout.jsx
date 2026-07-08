@@ -1,77 +1,88 @@
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Box, Drawer, List, ListItemButton, ListItemIcon, ListItemText, AppBar, Toolbar, Typography, IconButton, Divider } from "@mui/material";
-import { Dashboard, Add, Assessment, Menu as MenuIcon } from "@mui/icons-material";
-import { useState } from "react";
+import { Outlet, useSearchParams } from "react-router-dom";
+import {
+  Box,
+  AppBar,
+  Toolbar,
+  Typography,
+  IconButton,
+} from "@mui/material";
+import { Menu as MenuIcon } from "@mui/icons-material";
+import { useState, useCallback } from "react";
+import Sidebar from "./Sidebar";
+import CreateProjectDialog from "../common/CreateProjectDialog";
 
-const DRAWER_WIDTH = 220;
-
+/**
+ * Root layout: AppBar + Sidebar + page content outlet.
+ * Manages the CreateProjectDialog and exposes openCreateDialog
+ * to child pages via Outlet context.
+ */
 export default function Layout() {
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [manualDialogOpen, setManualDialogOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const menuItems = [
-    { text: "仪表盘", icon: <Dashboard />, path: "/" },
-    { text: "新建项目", icon: <Add />, path: "/projects/new" },
-  ];
+  // Support ?create=true in URL to trigger the dialog
+  const createParam = searchParams.get("create") === "true";
+  const createDialogOpen = createParam || manualDialogOpen;
+
+  const openCreateDialog = useCallback(() => {
+    setManualDialogOpen(true);
+  }, []);
+
+  const closeCreateDialog = useCallback(() => {
+    setManualDialogOpen(false);
+    if (createParam) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete("create");
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [createParam, searchParams, setSearchParams]);
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f5f5f5" }}>
-      <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
+      <AppBar
+        position="fixed"
+        sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}
+      >
         <Toolbar>
-          <IconButton color="inherit" edge="start" onClick={() => setOpen(!open)} sx={{ mr: 2, display: { sm: "none" } }}>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            sx={{ mr: 2, display: { sm: "none" } }}
+          >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap sx={{ flexGrow: 1, fontWeight: 700 }}>
-            HPM
-          </Typography>
-          <Typography variant="body2" sx={{ opacity: 0.8 }}>
-            硬件项目管理
+          <Typography
+            variant="h6"
+            noWrap
+            sx={{ flexGrow: 1, fontWeight: 700 }}
+          >
+            HPM 硬件项目管理
           </Typography>
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: DRAWER_WIDTH,
-          display: { xs: "none", sm: "block" },
-          "& .MuiDrawer-paper": { width: DRAWER_WIDTH, boxSizing: "border-box", mt: 8 },
-        }}
-        open
+      <Sidebar
+        temporaryOpen={mobileOpen}
+        onTemporaryClose={() => setMobileOpen(false)}
+        onCreateClick={openCreateDialog}
+      />
+
+      <Box
+        component="main"
+        sx={{ flexGrow: 1, mt: 8, p: 3, maxWidth: 1400, mx: "auto" }}
       >
-        <List sx={{ pt: 1 }}>
-          {menuItems.map((item) => (
-            <ListItemButton
-              key={item.path}
-              selected={location.pathname === item.path}
-              onClick={() => { navigate(item.path); setOpen(false); }}
-            >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          ))}
-        </List>
-      </Drawer>
-
-      <Drawer variant="temporary" open={open} onClose={() => setOpen(false)} sx={{ display: { sm: "none" }, "& .MuiDrawer-paper": { width: DRAWER_WIDTH, mt: 8 } }}>
-        <List sx={{ pt: 1 }}>
-          {menuItems.map((item) => (
-            <ListItemButton
-              key={item.path}
-              selected={location.pathname === item.path}
-              onClick={() => { navigate(item.path); setOpen(false); }}
-            >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          ))}
-        </List>
-      </Drawer>
-
-      <Box component="main" sx={{ flexGrow: 1, mt: 8, p: 3, maxWidth: 1400, mx: "auto" }}>
-        <Outlet />
+        <Outlet context={{ openCreateDialog }} />
       </Box>
+
+      <CreateProjectDialog
+        open={createDialogOpen}
+        onClose={closeCreateDialog}
+        onCreated={() => {
+          // Dialog already refreshed project list; no further action needed
+        }}
+      />
     </Box>
   );
 }
