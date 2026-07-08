@@ -28,9 +28,18 @@ import api from "../../api/client";
 export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleComplete }) {
   const [newTitle, setNewTitle] = useState("");
   const [adding, setAdding] = useState(false);
+  const [pendingTasks, setPendingTasks] = useState([]);
   const inputRef = useRef(null);
   const containerRef = useRef(null);
   const { capture, restore } = useKanbanScroll();
+
+  // 合并 props.tasks + 乐观插入的临时任务（去重）
+  const displayTasks = [...tasks];
+  pendingTasks.forEach((pt) => {
+    if (!displayTasks.find((t) => t.id === pt.id)) {
+      displayTasks.push(pt);
+    }
+  });
 
   /** 单任务字段更新（优先级、标题等），同步到父组件 */
   const handleTaskUpdate = (taskId, updates) => {
@@ -68,7 +77,9 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
     };
 
     const prevTasks = [...tasks];
+    const prevPending = [...pendingTasks];
     onTasksChange([...tasks, tempTask]);
+    setPendingTasks([...pendingTasks, tempTask]);
     setNewTitle("");
 
     try {
@@ -78,9 +89,12 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
         priority: "low",
         kanban_column: "待开始",
       });
+      // 替换临时 ID 为真实 ID
+      setPendingTasks((prev) => prev.filter((p) => p.id !== tempId));
       onTasksChange(tasks.map((t) => (t.id === tempId ? { ...res.data, subtask_count: 0 } : t)));
     } catch (err) {
       onTasksChange(prevTasks);
+      setPendingTasks(prevPending);
       console.error("添加任务失败:", err);
     } finally {
       setAdding(false);
@@ -137,7 +151,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
         fontWeight={500}
         sx={{ fontSize: 12, mb: 0.75 }}
       >
-        待办 ({tasks.length})
+        待办 ({displayTasks.length})
       </Typography>
 
       {/* 顶部快速录入 */}
@@ -169,7 +183,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
 
       {/* 任务列表（可拖拽） */}
       <Box sx={{ flex: 1, overflowY: "auto" }}>
-        {tasks.length === 0 ? (
+        {displayTasks.length === 0 ? (
           <Typography
             variant="body2"
             color="text.disabled"
@@ -184,10 +198,10 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={tasks.map((t) => t.id)}
+              items={displayTasks.map((t) => t.id)}
               strategy={verticalListSortingStrategy}
             >
-              {tasks.map((task) => (
+              {displayTasks.map((task) => (
                 <TaskCard key={task.id} task={task} onToggleComplete={onToggleComplete} onTaskUpdate={handleTaskUpdate} />
               ))}
             </SortableContext>
