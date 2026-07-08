@@ -9,6 +9,42 @@
 > - `[保持不变]` = 沿用 v1.0 既有设计，此处仅引用不赘述
 > - `[增量变更]` = 在 v1.0 基础上修改/增强
 > - `[新增]` = v1.1 全新能力
+>
+> **> 实现状态：2026-07-08 量产版完成**。详细见文末"实现记录"。
+
+---
+
+## 实现记录（2026-07-08）
+
+### 已完成
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| Mantis SSO 对接 | ✅ | 通过 session cookie 对接曙光内部定制版 Mantis（Flask SSO + 自研 API） |
+| 项目列表拉取 | ✅ | 39 个全量项目；前端下拉框 7 个最近使用项目 |
+| DI 趋势折线图 | ✅ | X 轴 2026-WXX，Y 轴 DI 值，过滤 DI=0 数据点 |
+| 缺陷分布柱状图 | ✅ | X 轴分类名，Y 轴 DI 加权值，过滤 count=0，图注右上角排列 |
+| 全局统计卡片 | ✅ | 当前 DI 值 / 故障总数 / 解决率（数据源：基本统计 view） |
+| 自动报告生成 | ✅ | 固定模板自动填充，一键复制，字体 15px |
+| 多项目切换 | ✅ | URL searchParams 驱动，切换后联动刷新 |
+| 缓存机制 | ✅ | SQLite sync_cache 表，TTL 300s，手动刷新清除 |
+| 异常处理 | ✅ | 鉴权失败/超时/网络异常友好提示 |
+| 本地缺陷管理 | 待开发 | P2 后续迭代 |
+
+### 关键数据源对照
+
+| HPM 展示 | Mantis API | view_name | index |
+|----------|-----------|-----------|-------|
+| 基本统计（127/88/69.29%） | POST /projects?action=view_project_collection | 基本统计 | 0 |
+| DI 趋势（28 周） | GET /analysis/?action=get_analysis_data | Defect Index | 0 |
+| 缺陷分布（DI 加权） | GET /analysis/?action=get_analysis_data | Defect Index | 1 |
+| 分类原始条数 | GET /analysis/?action=get_analysis_data | 基本统计 | 2 |
+
+### 技术决策
+
+- 前端图标全部使用 emoji/字符替代 @mui/icons-material（避免 MUI v5 部分 icon 解析为 object 导致白屏）
+- 后端 Node.js 进程使用 `node node_modules/vite/bin/vite.js` 直接启动（避免 npx 子进程随 shell 退出）
+- 图表库 recharts，去除了 Cell/Brush/Legend 等不常用导入
 
 ---
 

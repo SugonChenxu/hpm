@@ -20,11 +20,11 @@ export default function CategoryBarChart({ data = [], loading = false }) {
     <Box sx={{ mb: 3, position: "relative" }}>
       <Typography variant="h6" gutterBottom>缺陷分布（按分类）</Typography>
       {/* 右上方图注 */}
-      <Box sx={{ position: "absolute", top: 30, right: 16, zIndex: 1, p: 0.5 }}>
+      <Box sx={{ position: "absolute", top: 30, right: 16, zIndex: 2, p: 1, bgcolor: "rgba(255,255,255,0.9)", borderRadius: 1, boxShadow: 1 }}>
         {chartData.map((d, i) => (
-          <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.3 }}>
-            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: COLORS[i % COLORS.length], flexShrink: 0 }} />
-            <Typography variant="caption" sx={{ fontSize: 11, lineHeight: 1 }}>{d.label}</Typography>
+          <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.6 }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: COLORS[i % COLORS.length], flexShrink: 0 }} />
+            <Typography variant="caption" sx={{ fontSize: 12, lineHeight: 1.4 }}>{d.label}</Typography>
           </Box>
         ))}
       </Box>
