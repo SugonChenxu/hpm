@@ -4,6 +4,8 @@ import { Box, Typography, CircularProgress } from "@mui/material";
 import api from "../api/client";
 import RefreshBar from "../components/issue/RefreshBar";
 import StatsCards from "../components/issue/StatsCards";
+import DITrendChart from "../components/issue/DITrendChart";
+import CategoryBarChart from "../components/issue/CategoryBarChart";
 import ErrorState from "../components/issue/ErrorState";
 
 export default function IssueDashboardPage() {
@@ -11,6 +13,8 @@ export default function IssueDashboardPage() {
   const projectId = searchParams.get("projectId") || "";
   const [mantisProjects, setMantisProjects] = useState([]);
   const [stats, setStats] = useState(null);
+  const [diTrend, setDiTrend] = useState([]);
+  const [categoryStats, setCategoryStats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -19,9 +23,16 @@ export default function IssueDashboardPage() {
   const load = async (pid) => {
     if (!pid) return;
     setLoading(true); setError(null);
-    try { const r = await api.issues.summary(pid); setStats(r.data); }
-    catch (e) { setError(e?.message || "加载失败"); }
-    finally { setLoading(false); }
+    try {
+      const [s, d, c] = await Promise.all([
+        api.issues.summary(pid),
+        api.issues.diTrend(pid),
+        api.issues.categoryStats(pid),
+      ]);
+      setStats(s.data); setDiTrend(d.data||[]); setCategoryStats(c.data||[]);
+    } catch (e) {
+      setError(e?.message || "加载失败");
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { load(projectId); }, [projectId]);
@@ -43,8 +54,15 @@ export default function IssueDashboardPage() {
       <Typography variant="h5" fontWeight={600} gutterBottom>故障仪表盘</Typography>
       <RefreshBar projectId={projectId} projects={mantisProjects} loading={loading} onRefresh={refresh} onProjectChange={(pid)=>setSearchParams(pid?{projectId:pid}:{})} />
       {loading ? <CircularProgress sx={{ mx:"auto", mt:6, display:"block" }} /> :
-       error ? <ErrorState type="unknown" message={error} onRetry={refresh} /> :
-       <StatsCards total={stats?.total||0} resolved={stats?.resolved||0} rate={stats?.rate||0} />}
+       error ? <ErrorState type="unknown" message={error} onRetry={refresh} /> : (
+        <>
+          <StatsCards di={stats?.di||0} total={stats?.total||0} rate={stats?.rate||0} />
+          <Box sx={{ display:"grid", gridTemplateColumns:{xs:"1fr",md:"1fr 1fr"}, gap:3, mt:3 }}>
+            <DITrendChart data={diTrend} />
+            <CategoryBarChart data={categoryStats} />
+          </Box>
+        </>
+      )}
     </Box>
   );
 }

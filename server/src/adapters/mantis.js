@@ -57,14 +57,14 @@ class MantisAdapter {
     return series.data.map((di, i) => ({ date: categories[i] || `W${i+1}`, di })).filter(d => d.di > 0);
   }
 
-  /** 分类统计：index 1 的 table 数据（DI 加权值） */
+  /** 分类统计 — 从"基本统计" index 2 获取真实条数 */
   async fetchCategoryStats(projectId) {
     const data = await this._get("/analysis/", {
-      action: "get_analysis_data", view_name: "Defect Index", index: 1,
+      action: "get_analysis_data", view_name: "基本统计", index: 2,
       proj_id_arr: JSON.stringify([projectId]), ignore_privileged_projects: "yes",
     });
     const rows = data?.data?.[0]?.data?.data || [];
-    return rows.filter(r => r.all_status > 0).map(r => ({ category: r.category, count: r.all_status }));
+    return rows.filter(r => r.total > 0).map(r => ({ category: r.category, count: r.total }));
   }
 
   /** 全局摘要 — 从"基本统计"view 获取 */

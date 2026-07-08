@@ -1,24 +1,13 @@
-/**
- * StatsCards — 全局统计卡片组
- *
- * 3 张 MUI Card 横向排列：故障总数 / 已解决 / 解决率。
- * Loading 状态显示 Skeleton 占位。
- */
-
 import { Box, Card, CardContent, Typography, Skeleton } from "@mui/material";
 
 const CARD_DEFS = [
+  { key: "di", label: "当前 DI 值", color: "error.main" },
   { key: "total", label: "故障总数", color: "primary.main" },
-  { key: "resolved", label: "已解决", color: "success.main" },
-  { key: "rate", label: "解决率", color: "info.main", suffix: "%" },
+  { key: "rate", label: "解决率", color: "success.main", suffix: "%" },
 ];
 
-/**
- * @param {{ total: number, resolved: number, rate: number }} props
- * @param {boolean} props.loading
- */
-export default function StatsCards({ total = 0, resolved = 0, rate = 0, loading = false }) {
-  const values = { total, resolved, rate };
+export default function StatsCards({ di = 0, total = 0, rate = 0, loading = false }) {
+  const values = { di, total, rate };
 
   return (
     <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap" }}>
