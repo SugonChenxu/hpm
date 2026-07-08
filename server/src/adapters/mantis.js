@@ -96,12 +96,11 @@ class MantisAdapter {
 
   /** 周报文本 */
   async fetchReport(projectId) {
-    const cats = await this.fetchCategoryDIStats(projectId);
+    const diCats = await this.fetchCategoryDIStats(projectId);
     const s = await this.fetchSummary(projectId);
-    const unresolved = Math.max(0, s.total - s.resolved);
-    const catList = cats.filter(c => c.count > 0)
-      .map(c => `${c.category}-DI${Math.round(c.count * 100) / 100}`).join("、");
-    return `BUG情况：\n项目BUG状况：当前项目DI=${s.di}、BUG=${s.total}条、已解决=${s.resolved}条，解决率=${s.rate}%\n遗留BUG ${unresolved}条：${catList}\n`;
+    const diList = diCats.filter(c => c.count > 0)
+      .map(c => `${c.category}-${Math.round(c.count * 100) / 100}`).join("、");
+    return `当前项目DI=${s.di}，BUG=${s.total}条，已解决=${s.resolved}条，解决率=${s.rate}%\n\n各模块DI值分布：${diList}`;
   }
 
   async testConnection() { await this._get("/analysis/"); return true; }
