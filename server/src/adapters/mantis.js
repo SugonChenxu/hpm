@@ -67,13 +67,22 @@ class MantisAdapter {
     return rows.filter(r => r.all_status > 0).map(r => ({ category: r.category, count: r.all_status }));
   }
 
-  /** 全局摘要 */
+  /** 全局摘要 — 从"基本统计"view 获取 */
   async fetchSummary(projectId) {
-    const cats = await this.fetchCategoryStats(projectId);
+    const data = await this._get("/analysis/", {
+      action: "get_analysis_data", view_name: "基本统计", index: 0,
+      proj_id_arr: JSON.stringify([projectId]), ignore_privileged_projects: "yes",
+    });
+    const rows = data?.data?.[0]?.data?.data || [];
+    const total = rows.reduce((s, r) => s + (r.total || 0), 0);
+    if (total === 0) return { total: 0, resolved: 0, rate: 0, di: 0 };
+    // 按 total 加权平均 resolved_pct
+    const rate = rows.reduce((s, r) => s + (parseFloat(r.resolved_pct) || 0) * (r.total || 0), 0) / total;
+    const resolved = Math.round(total * rate / 100);
+    // DI 从趋势图获取
     const trend = await this.fetchDITrend(projectId);
-    const total = Math.round(cats.reduce((s, c) => s + c.count, 0) * 10) / 10;
-    const di = trend.length > 0 ? Math.round(trend[trend.length - 1].di * 10) / 10 : 0;
-    return { total, resolved: 0, rate: 0, di }; // 已解决数需从其他数据源获取
+    const di = trend.length > 0 ? Math.round(trend[trend.length - 1].di * 100) / 100 : 0;
+    return { total, resolved, rate: Math.round(rate * 10) / 10, di };
   }
 
   /** 周报文本 */
@@ -81,7 +90,8 @@ class MantisAdapter {
     const cats = await this.fetchCategoryStats(projectId);
     const s = await this.fetchSummary(projectId);
     const find = (n) => cats.find(c => c.category === n)?.count || 0;
-    return `BUG情况：\n项目BUG状况：当前项目DI=${s.di}、BUG=DI${s.total}、已解决=待统计，解决率=待统计\n遗留BUG分类：BIOS-DI${find("BIOS")}、BMC-DI${find("BMC")}、HW-DI${find("Hardware")}、Pef-DI${find("Performance")}\n`;
+    const unresolved = Math.max(0, s.total - s.resolved);
+    return `BUG情况：\n项目BUG状况：当前项目DI=${s.di}、BUG=${s.total}条、已解决=${s.resolved}条，解决率=${s.rate}%\n遗留BUG ${unresolved}条：BIOS-${find("BIOS")}、BMC-${find("BMC")}、HW-${find("Hardware")}、Pef-${find("Performance")}\n`;
   }
 
   async testConnection() { await this._get("/analysis/"); return true; }
