@@ -25,6 +25,7 @@ export default function TaskItem({ task, onToggleComplete, onTaskUpdate }) {
   const isCompleted = !!task.completed_at;
   const displayPriority = localPriority || task.priority || "low";
   const priorityColor = PRIORITY_MAP[displayPriority]?.color || "#52c41a";
+  const isHighPriority = displayPriority === "urgent" || displayPriority === "high";
   const subtaskCount = task.subtask_count || 0;
   const completedSubtaskCount = subtasks.filter((s) => s.is_completed && !s.deleted_at).length;
   const totalSubtaskCount = subtasks.filter((s) => !s.deleted_at).length || subtaskCount;
@@ -104,9 +105,9 @@ export default function TaskItem({ task, onToggleComplete, onTaskUpdate }) {
             sx={{
               flex: 1,
               fontSize: 12,
-              fontWeight: (displayPriority === "urgent" || displayPriority === "high") ? 600 : 500,
+              fontWeight: isHighPriority ? 600 : 500,
               textDecoration: isCompleted ? "line-through" : "none",
-              color: isCompleted ? "text.disabled" : priorityColor,
+              color: isCompleted ? "text.disabled" : (isHighPriority ? priorityColor : "text.primary"),
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",

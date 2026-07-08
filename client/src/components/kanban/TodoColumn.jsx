@@ -1,207 +1,106 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Box, Typography, TextField } from "@mui/material";
 import {
-  DndContext,
-  closestCenter,
-  PointerSensor,
-  useSensor,
-  useSensors,
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  arrayMove,
-} from "@dnd-kit/sortable";
+import { SortableContext, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import TaskCard from "./TaskCard";
 import useKanbanScroll from "../../hooks/useKanbanScroll";
 import api from "../../api/client";
 
 /**
- * 待办栏 — 快速录入 + 拖拽排序列表
- *
- * @param {Object} props
- * @param {Array} props.tasks - 待办任务列表
- * @param {number} props.projectId - 所属项目 ID
- * @param {Function} props.onTasksChange - (newTasks) => void
- * @param {Function} props.onToggleComplete - (task) => Promise
+ * 待办栏 — 本地 state 驱动，输入即显示，无延迟
  */
 export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleComplete }) {
   const [newTitle, setNewTitle] = useState("");
   const [adding, setAdding] = useState(false);
-  const [pendingTasks, setPendingTasks] = useState([]);
+  const [localTasks, setLocalTasks] = useState(tasks);
   const inputRef = useRef(null);
   const containerRef = useRef(null);
   const { capture, restore } = useKanbanScroll();
 
-  // 合并 props.tasks + 乐观插入的临时任务（去重）
-  const displayTasks = [...tasks];
-  pendingTasks.forEach((pt) => {
-    if (!displayTasks.find((t) => t.id === pt.id)) {
-      displayTasks.push(pt);
+  // 当外部 tasks 变化时同步（非拖拽/新增操作时）
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    if (tasks !== tasksRef.current) {
+      tasksRef.current = tasks;
+      // 合并外部 tasks：保留 localTasks 中独有的（乐观插入），其余用外部
+      const externalIds = new Set(tasks.map((t) => t.id));
+      const localOnly = localTasks.filter((t) => typeof t.id === "string" && t.id.startsWith("temp-") && !externalIds.has(t.id));
+      setLocalTasks([...tasks, ...localOnly]);
     }
-  });
+  }, [tasks]);
 
-  /** 单任务字段更新（优先级、标题等），同步到父组件 */
   const handleTaskUpdate = (taskId, updates) => {
+    setLocalTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
     onTasksChange(tasks.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
   };
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 },
-    })
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   const handleAddTask = async () => {
     const trimmed = newTitle.trim();
     if (!trimmed || adding) return;
-
     setAdding(true);
     const savedScroll = capture(containerRef);
-
-    // 乐观插入
     const tempId = `temp-${Date.now()}`;
-    const tempTask = {
-      id: tempId,
-      project_id: projectId,
-      title: trimmed,
-      priority: "low",
-      kanban_column: "待开始",
-      status: "待开始",
-      sort_order: tasks.length,
-      subtask_count: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      completed_at: null,
-      deleted_at: null,
-    };
+    const tempTask = { id: tempId, project_id: projectId, title: trimmed, priority: "low", kanban_column: "待开始", status: "待开始", sort_order: localTasks.length, subtask_count: 0, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), completed_at: null, deleted_at: null };
 
-    const prevTasks = [...tasks];
-    const prevPending = [...pendingTasks];
-    onTasksChange([...tasks, tempTask]);
-    setPendingTasks([...pendingTasks, tempTask]);
+    // 立即加到本地列表
+    setLocalTasks((prev) => [...prev, tempTask]);
     setNewTitle("");
+    // 同步通知父组件
+    onTasksChange([...tasks, tempTask]);
 
     try {
-      const res = await api.tasks.create({
-        project_id: projectId,
-        title: trimmed,
-        priority: "low",
-        kanban_column: "待开始",
-      });
-      // 替换临时 ID 为真实 ID
-      setPendingTasks((prev) => prev.filter((p) => p.id !== tempId));
+      const res = await api.tasks.create({ project_id: projectId, title: trimmed, priority: "low", kanban_column: "待开始" });
+      // 替换临时 ID
+      setLocalTasks((prev) => prev.map((t) => (t.id === tempId ? { ...res.data, subtask_count: 0 } : t)));
       onTasksChange(tasks.map((t) => (t.id === tempId ? { ...res.data, subtask_count: 0 } : t)));
     } catch (err) {
-      onTasksChange(prevTasks);
-      setPendingTasks(prevPending);
+      // 回滚
+      setLocalTasks((prev) => prev.filter((t) => t.id !== tempId));
       console.error("添加任务失败:", err);
     } finally {
       setAdding(false);
       restore(containerRef, savedScroll);
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
+      inputRef.current?.focus();
     }
   };
 
-  const handleDragEnd = useCallback(
-    (event) => {
-      const { active, over } = event;
-      if (!over || active.id === over.id) return;
-
-      const savedScroll = capture(containerRef);
-      const oldIndex = tasks.findIndex((t) => t.id === active.id);
-      const newIndex = tasks.findIndex((t) => t.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-
-      const prevTasks = [...tasks];
-      const reordered = arrayMove(tasks, oldIndex, newIndex);
-      onTasksChange(reordered);
-
-      // 调用 reorder API
-      api.tasks
-        .reorder(active.id, { sort_order: newIndex, project_id: projectId })
-        .then(() => {
-          restore(containerRef, savedScroll);
-        })
-        .catch(() => {
-          // 回滚
-          onTasksChange(prevTasks);
-          restore(containerRef, savedScroll);
-        });
-    },
-    [tasks, projectId, onTasksChange, capture, restore]
-  );
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const savedScroll = capture(containerRef);
+    const oldIndex = localTasks.findIndex((t) => t.id === active.id);
+    const newIndex = localTasks.findIndex((t) => t.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(localTasks, oldIndex, newIndex);
+    setLocalTasks(reordered);
+    onTasksChange(reordered);
+    api.tasks.reorder(active.id, { sort_order: newIndex, project_id: projectId }).catch(() => {});
+    restore(containerRef, savedScroll);
+  }, [localTasks, projectId, onTasksChange, capture, restore]);
 
   return (
-    <Box
-      ref={containerRef}
-      sx={{
-        flex: 1,
-        minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      {/* 列头 */}
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        fontWeight={500}
-        sx={{ fontSize: 12, mb: 0.75 }}
-      >
-        待办 ({displayTasks.length})
+    <Box ref={containerRef} sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+      <Typography variant="caption" color="text.secondary" fontWeight={500} sx={{ fontSize: 12, mb: 0.75 }}>
+        待办 ({localTasks.length})
       </Typography>
-
-      {/* 顶部快速录入 */}
       <Box sx={{ mb: 0.75 }}>
-        <TextField
-          inputRef={inputRef}
-          size="small"
-          fullWidth
-          placeholder="输入任务，回车新增"
-          value={newTitle}
+        <TextField inputRef={inputRef} size="small" fullWidth placeholder="输入任务，回车新增" value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleAddTask();
-            }
-          }}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTask(); } }}
           disabled={adding}
-          sx={{
-            "& .MuiOutlinedInput-root": {
-              bgcolor: "grey.50",
-              borderRadius: 1,
-              "& fieldset": { borderColor: "divider" },
-            },
-            "& .MuiInputBase-input": { fontSize: "0.85rem", py: 0.75 },
-          }}
-        />
+          sx={{ "& .MuiOutlinedInput-root": { bgcolor: "grey.50", borderRadius: 1, "& fieldset": { borderColor: "divider" } }, "& .MuiInputBase-input": { fontSize: "0.85rem", py: 0.75 } }} />
       </Box>
-
-      {/* 任务列表（可拖拽） */}
       <Box sx={{ flex: 1, overflowY: "auto" }}>
-        {displayTasks.length === 0 ? (
-          <Typography
-            variant="body2"
-            color="text.disabled"
-            sx={{ textAlign: "center", py: 2, fontSize: 12 }}
-          >
-            暂无待办任务
-          </Typography>
+        {localTasks.length === 0 ? (
+          <Typography variant="body2" color="text.disabled" sx={{ textAlign: "center", py: 2, fontSize: 12 }}>暂无待办任务</Typography>
         ) : (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <SortableContext
-              items={displayTasks.map((t) => t.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {displayTasks.map((task) => (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={localTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              {localTasks.map((task) => (
                 <TaskCard key={task.id} task={task} onToggleComplete={onToggleComplete} onTaskUpdate={handleTaskUpdate} />
               ))}
             </SortableContext>
