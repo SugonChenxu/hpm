@@ -1,27 +1,24 @@
 #!/bin/bash
-# HPM 启动脚本 — 使用 nohup 确保进程不被终端关闭影响
-# 用法: bash start.sh
+# HPM 启动脚本 — 可靠版
+# 使用 node 直接调用避免 npx 依赖问题
 
 echo "=== HPM 启动 ==="
 
 # 清理旧进程
-echo "清理端口 5173/5174/3001..."
 taskkill //F //IM node.exe 2>/dev/null
 sleep 1
 
-# 启动后端
+# 后端
 cd /d/HPM/server
-rm -f server.log
-nohup node src/index.js > server.log 2>&1 &
+nohup node src/index.js > /d/HPM/server/server.log 2>&1 &
 echo "后端 PID=$! — http://localhost:3001"
 sleep 2
 
-# 启动前端
+# 前端 (直接用 node 调 vite，不用 npx)
 cd /d/HPM/client
-rm -f vite.log
-nohup npx vite --host --port 5173 > vite.log 2>&1 &
+nohup node node_modules/vite/bin/vite.js --host --port 5173 > /d/HPM/client/vite.log 2>&1 &
 echo "前端 PID=$! — http://localhost:5173"
-sleep 3
+sleep 4
 
 # 验证
 echo ""
