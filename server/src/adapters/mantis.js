@@ -61,14 +61,19 @@ class MantisAdapter {
       throw e;
     }
     try {
-      // 传空数组拉取全量项目列表
       const data = await this._post("/projects", {
         action: "view_project_collection",
         proj_id_arr: "[]",
       });
-      const projects = (data?.data?.simple_filters?.projects || [])
-        .map(p => ({ id: p.id, name: p.name }));
-      return projects;
+      const all = (data?.data?.simple_filters?.projects || []).map(p => ({ id: p.id, name: p.name }));
+      // 标记最近使用（用户确认的 8 个项目关键词匹配）
+      const recentKeywords = [
+        "5000售后二线", "马泉河", "干将_909", "勒拿河",
+        "数创冷板", "常规问题", "京能", "海南岛"
+      ];
+      const recent = all.filter(p => recentKeywords.some(k => p.name.includes(k)));
+      const others = all.filter(p => !recentKeywords.some(k => p.name.includes(k)));
+      return { recent, others, all };
     } catch (e) {
       if (e.response?.status === 401) { const err = new Error("鉴权失败"); err.code = "auth_failed"; throw err; }
       throw e;

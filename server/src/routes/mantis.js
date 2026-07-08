@@ -47,8 +47,9 @@ function updateLastSync(status) {
 // ═══════════════════════════════════════════════════════════
 router.get("/mantis/projects", async (req, res) => {
   try {
-    const projects = await adapter.fetchProjects();
-    res.json({ ok: true, data: projects });
+    const result = await adapter.fetchProjects();
+    // 返回分组：最近使用 + 其他项目
+    res.json({ ok: true, data: result.recent || result.all || result });
   } catch (error) {
     const { status, message } = mapMantisError(error, "获取项目列表失败");
     res.status(status).json({ ok: false, error: message });
