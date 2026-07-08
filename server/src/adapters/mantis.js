@@ -99,6 +99,7 @@ class MantisAdapter {
     const diCats = await this.fetchCategoryDIStats(projectId);
     const s = await this.fetchSummary(projectId);
     const diList = diCats.filter(c => c.count > 0)
+      .sort((a, b) => b.count - a.count)
       .map(c => `${c.category}-${Math.round(c.count * 100) / 100}`).join("、");
     return `当前项目DI=${s.di}，BUG=${s.total}条，已解决=${s.resolved}条，解决率=${s.rate}%\n\n各模块DI值分布：${diList}`;
   }
