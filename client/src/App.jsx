@@ -5,6 +5,7 @@ import DashboardPage from "./pages/DashboardPage";
 import SchedulePage from "./pages/SchedulePage";
 import TaskKanbanPage from "./pages/TaskKanbanPage";
 import IssueListPage from "./pages/IssueListPage";
+import IssueDashboardPage from "./pages/IssueDashboardPage";
 import MaterialListPage from "./pages/MaterialListPage";
 import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
@@ -18,7 +19,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/plans" element={<SchedulePage />} />
           <Route path="/todos" element={<TaskKanbanPage />} />
-          <Route path="/issues" element={<IssueListPage />} />
+          <Route path="/issues" element={<IssueDashboardPage />} />
           <Route path="/materials" element={<MaterialListPage />} />
           <Route path="/meetings" element={<MeetingListPage />} />
           <Route path="/reports" element={<WeeklyReportPage />} />
