@@ -67,6 +67,16 @@ class MantisAdapter {
     return rows.filter(r => r.total > 0).map(r => ({ category: r.category, count: r.total }));
   }
 
+  /** 分类 DI 加权值 — 从"Defect Index" index 1 获取（用于柱状图） */
+  async fetchCategoryDIStats(projectId) {
+    const data = await this._get("/analysis/", {
+      action: "get_analysis_data", view_name: "Defect Index", index: 1,
+      proj_id_arr: JSON.stringify([projectId]), ignore_privileged_projects: "yes",
+    });
+    const rows = data?.data?.[0]?.data?.data || [];
+    return rows.filter(r => r.all_status > 0).map(r => ({ category: r.category, count: r.all_status }));
+  }
+
   /** 全局摘要 — 从"基本统计"view 获取 */
   async fetchSummary(projectId) {
     const data = await this._get("/analysis/", {

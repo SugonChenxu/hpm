@@ -59,7 +59,7 @@ export const api = {
     update: (id, data) => request(`/issues/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     diSummary: (projectId) => request(`/issues/di-summary?project_id=${projectId}`),
     diTrend: (projectId) => request(`/issues/di-trend?project_id=${projectId}`),
-    categoryStats: (projectId) => request(`/issues/category-stats?project_id=${projectId}`),
+    categoryStats: (projectId, type) => request(`/issues/category-stats?project_id=${projectId}${type ? "&type=" + type : ""}`),
     summary: (projectId) => request(`/issues/summary?project_id=${projectId}`),
     report: (projectId) => request(`/issues/report?project_id=${projectId}`),
   },

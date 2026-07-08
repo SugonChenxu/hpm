@@ -6,6 +6,7 @@ import RefreshBar from "../components/issue/RefreshBar";
 import StatsCards from "../components/issue/StatsCards";
 import DITrendChart from "../components/issue/DITrendChart";
 import CategoryBarChart from "../components/issue/CategoryBarChart";
+import ReportPanel from "../components/issue/ReportPanel";
 import ErrorState from "../components/issue/ErrorState";
 
 export default function IssueDashboardPage() {
@@ -14,7 +15,8 @@ export default function IssueDashboardPage() {
   const [mantisProjects, setMantisProjects] = useState([]);
   const [stats, setStats] = useState(null);
   const [diTrend, setDiTrend] = useState([]);
-  const [categoryStats, setCategoryStats] = useState([]);
+  const [categoryDI, setCategoryDI] = useState([]);
+  const [reportText, setReportText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -24,12 +26,13 @@ export default function IssueDashboardPage() {
     if (!pid) return;
     setLoading(true); setError(null);
     try {
-      const [s, d, c] = await Promise.all([
+      const [s, d, c, r] = await Promise.all([
         api.issues.summary(pid),
         api.issues.diTrend(pid),
-        api.issues.categoryStats(pid),
+        api.issues.categoryStats(pid, "di"),
+        api.issues.report(pid),
       ]);
-      setStats(s.data); setDiTrend(d.data||[]); setCategoryStats(c.data||[]);
+      setStats(s.data); setDiTrend(d.data||[]); setCategoryDI(c.data||[]); setReportText(r.data||"");
     } catch (e) {
       setError(e?.message || "加载失败");
     } finally { setLoading(false); }
@@ -59,7 +62,10 @@ export default function IssueDashboardPage() {
           <StatsCards di={stats?.di||0} total={stats?.total||0} rate={stats?.rate||0} />
           <Box sx={{ display:"grid", gridTemplateColumns:{xs:"1fr",md:"1fr 1fr"}, gap:3, mt:3 }}>
             <DITrendChart data={diTrend} />
-            <CategoryBarChart data={categoryStats} />
+            <CategoryBarChart data={categoryDI} />
+          </Box>
+          <Box sx={{ mt: 3 }}>
+            <ReportPanel reportText={reportText} />
           </Box>
         </>
       )}

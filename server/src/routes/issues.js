@@ -88,15 +88,18 @@ router.get("/issues/di-trend", async (req, res) => {
 
 // B. 缺陷分类柱状图数据 — 从 Mantis 实时拉取
 router.get("/issues/category-stats", async (req, res) => {
-  const { project_id } = req.query;
+  const { project_id, type } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
 
-  const cached = getCache(project_id, "category_stats");
+  const cacheKey = type === "di" ? "category_di_stats" : "category_stats";
+  const cached = getCache(project_id, cacheKey);
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
-    const data = await mantis.fetchCategoryStats(project_id);
-    setCache(project_id, "category_stats", data);
+    const data = type === "di"
+      ? await mantis.fetchCategoryDIStats(project_id)
+      : await mantis.fetchCategoryStats(project_id);
+    setCache(project_id, cacheKey, data);
     res.json({ ok: true, data });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
