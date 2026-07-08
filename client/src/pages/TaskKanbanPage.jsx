@@ -9,9 +9,38 @@ import {
   Snackbar,
 } from "@mui/material";
 import { Add } from "@mui/icons-material";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import api from "../api/client";
 import KanbanProjectView from "../components/kanban/KanbanProjectView";
 import CreateProjectDialog from "../components/common/CreateProjectDialog";
+
+/** 可拖拽的看板卡片包裹组件 */
+function SortableKanbanCard({ id, children }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
+}
 
 /**
  * 多项目看板网格页面
@@ -32,6 +61,25 @@ export default function TaskKanbanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  /** 看板卡片拖拽结束：交换 projects 顺序 */
+  const handleKanbanDragEnd = useCallback(
+    (event) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      setProjects((prev) => {
+        const oldIndex = prev.findIndex((p) => p.id === active.id);
+        const newIndex = prev.findIndex((p) => p.id === over.id);
+        if (oldIndex === -1 || newIndex === -1) return prev;
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    },
+    []
+  );
 
   /**
    * 并行加载所有项目、所有任务，再为每个项目获取看板统计
@@ -171,38 +219,46 @@ export default function TaskKanbanPage() {
         </Card>
       )}
 
-      {/* 响应式看板网格 */}
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(540px, 1fr))",
-          gap: 3,
-        }}
+      {/* 响应式看板网格（可拖拽排列） */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleKanbanDragEnd}
       >
-        {projects.map((p) => (
-          <Card
-            key={p.id}
-            sx={{ p: 2.5, borderRadius: 2 }}
-            variant="outlined"
+        <SortableContext
+          items={projects.map((p) => p.id)}
+          strategy={rectSortingStrategy}
+        >
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(540px, 1fr))",
+              gap: 3,
+            }}
           >
-            <KanbanProjectView
-              tasks={tasksByProject.get(p.id) || []}
-              project={p}
-              stats={statsMap[p.id]}
-              onTasksChange={(newTasks) =>
-                handleProjectTasksChange(p.id, newTasks)
-              }
-              onRefresh={load}
-            />
-          </Card>
-        ))}
-      </Box>
+            {projects.map((p) => (
+              <SortableKanbanCard key={p.id} id={p.id}>
+                <KanbanProjectView
+                  tasks={tasksByProject.get(p.id) || []}
+                  project={p}
+                  stats={statsMap[p.id]}
+                  onTasksChange={(newTasks) =>
+                    handleProjectTasksChange(p.id, newTasks)
+                  }
+                  onRefresh={load}
+                />
+              </SortableKanbanCard>
+            ))}
+          </Box>
+        </SortableContext>
+      </DndContext>
 
       {/* 新建项目弹窗 */}
       <CreateProjectDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={() => load()}
+        hideTemplate
       />
 
       {/* 全局错误 Snackbar */}

@@ -73,7 +73,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
         priority: "medium",
         kanban_column: "待开始",
       });
-      onTasksChange((prev) => prev.map((t) => (t.id === tempId ? { ...res.data, subtask_count: 0 } : t)));
+      onTasksChange(tasks.map((t) => (t.id === tempId ? { ...res.data, subtask_count: 0 } : t)));
     } catch (err) {
       onTasksChange(prevTasks);
       console.error("添加任务失败:", err);

@@ -28,8 +28,9 @@ const CATEGORIES = [
  *   open      — whether the dialog is visible
  *   onClose   — called when the dialog is dismissed
  *   onCreated — called with new project id on successful creation
+ *   hideTemplate — if true, skip template selector entirely (for kanban use)
  */
-export default function CreateProjectDialog({ open, onClose, onCreated }) {
+export default function CreateProjectDialog({ open, onClose, onCreated, hideTemplate }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -49,8 +50,9 @@ export default function CreateProjectDialog({ open, onClose, onCreated }) {
   // Reset form and load templates whenever the dialog opens
   useEffect(() => {
     if (open) {
-      setLoading(true);
       setForm({ code: "", name: "", category: "新品", template_id: "" });
+      if (hideTemplate) { setLoading(false); return; }
+      setLoading(true);
       api.templates
         .list()
         .then((r) => {
@@ -137,6 +139,7 @@ export default function CreateProjectDialog({ open, onClose, onCreated }) {
                   </MenuItem>
                 ))}
               </TextField>
+              {!hideTemplate && (
               <TextField
                 select
                 label="流程模板"
@@ -158,6 +161,7 @@ export default function CreateProjectDialog({ open, onClose, onCreated }) {
                   </MenuItem>
                 ))}
               </TextField>
+              )}
             </Box>
           )}
         </DialogContent>
