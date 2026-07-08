@@ -1,5 +1,5 @@
 import { Box, Typography, Skeleton } from "@mui/material";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function DITrendChart({ data = [], loading = false }) {
   const filtered = data.filter((d) => d.di > 0);
@@ -16,6 +16,7 @@ export default function DITrendChart({ data = [], loading = false }) {
           <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 12 }} />
+          <Tooltip formatter={(value) => [`DI ${value}`, ""]} />
           <Line type="monotone" dataKey="di" stroke="#D32F2F" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
         </LineChart>
       </ResponsiveContainer>
