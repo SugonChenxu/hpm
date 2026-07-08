@@ -180,6 +180,23 @@ CREATE TABLE IF NOT EXISTS weekly_reports (
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS _migrations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    executed_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS subtasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    is_completed INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_phases_project ON phases(project_id, phase_order);
 CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date) WHERE deleted_at IS NULL;
@@ -190,6 +207,8 @@ CREATE INDEX IF NOT EXISTS idx_materials_delivery ON materials(planned_delivery)
 CREATE INDEX IF NOT EXISTS idx_meetings_project ON meetings(project_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_time ON meetings(start_time);
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_project ON weekly_reports(project_id, week_start);
+CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id, sort_order);
+-- idx_tasks_sort 在下方迁移区块创建（sort_order 列通过 ALTER TABLE 新增后）
 
 -- =====================================================
 -- M1 增量：项目计划排期表
@@ -263,6 +282,87 @@ try {
   if (!e.message.includes("duplicate column name")) {
     console.warn("Migration bg_color:", e.message);
   }
+}
+
+// =====================================================
+// 看板模块迁移：tasks 表新增字段
+// =====================================================
+
+// 迁移：tasks.sort_order
+try {
+  db.exec(`ALTER TABLE tasks ADD COLUMN sort_order INTEGER DEFAULT 0`);
+  // 为已有数据按 id 设置默认 sort_order
+  db.exec(`UPDATE tasks SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration tasks.sort_order:", e.message);
+  }
+}
+
+// 迁移：tasks.completed_at
+try {
+  db.exec(`ALTER TABLE tasks ADD COLUMN completed_at TEXT`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration tasks.completed_at:", e.message);
+  }
+}
+
+// 迁移：projects.theme_color
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN theme_color TEXT DEFAULT '#1565C0'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration projects.theme_color:", e.message);
+  }
+}
+
+// 迁移：索引
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks(project_id, sort_order)`);
+} catch (e) {
+  console.warn("Migration idx_tasks_sort:", e.message);
+}
+
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id, sort_order)`);
+} catch (e) {
+  console.warn("Migration idx_subtasks_task:", e.message);
+}
+
+// =====================================================
+// 优先级数据迁移（仅执行一次）
+// =====================================================
+
+const priorityMigrationDone = db.prepare(
+  "SELECT id FROM _migrations WHERE name = ?"
+).get("priority-v1");
+
+if (!priorityMigrationDone) {
+  console.log("Running priority migration: P0→urgent, P1→high, P2→medium");
+  const migrate = db.transaction(() => {
+    const countP0 = db.prepare(
+      "SELECT COUNT(*) as cnt FROM tasks WHERE priority = 'P0' AND deleted_at IS NULL"
+    ).get();
+    const countP1 = db.prepare(
+      "SELECT COUNT(*) as cnt FROM tasks WHERE priority = 'P1' AND deleted_at IS NULL"
+    ).get();
+    const countP2 = db.prepare(
+      "SELECT COUNT(*) as cnt FROM tasks WHERE priority = 'P2' AND deleted_at IS NULL"
+    ).get();
+
+    db.prepare("UPDATE tasks SET priority = 'urgent', updated_at = datetime('now','localtime') WHERE priority = 'P0'").run();
+    db.prepare("UPDATE tasks SET priority = 'high', updated_at = datetime('now','localtime') WHERE priority = 'P1'").run();
+    db.prepare("UPDATE tasks SET priority = 'medium', updated_at = datetime('now','localtime') WHERE priority = 'P2'").run();
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run("priority-v1");
+
+    console.log(
+      `Priority migration done: ${countP0.cnt} P0→urgent, ${countP1.cnt} P1→high, ${countP2.cnt} P2→medium`
+    );
+  });
+  migrate();
+} else {
+  console.log("Priority migration already executed, skipping.");
 }
 
 export default db;

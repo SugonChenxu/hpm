@@ -1,7 +1,10 @@
 const BASE = "/api";
 
 async function request(url, options = {}) {
-  const res = await fetch(BASE + url, { headers: { "Content-Type": "application/json", ...options.headers }, ...options });
+  const res = await fetch(BASE + url, {
+    headers: { "Content-Type": "application/json", ...options.headers },
+    ...options,
+  });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || "请求失败");
   return json;
@@ -15,13 +18,15 @@ export const api = {
     get: (id) => request(`/projects/${id}`),
     update: (id, data) => request(`/projects/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     archive: (id) => request(`/projects/${id}`, { method: "DELETE" }),
+    kanbanStats: (projectId) => request(`/projects/${projectId}/kanban-stats`),
   },
   templates: {
     list: () => request("/templates"),
   },
   phases: {
     list: (projectId) => request(`/projects/${projectId}/phases`),
-    update: (projectId, phaseId, data) => request(`/projects/${projectId}/phases/${phaseId}`, { method: "PUT", body: JSON.stringify(data) }),
+    update: (projectId, phaseId, data) =>
+      request(`/projects/${projectId}/phases/${phaseId}`, { method: "PUT", body: JSON.stringify(data) }),
   },
   // 待办任务
   tasks: {
@@ -32,6 +37,15 @@ export const api = {
     remove: (id) => request(`/tasks/${id}`, { method: "DELETE" }),
     batch: (data) => request("/tasks/batch", { method: "PUT", body: JSON.stringify(data) }),
     overdue: () => request("/tasks/overdue"),
+    reorder: (id, data) => request(`/tasks/${id}/reorder`, { method: "PUT", body: JSON.stringify(data) }),
+    toggleComplete: (id) => request(`/tasks/${id}/toggle-complete`, { method: "PUT" }),
+    subtasks: {
+      list: (taskId) => request(`/tasks/${taskId}/subtasks`),
+      create: (taskId, data) =>
+        request(`/tasks/${taskId}/subtasks`, { method: "POST", body: JSON.stringify(data) }),
+      update: (id, data) => request(`/subtasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+      remove: (id) => request(`/subtasks/${id}`, { method: "DELETE" }),
+    },
   },
   kanban: {
     columns: () => request("/kanban-columns"),
@@ -62,8 +76,10 @@ export const api = {
     create: (data) => request("/meetings", { method: "POST", body: JSON.stringify(data) }),
     get: (id) => request(`/meetings/${id}`),
     update: (id, data) => request(`/meetings/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-    addActionItem: (id, data) => request(`/meetings/${id}/action-items`, { method: "POST", body: JSON.stringify(data) }),
-    updateActionItem: (id, aid, data) => request(`/meetings/${id}/action-items/${aid}`, { method: "PUT", body: JSON.stringify(data) }),
+    addActionItem: (id, data) =>
+      request(`/meetings/${id}/action-items`, { method: "POST", body: JSON.stringify(data) }),
+    updateActionItem: (id, aid, data) =>
+      request(`/meetings/${id}/action-items/${aid}`, { method: "PUT", body: JSON.stringify(data) }),
     convertToTask: (id, aid) => request(`/meetings/${id}/action-items/${aid}/convert`, { method: "POST" }),
   },
   // 周报

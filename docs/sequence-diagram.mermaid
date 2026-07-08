@@ -1,23 +1,89 @@
 sequenceDiagram
     actor User
-    participant Sidebar
-    participant Router
-    participant TaskKanbanPage
-    participant ProjectSelector
-    participant ProjectContext
-    participant API
+    participant Page as TaskKanbanPage
+    participant API as api/client.js
+    participant Server as Express
+    participant DB as SQLite
 
-    User->>Sidebar: 点击「待办事项」
-    Sidebar->>Router: navigate("/todos")
-    Router->>TaskKanbanPage: 渲染（projectId=null 初始）
-    TaskKanbanPage->>ProjectContext: 消费 projects（已缓存）
-    TaskKanbanPage->>API: api.tasks.list({})（无 project_id → 全部）
-    API-->>TaskKanbanPage: 全部任务数据
-    TaskKanbanPage->>TaskKanbanPage: 渲染全部任务 + ProjectSelector
+    Note over User,DB: === 1. 加载项目看板 ===
 
-    User->>ProjectSelector: 选择「HG4-001」项目
-    ProjectSelector->>Router: setSearchParams({projectId: "5"})
-    Router->>TaskKanbanPage: 重渲染（projectId="5"）
-    TaskKanbanPage->>API: api.tasks.list({project_id: 5})
-    API-->>TaskKanbanPage: 项目 5 的任务数据
-    TaskKanbanPage->>TaskKanbanPage: 渲染过滤后的任务
+    User->>Page: 选择项目
+    Page->>Page: setProjectId(id)
+    Page->>API: GET /api/tasks?project_id=X
+    API->>Server: HTTP GET
+    Server->>DB: SELECT * FROM tasks WHERE project_id=X AND deleted_at IS NULL ORDER BY sort_order
+    DB-->>Server: Task[]
+    Server-->>API: {ok, data: Task[]}
+    API-->>Page: Task[]
+
+    par 并行加载
+        Page->>API: GET /api/projects/X
+        API->>Server: HTTP GET
+        Server->>DB: SELECT * FROM projects WHERE id=X
+        DB-->>Server: Project
+        Server-->>API: {ok, data: Project}
+        API-->>Page: Project
+    and
+        Page->>API: GET /api/projects/X/kanban-stats
+        API->>Server: HTTP GET
+        Server->>DB: SELECT COUNT...
+        DB-->>Server: stats
+        Server-->>API: {ok, data: KanbanStats}
+        API-->>Page: KanbanStats
+    end
+
+    Page->>Page: 拆分为 todoTasks / doneTasks
+    Page->>Page: localStorage 读取折叠状态
+    Page->>Page: 渲染 KanbanProjectView
+
+    Note over User,DB: === 2. 展开子任务 ===
+
+    User->>Page: 点击 ▶ 箭头
+    Page->>Page: setExpanded(true)
+    Page->>API: GET /api/tasks/{taskId}/subtasks
+    API->>Server: HTTP GET
+    Server->>DB: SELECT * FROM subtasks WHERE task_id=? AND deleted_at IS NULL ORDER BY sort_order
+    DB-->>Server: Subtask[]
+    Server-->>API: {ok, data: Subtask[]}
+    API-->>Page: Subtask[]
+    Page->>Page: 渲染 SubtaskList，自动聚焦输入框
+
+    Note over User,DB: === 3. 新增子任务（快速录入 + 乐观更新） ===
+
+    User->>Page: 输入文字 + 回车
+    Page->>Page: 乐观插入本地状态
+    Page->>Page: 清空输入框，保持光标
+    Page->>API: POST /api/tasks/{taskId}/subtasks {title}
+    API->>Server: HTTP POST
+    Server->>DB: INSERT INTO subtasks (task_id, title, sort_order) VALUES (?, ?, ?)
+    DB-->>Server: {id, ...}
+    Server-->>API: {ok, data: Subtask}
+    API-->>Page: Subtask（含真实 id）
+    Page->>Page: 用服务端数据更新本地记录
+
+    Note over User,DB: === 4. 拖拽排序（乐观更新 + 滚动保持） ===
+
+    User->>Page: 拖拽任务卡片到新位置
+    Page->>Page: onDragEnd → 计算新 sort_order
+    Page->>Page: 记录 scrollTop
+    Page->>Page: 乐观重排本地 tasks[] 数组
+    Page->>API: PUT /api/tasks/{taskId}/reorder {sort_order, project_id}
+    API->>Server: HTTP PUT
+    Server->>DB: BEGIN TRANSACTION; 重新计算 sort_order; COMMIT
+    DB-->>Server: OK
+    Server-->>API: {ok, data: Task}
+    API-->>Page: OK
+    Page->>Page: requestAnimationFrame 恢复 scrollTop
+
+    Note over User,DB: === 5. 切换完成状态（乐观更新 + 自动折叠） ===
+
+    User->>Page: 点击 ✓ 按钮
+    Page->>Page: 乐观移动：todo→done
+    Page->>API: PUT /api/tasks/{id}/toggle-complete
+    API->>Server: HTTP PUT
+    Server->>DB: UPDATE tasks SET completed_at=?, kanban_column=?, status=? WHERE id=?
+    DB-->>Server: OK
+    Server-->>API: {ok, data: Task}
+    API-->>Page: Task（含 completed_at）
+    Page->>Page: 检查全部完成 → 自动折叠
+    Page->>Page: localStorage.setItem('kanban-collapsed-{pid}', 'true')

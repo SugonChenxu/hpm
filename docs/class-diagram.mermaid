@@ -1,80 +1,191 @@
 classDiagram
     direction TB
 
-    class ProjectContext {
-        +projects: Project[]
-        +loading: boolean
-        +error: string|null
-        +refreshProjects(): Promise~void~
-        +Provider: React.FC
+    %% ==================== 数据模型 ====================
+
+    class Project {
+        +INTEGER id PK
+        +TEXT code
+        +TEXT name
+        +TEXT category
+        +TEXT status
+        +INTEGER template_id FK
+        +TEXT theme_color
+        +TEXT created_at
+        +TEXT updated_at
     }
 
-    class ProjectSelectorProps {
-        +label: string
-        +size: "small"|"medium"
+    class Task {
+        +INTEGER id PK
+        +INTEGER project_id FK
+        +INTEGER phase_id FK
+        +TEXT title
+        +TEXT description
+        +TEXT priority
+        +TEXT assignee
+        +TEXT kanban_column
+        +TEXT due_date
+        +TEXT status
+        +INTEGER sort_order
+        +TEXT completed_at
+        +TEXT created_at
+        +TEXT updated_at
+        +TEXT deleted_at
     }
-    note for ProjectSelectorProps "组件内部使用 useSearchParams()\n不通过 props 传递 projectId"
 
-    class SidebarProps {
-        +onCreateClick: () => void
+    class Subtask {
+        +INTEGER id PK
+        +INTEGER task_id FK
+        +TEXT title
+        +INTEGER is_completed
+        +INTEGER sort_order
+        +TEXT created_at
+        +TEXT updated_at
+        +TEXT deleted_at
     }
 
-    class CreateProjectDialogProps {
-        +open: boolean
-        +onClose: () => void
-        +onCreated: () => void
+    class KanbanStats {
+        +INTEGER total
+        +INTEGER todo
+        +INTEGER done
+        +INTEGER subtasks_total
+        +INTEGER subtasks_done
     }
 
-    class PlansPage {
-        +projectId: number|null (from useSearchParams)
-        +tab: "timeline"|"schedule" (from useSearchParams)
-        +projects: Project[] (from ProjectContext)
-    }
+    Project "1" -- "*" Task : project_id
+    Task "1" -- "*" Subtask : task_id
+
+    %% ==================== 前端组件 ====================
 
     class TaskKanbanPage {
-        +projectId: number|null (from useSearchParams)
-        +projects: Project[] (from ProjectContext)
-        +tasks: Task[]
-        +currentProject: Project|null
+        -projectId: number|null
+        -tasks: Task[]
+        -project: Project|null
+        -loading: boolean
+        +load() void
+        +render() JSX
     }
 
-    class IssueListPage {
-        +projectId: number|null
-        +projects: Project[]
-        +issues: Issue[]
+    class KanbanGlobalView {
+        -tasks: Task[]
+        -columns: string[]
+        +render() JSX
     }
 
-    class MaterialListPage {
-        +projectId: number|null
-        +projects: Project[]
-        +materials: Material[]
+    class KanbanProjectView {
+        -tasks: Task[]
+        -project: Project
+        -collapsed: boolean
+        -themeColor: string
+        +onToggleCollapse() void
+        +render() JSX
     }
 
-    class MeetingListPage {
-        +projectId: number|null
-        +projects: Project[]
-        +meetings: Meeting[]
+    class TodoColumn {
+        -tasks: Task[]
+        -projectId: number
+        +onDragEnd(event) void
+        +onAddTask(title) void
+        +render() JSX
     }
 
-    class WeeklyReportPage {
-        +projectId: number|null
-        +projects: Project[]
-        +reports: WeeklyReport[]
+    class DoneColumn {
+        -tasks: Task[]
+        +render() JSX
     }
 
-    ProjectContext <.. ProjectSelector : 消费 projects
-    ProjectContext <.. PlansPage : 消费 projects
-    ProjectContext <.. TaskKanbanPage : 消费 projects
-    ProjectContext <.. IssueListPage : 消费 projects
-    ProjectContext <.. MaterialListPage : 消费 projects
-    ProjectContext <.. MeetingListPage : 消费 projects
-    ProjectContext <.. WeeklyReportPage : 消费 projects
+    class TaskCard {
+        -task: Task
+        -isDragging: boolean
+        +render() JSX
+    }
 
-    ProjectSelector ..> PlansPage : 使用
-    ProjectSelector ..> TaskKanbanPage : 使用
-    ProjectSelector ..> IssueListPage : 使用
-    ProjectSelector ..> MaterialListPage : 使用
-    ProjectSelector ..> MeetingListPage : 使用
-    ProjectSelector ..> WeeklyReportPage : 使用
+    class TaskItem {
+        -task: Task
+        -expanded: boolean
+        -subtasks: Subtask[]
+        +onToggleExpand() void
+        +onToggleComplete() void
+        +render() JSX
+    }
 
-    CreateProjectDialog ..> ProjectContext : 创建后调用 refreshProjects
+    class SubtaskList {
+        -subtasks: Subtask[]
+        -taskId: number
+        +onAdd(title) void
+        +onToggle(id) void
+        +onDelete(id) void
+        +render() JSX
+    }
+
+    class SubtaskItem {
+        -subtask: Subtask
+        +onToggle() void
+        +onDelete() void
+        +render() JSX
+    }
+
+    class PriorityChip {
+        +COLOR_MAP: object
+        +LABEL_MAP: object
+        +render() JSX
+    }
+
+    class CollapsedProjectHeader {
+        -project: Project
+        -taskCount: number
+        +onExpand() void
+        +render() JSX
+    }
+
+    class KanbanStatsBar {
+        -total: number
+        -done: number
+        -subtaskStats: object
+        +render() JSX
+    }
+
+    class useOptimistic {
+        +data: T
+        +mutate(updater) void
+        -snapshot: T
+    }
+
+    class useKanbanScroll {
+        +capture() number
+        +restore(scrollTop) void
+        -containerRef: RefObject
+    }
+
+    %% 组件组合关系
+
+    TaskKanbanPage --> KanbanGlobalView : projectId=null
+    TaskKanbanPage --> KanbanProjectView : projectId≠null
+    KanbanProjectView --> TodoColumn
+    KanbanProjectView --> DoneColumn
+    KanbanProjectView --> CollapsedProjectHeader : collapsed=true
+    KanbanProjectView --> KanbanStatsBar
+    TodoColumn --> TaskCard : @dnd-kit sortable
+    DoneColumn --> TaskCard
+    TaskCard --> TaskItem
+    TaskCard --> PriorityChip
+    TaskItem --> SubtaskList
+    SubtaskList --> SubtaskItem
+
+    TaskKanbanPage ..> useOptimistic : uses
+    TodoColumn ..> useKanbanScroll : uses
+    TaskItem ..> useOptimistic : uses
+    SubtaskList ..> useOptimistic : uses
+
+    %% 组件 → API 映射
+
+    KanbanGlobalView ..> Task : GET/PUT /api/tasks
+    KanbanProjectView ..> KanbanStats : GET /api/projects/:id/kanban-stats
+    TodoColumn ..> Task : POST /api/tasks, PUT /api/tasks/:id/reorder
+    SubtaskList ..> Subtask : POST /api/tasks/:id/subtasks
+    SubtaskItem ..> Subtask : PUT /api/subtasks/:id, DELETE /api/subtasks/:id
+    TaskItem ..> Task : PUT /api/tasks/:id/toggle-complete
+
+    %% 优先级常量
+
+    note for PriorityChip "urgent→#cf1322 紧急\nhigh→#ff4d4f 高\nmedium→#faad14 中\nlow→#52c41a 低"
