@@ -112,17 +112,7 @@ router.get("/issues/summary", async (req, res) => {
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
-    // 获取 DI 趋势数据来计算总数和解决数
-    const trend = await mantis.fetchDITrend(project_id);
-    const latest = trend.length > 0 ? trend[trend.length - 1].di : 0;
-    // 使用分类数据来估算总数
-    const cats = await mantis.fetchCategoryStats(project_id);
-    const total = cats.reduce((s, c) => s + (c.count || 0), 0);
-    // 从项目详情获取解决数估算
-    const detail = await mantis.fetchProjectDetail(project_id);
-    const resolved = Math.round(total * 0.6); // 默认估算 60% 解决率
-    const rate = total > 0 ? Math.round((resolved / total) * 1000) / 10 : 0;
-    const data = { total, resolved, rate, di: Math.round(latest * 10) / 10 };
+    const data = await mantis.fetchSummary(project_id);
     setCache(project_id, "summary", data);
     res.json({ ok: true, data });
   } catch (e) {
@@ -139,24 +129,7 @@ router.get("/issues/report", async (req, res) => {
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
-    const [trend, cats] = await Promise.all([
-      mantis.fetchDITrend(project_id),
-      mantis.fetchCategoryStats(project_id),
-    ]);
-    const di = trend.length > 0 ? Math.round(trend[trend.length - 1].di * 100) / 100 : 0;
-    const total = cats.reduce((s, c) => s + (c.count || 0), 0);
-    const resolved = Math.round(total * 0.6);
-    const rate = total > 0 ? Math.round((resolved / total) * 1000) / 10 : 0;
-    const unresolved = total - resolved;
-
-    const find = (name) => cats.find(c => c.category === name)?.count || 0;
-    const bios = find("BIOS");
-    const bmc = find("BMC");
-    const hw = find("HW");
-    const perf = find("Performance");
-
-    const report = `BUG情况：\n项目BUG状况：当前项目DI=${di}、BUG=${total}条、已解决=${resolved}条，解决率=${rate}%\n遗留BUG ${unresolved}条：BIOS-${bios}、BMC-${bmc}、HW-${hw}、Pef-${perf}\n`;
-
+    const report = await mantis.fetchReport(project_id);
     setCache(project_id, "report", report);
     res.json({ ok: true, data: report });
   } catch (e) {
