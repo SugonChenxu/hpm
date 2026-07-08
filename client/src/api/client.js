@@ -58,6 +58,10 @@ export const api = {
     get: (id) => request(`/issues/${id}`),
     update: (id, data) => request(`/issues/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     diSummary: (projectId) => request(`/issues/di-summary?project_id=${projectId}`),
+    diTrend: (projectId) => request(`/issues/di-trend?project_id=${projectId}`),
+    categoryStats: (projectId) => request(`/issues/category-stats?project_id=${projectId}`),
+    summary: (projectId) => request(`/issues/summary?project_id=${projectId}`),
+    report: (projectId) => request(`/issues/report?project_id=${projectId}`),
   },
   // 物料管理
   materials: {
@@ -123,6 +127,20 @@ export const api = {
     restoreVersion: (projectId, vid) =>
       request(`/projects/${projectId}/schedule/versions/${vid}/restore`, { method: "POST" }),
     exportUrl: (projectId) => `${BASE}/projects/${projectId}/schedule/export`,
+  },
+  // Mantis 集成
+  mantis: {
+    projects: () => request("/mantis/projects"),
+    sync: (projectId) =>
+      request("/mantis/sync", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
+    connection: () => request("/mantis/connection"),
+    updateConnection: (data) =>
+      request("/mantis/connection", { method: "PUT", body: JSON.stringify(data) }),
+  },
+  // 缓存管理
+  cache: {
+    invalidate: (projectId) =>
+      request("/cache/invalidate", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
   },
 };
 
