@@ -1,13 +1,9 @@
-import { Box, Typography, IconButton } from "@mui/material";
-import { ExpandMore, TaskAlt } from "@mui/icons-material";
+import { Box, Typography } from "@mui/material";
+import { TaskAlt } from "@mui/icons-material";
 
 /**
  * 折叠态项目头部 — 全部完成时显示
- *
- * @param {Object} props
- * @param {Object} props.project - 项目对象（含 theme_color）
- * @param {number} props.taskCount - 已完成任务总数
- * @param {Function} props.onExpand - 点击展开回调
+ * 严格对标原型：主题色横条 + ✓ + 项目名 + "全部完成 · 点击展开"
  */
 export default function CollapsedProjectHeader({ project, taskCount, onExpand }) {
   const themeColor = project?.theme_color || "#1565C0";
@@ -16,37 +12,39 @@ export default function CollapsedProjectHeader({ project, taskCount, onExpand })
     <Box
       onClick={onExpand}
       sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1.5,
-        py: 2,
-        px: 2.5,
-        borderRadius: 2,
-        border: "1px solid",
-        borderColor: "divider",
-        borderLeft: `4px solid ${themeColor}`,
-        bgcolor: "background.paper",
+        background: "var(--color-background-primary, #fff)",
+        borderRadius: "var(--border-radius-lg, 12px)",
+        border: "0.5px solid var(--color-border-tertiary, #e0e0e0)",
+        overflow: "hidden",
         cursor: "pointer",
-        transition: "box-shadow 0.2s",
-        "&:hover": {
-          boxShadow: 2,
-        },
       }}
     >
-      <TaskAlt sx={{ color: "success.main", fontSize: 28 }} />
-
-      <Box sx={{ flex: 1 }}>
-        <Typography variant="h6" fontWeight={600}>
-          {project?.name || "项目看板"}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {taskCount} 项任务全部完成
+      <Box sx={{ height: 3, bgcolor: themeColor }} />
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          py: 1.5,
+          px: 2,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <TaskAlt sx={{ color: "#52c41a", fontSize: 16 }} />
+          <Typography
+            variant="body2"
+            fontWeight={500}
+            color="text.secondary"
+            sx={{ fontSize: 14 }}
+          >
+            {project?.code ? `[${project.code}] ` : ""}
+            {project?.name || "项目看板"}
+          </Typography>
+        </Box>
+        <Typography variant="caption" color="text.disabled" sx={{ fontSize: 11 }}>
+          全部完成 · 点击展开
         </Typography>
       </Box>
-
-      <IconButton size="small" sx={{ transform: "rotate(-90deg)" }}>
-        <ExpandMore />
-      </IconButton>
     </Box>
   );
 }

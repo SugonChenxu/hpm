@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { Box, Typography, TextField, Chip } from "@mui/material";
+import { Box, Typography, TextField } from "@mui/material";
 import {
   DndContext,
   closestCenter,
@@ -120,23 +120,28 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
       ref={containerRef}
       sx={{
         flex: 1,
-        minWidth: 280,
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
-        bgcolor: "#fafafa",
-        borderRadius: 2,
-        border: "1px solid",
-        borderColor: "divider",
-        overflow: "hidden",
       }}
     >
+      {/* 列头 */}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        fontWeight={500}
+        sx={{ fontSize: 12, mb: 0.75 }}
+      >
+        待办 ({tasks.length})
+      </Typography>
+
       {/* 顶部快速录入 */}
-      <Box sx={{ p: 1.5, pb: 1 }}>
+      <Box sx={{ mb: 0.75 }}>
         <TextField
           inputRef={inputRef}
           size="small"
           fullWidth
-          placeholder="输入任务标题，回车新增"
+          placeholder="输入任务，回车新增"
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -147,19 +152,23 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
           }}
           disabled={adding}
           sx={{
-            "& .MuiOutlinedInput-root": { bgcolor: "background.paper" },
+            "& .MuiOutlinedInput-root": {
+              bgcolor: "grey.50",
+              borderRadius: 1,
+              "& fieldset": { borderColor: "divider" },
+            },
             "& .MuiInputBase-input": { fontSize: "0.85rem", py: 0.75 },
           }}
         />
       </Box>
 
       {/* 任务列表（可拖拽） */}
-      <Box sx={{ flex: 1, overflowY: "auto", px: 1.5, pb: 1 }}>
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
         {tasks.length === 0 ? (
           <Typography
             variant="body2"
             color="text.disabled"
-            sx={{ textAlign: "center", py: 4 }}
+            sx={{ textAlign: "center", py: 2, fontSize: 12 }}
           >
             暂无待办任务
           </Typography>
@@ -183,24 +192,6 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
             </SortableContext>
           </DndContext>
         )}
-      </Box>
-
-      {/* 底部计数 */}
-      <Box
-        sx={{
-          px: 1.5,
-          py: 1,
-          borderTop: "1px solid",
-          borderColor: "divider",
-          bgcolor: "background.paper",
-        }}
-      >
-        <Chip
-          label={`${tasks.length} 项待办`}
-          size="small"
-          variant="outlined"
-          sx={{ fontSize: "0.7rem", height: 22 }}
-        />
       </Box>
     </Box>
   );
