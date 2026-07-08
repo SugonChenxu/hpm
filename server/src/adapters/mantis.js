@@ -60,19 +60,13 @@ class MantisAdapter {
       e.code = "auth_failed";
       throw e;
     }
-
     try {
-      // 用已知项目 ID 拉取详情，获取 all_proj_id
-      const detail = await this.fetchProjectDetail("695a1917425fc624d2eb6927");
-      // all_proj_id 在 fetchProjectDetail 内部不可见，需要直接调用
+      // 传空数组拉取全量项目列表
       const data = await this._post("/projects", {
         action: "view_project_collection",
-        proj_id_arr: JSON.stringify(["695a1917425fc624d2eb6927"]),
+        proj_id_arr: "[]",
       });
-      const allIds = data?.data?.all_proj_id || [];
-      // 从 simple_filters.projects 获取名称
       const projects = (data?.data?.simple_filters?.projects || [])
-        .filter(p => allIds.includes(p.id) || p.class_name === "level-1")
         .map(p => ({ id: p.id, name: p.name }));
       return projects;
     } catch (e) {
