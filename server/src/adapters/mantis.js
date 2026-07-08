@@ -52,26 +52,29 @@ class MantisAdapter {
 
   /**
    * 拉取项目列表（当前用户可见的所有项目）
-   * @returns {Promise<Array<{id, name}>>}
+   * 通过调用已知项目的 detail 接口，从 all_proj_id 中提取全部项目
    */
   async fetchProjects() {
-    // 先获取第一个项目的详情来提取 all_proj_id
-    const conn = db.prepare("SELECT api_token FROM mantis_connection LIMIT 1").get();
-    if (!conn || !conn.api_token) {
+    if (!this.cookie) {
       const e = new Error("未配置 Mantis session cookie");
       e.code = "auth_failed";
       throw e;
     }
 
     try {
-      // 获取主页来提取用户的所有项目
-      const html = await this._get("/");
-      // 尝试通过分析页获取项目列表
-      const data = await this._get("/my/views", {
-        action: "my_assigned_count",
-        ignore_privileged_projects: "yes",
+      // 用已知项目 ID 拉取详情，获取 all_proj_id
+      const detail = await this.fetchProjectDetail("695a1917425fc624d2eb6927");
+      // all_proj_id 在 fetchProjectDetail 内部不可见，需要直接调用
+      const data = await this._post("/projects", {
+        action: "view_project_collection",
+        proj_id_arr: JSON.stringify(["695a1917425fc624d2eb6927"]),
       });
-      return data?.data?.projects || [];
+      const allIds = data?.data?.all_proj_id || [];
+      // 从 simple_filters.projects 获取名称
+      const projects = (data?.data?.simple_filters?.projects || [])
+        .filter(p => allIds.includes(p.id) || p.class_name === "level-1")
+        .map(p => ({ id: p.id, name: p.name }));
+      return projects;
     } catch (e) {
       if (e.response?.status === 401) { const err = new Error("鉴权失败"); err.code = "auth_failed"; throw err; }
       throw e;
