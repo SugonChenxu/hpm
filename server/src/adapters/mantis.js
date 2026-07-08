@@ -74,15 +74,14 @@ class MantisAdapter {
       proj_id_arr: JSON.stringify([projectId]), ignore_privileged_projects: "yes",
     });
     const rows = data?.data?.[0]?.data?.data || [];
-    const total = rows.reduce((s, r) => s + (r.total || 0), 0);
-    if (total === 0) return { total: 0, resolved: 0, rate: 0, di: 0 };
-    // 按 total 加权平均 resolved_pct
-    const rate = rows.reduce((s, r) => s + (parseFloat(r.resolved_pct) || 0) * (r.total || 0), 0) / total;
+    // 只取父项目（第一行）
+    const parent = rows[0] || {};
+    const total = parent.total || 0;
+    const rate = parseFloat(parent.resolved_pct) || 0;
     const resolved = Math.round(total * rate / 100);
-    // DI 从趋势图获取
     const trend = await this.fetchDITrend(projectId);
     const di = trend.length > 0 ? Math.round(trend[trend.length - 1].di * 100) / 100 : 0;
-    return { total, resolved, rate: Math.round(rate * 10) / 10, di };
+    return { total, resolved, rate, di };
   }
 
   /** 周报文本 */
