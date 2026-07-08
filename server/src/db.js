@@ -377,4 +377,63 @@ if (!priorityMigrationDone) {
   console.log("Priority migration already executed, skipping.");
 }
 
+// =====================================================
+// M3 增量：Mantis 同步缓存 + issues/mantis_connection 扩展
+// =====================================================
+
+// 新增 sync_cache 表
+db.exec(`
+CREATE TABLE IF NOT EXISTS sync_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    cache_key TEXT,
+    cache_data TEXT,
+    cached_at TEXT DEFAULT (datetime('now','localtime')),
+    ttl_seconds INTEGER DEFAULT 300
+);
+`);
+
+// issues 表新增 category 列
+try {
+  db.exec(`ALTER TABLE issues ADD COLUMN category TEXT`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration issues.category:", e.message);
+  }
+}
+
+// issues 表新增 resolution 列
+try {
+  db.exec(`ALTER TABLE issues ADD COLUMN resolution TEXT`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration issues.resolution:", e.message);
+  }
+}
+
+// mantis_connection 表新增 last_sync_at 列
+try {
+  db.exec(`ALTER TABLE mantis_connection ADD COLUMN last_sync_at TEXT`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration mantis_connection.last_sync_at:", e.message);
+  }
+}
+
+// mantis_connection 表新增 last_sync_status 列
+try {
+  db.exec(`ALTER TABLE mantis_connection ADD COLUMN last_sync_status TEXT`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration mantis_connection.last_sync_status:", e.message);
+  }
+}
+
+// sync_cache 索引
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sync_cache_project_key ON sync_cache(project_id, cache_key)`);
+} catch (e) {
+  console.warn("Migration idx_sync_cache_project_key:", e.message);
+}
+
 export default db;
