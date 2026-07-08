@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Box, Typography, Collapse, CircularProgress, Tooltip } from "@mui/material";
-import PriorityChip from "./PriorityChip";
+import PriorityChip, { nextPriority } from "./PriorityChip";
 import SubtaskList from "./SubtaskList";
 import api from "../../api/client";
 import dayjs from "dayjs";
@@ -40,6 +40,17 @@ export default function TaskItem({ task, onToggleComplete }) {
     }
   };
 
+  /** 点击状态灯循环切换优先级 */
+  const handlePriorityClick = async (e) => {
+    e.stopPropagation();
+    const newPri = nextPriority(task.priority || "low");
+    try {
+      await api.tasks.update(task.id, { priority: newPri });
+    } catch (err) {
+      console.error("切换优先级失败:", err);
+    }
+  };
+
   const dateLabel = task.due_date ? fmtDate(task.due_date) : task.planned_end ? fmtDate(task.planned_end) : null;
 
   return (
@@ -58,8 +69,8 @@ export default function TaskItem({ task, onToggleComplete }) {
           cursor: "grab",
         }}
       >
-        {/* 优先级灯（左侧） */}
-        <PriorityChip priority={task.priority} />
+        {/* 优先级灯（左侧，可点击切换） */}
+        <PriorityChip priority={task.priority} onClick={handlePriorityClick} />
 
         {/* 标题 */}
         <Typography

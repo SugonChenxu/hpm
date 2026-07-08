@@ -51,7 +51,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
       id: tempId,
       project_id: projectId,
       title: trimmed,
-      priority: "medium",
+      priority: "low",
       kanban_column: "待开始",
       status: "待开始",
       sort_order: tasks.length,
@@ -70,7 +70,7 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
       const res = await api.tasks.create({
         project_id: projectId,
         title: trimmed,
-        priority: "medium",
+        priority: "low",
         kanban_column: "待开始",
       });
       onTasksChange(tasks.map((t) => (t.id === tempId ? { ...res.data, subtask_count: 0 } : t)));
