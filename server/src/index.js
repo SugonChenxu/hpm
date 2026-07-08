@@ -7,6 +7,7 @@ import "./seed.js";
 import projectsRouter from "./routes/projects.js";
 import tasksRouter from "./routes/tasks.js";
 import issuesRouter from "./routes/issues.js";
+import mantisRouter from "./routes/mantis.js";
 import materialsRouter from "./routes/materials.js";
 import meetingsRouter from "./routes/meetings.js";
 import weeklyReportsRouter from "./routes/weekly-reports.js";
@@ -27,6 +28,7 @@ app.get("/api/health", (req, res) => {
 app.use("/api", projectsRouter);
 app.use("/api", tasksRouter);
 app.use("/api", issuesRouter);
+app.use("/api", mantisRouter);
 app.use("/api", materialsRouter);
 app.use("/api", meetingsRouter);
 app.use("/api", weeklyReportsRouter);
