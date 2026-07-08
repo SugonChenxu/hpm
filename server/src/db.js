@@ -320,7 +320,7 @@ try {
 // 迁移：为现有默认色项目分配随机主题色（仅首次）
 const COLORS = ['#1565C0', '#E65100', '#2E7D32', '#6A1B9A', '#C62828', '#00838F', '#4E342E', '#37474F'];
 try {
-  const rows = db.prepare("SELECT id FROM projects WHERE theme_color = '#1565C0' AND deleted_at IS NULL ORDER BY id").all();
+  const rows = db.prepare("SELECT id FROM projects WHERE theme_color = '#1565C0' ORDER BY id").all();
   rows.forEach((r, i) => {
     db.prepare("UPDATE projects SET theme_color = ? WHERE id = ?").run(COLORS[i % COLORS.length], r.id);
   });
