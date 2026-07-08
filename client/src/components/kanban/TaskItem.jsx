@@ -44,7 +44,7 @@ export default function TaskItem({ task, onToggleComplete }) {
 
   return (
     <Box>
-      {/* 主体行：优先级灯 + 标题 + 日期 + 子任务/展开 */}
+      {/* 主体行：优先级灯 + 标题 + 日期 + 子任务 + 完成框 */}
       <Box
         sx={{
           display: "flex",
@@ -58,30 +58,7 @@ export default function TaskItem({ task, onToggleComplete }) {
           cursor: "grab",
         }}
       >
-        {/* 勾选框 */}
-        <Box
-          onClick={(e) => { e.stopPropagation(); onToggleComplete(task); }}
-          sx={{
-            width: 14,
-            height: 14,
-            borderRadius: "3px",
-            border: "0.5px solid",
-            borderColor: "text.disabled",
-            flexShrink: 0,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 10,
-            color: "white",
-            bgcolor: isCompleted ? "#52c41a" : "transparent",
-            "&:hover": { borderColor: "primary.main" },
-          }}
-        >
-          {isCompleted && "✓"}
-        </Box>
-
-        {/* 优先级灯 */}
+        {/* 优先级灯（左侧） */}
         <PriorityChip priority={task.priority} />
 
         {/* 标题 */}
@@ -134,6 +111,29 @@ export default function TaskItem({ task, onToggleComplete }) {
             ▶
           </Typography>
         )}
+
+        {/* 完成勾选框（右侧） */}
+        <Box
+          onClick={(e) => { e.stopPropagation(); onToggleComplete(task); }}
+          sx={{
+            width: 14,
+            height: 14,
+            borderRadius: "3px",
+            border: "0.5px solid",
+            borderColor: "text.disabled",
+            flexShrink: 0,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 10,
+            color: "white",
+            bgcolor: isCompleted ? "#52c41a" : "transparent",
+            "&:hover": { borderColor: "primary.main" },
+          }}
+        >
+          {isCompleted && "✓"}
+        </Box>
       </Box>
 
       {/* 子任务展开面板 */}

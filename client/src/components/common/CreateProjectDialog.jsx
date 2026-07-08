@@ -20,6 +20,12 @@ const CATEGORIES = [
   "部件引入", "独立板卡", "机柜机箱", "产品维护",
 ];
 
+/** 预设主题色池，创建看板时自动轮换分配 */
+const THEME_COLORS = [
+  "#1565C0", "#E65100", "#2E7D32", "#6A1B9A",
+  "#C62828", "#00838F", "#4E342E", "#37474F",
+];
+
 /**
  * Global "Create Project" dialog.
  * Replaces the former /projects/new route page.
@@ -67,10 +73,15 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
     if (!form.code || !form.name) return;
     setSubmitting(true);
     try {
-      const res = await api.projects.create({
+      const payload = {
         ...form,
         template_id: form.template_id ? Number(form.template_id) : null,
-      });
+      };
+      // 看板模式：自动分配主题色
+      if (hideTemplate) {
+        payload.theme_color = THEME_COLORS[Math.floor(Math.random() * THEME_COLORS.length)];
+      }
+      const res = await api.projects.create(payload);
       await refreshProjects();
       setSnackbar({
         open: true,

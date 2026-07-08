@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, TextField, Collapse, IconButton } from "@mui/material";
+import { ExpandMore, ExpandLess } from "@mui/icons-material";
 import TodoColumn from "./TodoColumn";
 import DoneColumn from "./DoneColumn";
-import CollapsedProjectHeader from "./CollapsedProjectHeader";
 import api from "../../api/client";
 
 function collapseKey(projectId) {
@@ -25,6 +25,11 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
   const initialCollapsed = localStorage.getItem(collapseKey(project?.id)) === "true";
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const prevAllDoneRef = useRef(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState(project?.name || "");
+  const nameInputRef = useRef(null);
+
+  useEffect(() => { setNameValue(project?.name || ""); }, [project?.name]);
 
   const todoTasks = tasks.filter((t) => !t.completed_at && t.deleted_at === null);
   const doneTasks = tasks.filter((t) => !!t.completed_at && t.deleted_at === null);
@@ -97,23 +102,26 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
     [tasks, onTasksChange]
   );
 
-  const handleExpand = useCallback(() => {
-    setCollapsed(false);
-    localStorage.removeItem(collapseKey(project?.id));
-  }, [project?.id]);
-
   const themeColor = project?.theme_color || "#1565C0";
 
-  // 折叠态
-  if (collapsed) {
-    return (
-      <CollapsedProjectHeader
-        project={project}
-        taskCount={doneTasks.length}
-        onExpand={handleExpand}
-      />
-    );
-  }
+  /** 手动切换折叠（持久化） */
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    if (next) localStorage.setItem(collapseKey(project?.id), "true");
+    else localStorage.removeItem(collapseKey(project?.id));
+  };
+
+  /** 保存项目名称 */
+  const handleSaveName = async () => {
+    const trimmed = nameValue.trim();
+    if (!trimmed || trimmed === project?.name) { setEditingName(false); return; }
+    try {
+      await api.projects.update(project.id, { name: trimmed });
+      if (onRefresh) onRefresh();
+    } catch { /* ignore */ }
+    setEditingName(false);
+  };
 
   // 展开态
   return (
@@ -130,25 +138,53 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
       <Box sx={{ height: 3, bgcolor: themeColor }} />
 
       <Box sx={{ p: "10px 14px 0" }}>
-        {/* 项目名 + 统计 */}
+        {/* 项目名 + 统计 + 折叠按钮 */}
         <Box
           sx={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             mb: 1,
+            gap: 1,
           }}
         >
-          <Typography variant="body2" fontWeight={500} sx={{ fontSize: 14 }}>
-            {project?.code ? `[${project.code}] ` : ""}
-            {project?.name || "项目看板"}
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: 12 }}>
-            待办 {todoTasks.length} / 已完成 {doneTasks.length}
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flex: 1, minWidth: 0 }}>
+            {editingName ? (
+              <TextField
+                inputRef={nameInputRef}
+                size="small"
+                variant="standard"
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSaveName(); if (e.key === "Escape") setEditingName(false); }}
+                autoFocus
+                sx={{ flex: 1, "& .MuiInput-input": { fontSize: 14, fontWeight: 500, py: 0 } }}
+              />
+            ) : (
+              <Typography
+                variant="body2"
+                fontWeight={500}
+                sx={{ fontSize: 14, cursor: "pointer", "&:hover": { color: "primary.main" } }}
+                onClick={() => { setNameValue(project?.name || ""); setTimeout(() => nameInputRef.current?.focus(), 0); setEditingName(true); }}
+              >
+                {project?.code ? `[${project.code}] ` : ""}
+                {project?.name || "项目看板"}
+              </Typography>
+            )}
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, flexShrink: 0 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: 12 }}>
+              待办 {todoTasks.length} / 已完成 {doneTasks.length}
+            </Typography>
+            <IconButton size="small" onClick={toggleCollapsed} sx={{ p: 0.25 }}>
+              {collapsed ? <ExpandMore sx={{ fontSize: 16 }} /> : <ExpandLess sx={{ fontSize: 16 }} />}
+            </IconButton>
+          </Box>
         </Box>
 
-        {/* 双栏布局 */}
+        {/* 双栏布局（可折叠动画） */}
+        <Collapse in={!collapsed} timeout={300} unmountOnExit>
         <Box
           sx={{
             display: "flex",
@@ -174,6 +210,7 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
             onDelete={handleDelete}
           />
         </Box>
+        </Collapse>
       </Box>
     </Box>
   );
