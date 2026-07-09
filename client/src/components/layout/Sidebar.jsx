@@ -17,6 +17,7 @@ import {
   Group,
   Description,
   Add,
+  EventNote,
 } from "@mui/icons-material";
 
 const DRAWER_WIDTH = 220;
@@ -25,6 +26,7 @@ const NAV_ITEMS = [
   { text: "项目概览", icon: <Dashboard />, path: "/dashboard" },
   { text: "项目计划", icon: <CalendarMonth />, path: "/plans" },
   { text: "待办事项", icon: <Checklist />, path: "/todos" },
+  { text: "本周会议", icon: <EventNote />, path: "/week-meetings" },
   { text: "物料管理", icon: <Inventory />, path: "/materials" },
   { text: "故障管理", icon: <BugReport />, path: "/issues" },
   { text: "会议纪要", icon: <Group />, path: "/meetings" },

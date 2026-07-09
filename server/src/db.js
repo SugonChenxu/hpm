@@ -513,4 +513,30 @@ try {
   console.warn("Migration idx_smart_minutes_meeting:", e.message);
 }
 
+// =====================================================
+// 本周会议模块
+// =====================================================
+db.exec(`
+CREATE TABLE IF NOT EXISTS week_meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    week_key TEXT NOT NULL,
+    weekday TEXT NOT NULL,
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_week_meetings_key ON week_meetings(week_key);
+CREATE TABLE IF NOT EXISTS week_meeting_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    week_key TEXT NOT NULL,
+    weekday TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(week_key, weekday)
+);
+`);
+console.log("Migration week_meetings + week_meeting_outputs: done");
+
 export default db;

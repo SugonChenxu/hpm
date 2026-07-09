@@ -10,6 +10,7 @@ import MaterialListPage from "./pages/MaterialListPage";
 import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
 import RedirectLegacyRoutes from "./components/layout/RedirectLegacyRoutes";
+import WeekMeetingPage from "./pages/WeekMeetingPage";
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/plans" element={<SchedulePage />} />
           <Route path="/todos" element={<TaskKanbanPage />} />
+          <Route path="/week-meetings" element={<WeekMeetingPage />} />
           <Route path="/issues" element={<IssueDashboardPage />} />
           <Route path="/materials" element={<MaterialListPage />} />
           <Route path="/meetings" element={<MeetingListPage />} />

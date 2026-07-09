@@ -140,6 +140,14 @@ export const api = {
     updateConnection: (data) =>
       request("/mantis/connection", { method: "PUT", body: JSON.stringify(data) }),
   },
+  // 本周会议
+  weekMeetings: {
+    list: (week) => request(`/week-meetings?week=${week}`),
+    create: (data) => request("/week-meetings", { method: "POST", body: JSON.stringify(data) }),
+    update: (id, data) => request(`/week-meetings/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    remove: (id) => request(`/week-meetings/${id}`, { method: "DELETE" }),
+    saveOutputs: (data) => request("/week-meetings/outputs", { method: "PUT", body: JSON.stringify(data) }),
+  },
   // 缓存管理
   cache: {
     invalidate: (projectId) =>
