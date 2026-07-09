@@ -9,18 +9,7 @@ import {
   Divider,
 } from "@mui/material";
 import { Edit } from "@mui/icons-material";
-
-/** 优先级 → 颜色 + 中文 */
-const PRIORITY_CONFIG = {
-  urgent: { color: "#D32F2F", label: "紧急" },
-  high: { color: "#ED6C02", label: "高" },
-  medium: { color: "#2196F3", label: "中" },
-  low: { color: "#9E9E9E", label: "低" },
-};
-
-function priorityColor(p) {
-  return PRIORITY_CONFIG[p]?.color || "#9E9E9E";
-}
+import PriorityChip from "./PriorityChip";
 
 /** InfoRow: 紧凑的 label : value 行 */
 function InfoRow({ label, value }) {
@@ -148,32 +137,31 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
               <Divider sx={{ my: 1 }} />
               <Box sx={{ maxHeight: 200, overflowY: "auto" }}>
                 {activeTasks.map((t) => (
-                  <Typography
+                  <Box
                     key={t.id}
-                    variant="body2"
                     sx={{
-                      fontSize: "0.78rem",
-                      color: "text.secondary",
-                      lineHeight: 1.7,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 0.75,
+                      py: 0.25,
                     }}
                   >
-                    <Box
-                      component="span"
+                    <PriorityChip priority={t.priority} />
+                    <Typography
+                      variant="body2"
                       sx={{
-                        display: "inline-block",
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        bgcolor: priorityColor(t.priority),
-                        mr: 0.75,
-                        verticalAlign: "middle",
+                        fontSize: "0.78rem",
+                        color: "text.secondary",
+                        lineHeight: 1.7,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                        flex: 1,
                       }}
-                    />
-                    {t.title}
-                  </Typography>
+                    >
+                      {t.title}
+                    </Typography>
+                  </Box>
                 ))}
               </Box>
             </>
