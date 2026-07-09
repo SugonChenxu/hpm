@@ -1,17 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
 import {
   Box,
   Grid,
   Card,
-  CardContent,
   Typography,
   Chip,
   CircularProgress,
   Button,
   TextField,
   MenuItem,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,38 +17,158 @@ import {
   DialogActions,
 } from "@mui/material";
 import { Add, Flag, DeleteOutline } from "@mui/icons-material";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import api from "../api/client";
+import ProjectCard from "../components/kanban/ProjectCard";
+import CreateProjectDialog from "../components/common/CreateProjectDialog";
 
-const STATUS_COLORS = { 进行中: "primary", 已结项: "success", 已归档: "default" };
+/** 可拖拽的卡片包裹组件 */
+function SortableProjectCard({ project, tasks, onEdit, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: project.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <Box sx={{ position: "relative" }}>
+        <IconButton
+          size="small"
+          sx={{ position: "absolute", top: 4, right: 4, zIndex: 2 }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(project);
+          }}
+        >
+          <DeleteOutline sx={{ fontSize: 18, color: "text.disabled" }} />
+        </IconButton>
+        <ProjectCard project={project} tasks={tasks} onEdit={onEdit} />
+      </Box>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const [projects, setProjects] = useState([]);
+  const [tasksByProject, setTasksByProject] = useState({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: "", category: "", search: "" });
   const navigate = useNavigate();
   const { openCreateDialog } = useOutletContext();
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [editProject, setEditProject] = useState(null);
 
-  const load = () => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  /** 拉取项目列表 */
+  const loadProjects = useCallback(() => {
     setLoading(true);
-    api.projects.list(filter).then(r => { setProjects(r.data); setLoading(false); }).catch(() => setLoading(false));
-  };
+    api.projects
+      .list(filter)
+      .then((r) => {
+        setProjects(r.data || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [filter]);
 
-  useEffect(() => { load(); }, [filter]);
+  /** 拉取每个项目的待办任务 */
+  const loadTasks = useCallback(async (projectIds) => {
+    const results = {};
+    await Promise.all(
+      projectIds.map(async (pid) => {
+        try {
+          const r = await api.tasks.list({ project_id: pid });
+          results[pid] = r.data || [];
+        } catch {
+          results[pid] = [];
+        }
+      })
+    );
+    setTasksByProject(results);
+  }, []);
 
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  // 项目列表加载后，批量拉取待办任务
+  useEffect(() => {
+    if (projects.length > 0) {
+      loadTasks(projects.map((p) => p.id));
+    }
+  }, [projects, loadTasks]);
+
+  /** 拖拽结束：交换顺序 */
+  const handleDragEnd = useCallback(
+    (event) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      setProjects((prev) => {
+        const oldIndex = prev.findIndex((p) => p.id === active.id);
+        const newIndex = prev.findIndex((p) => p.id === over.id);
+        if (oldIndex === -1 || newIndex === -1) return prev;
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    },
+    []
+  );
+
+  /** 删除项目 */
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
       await api.projects.archive(deleteTarget.id);
       setDeleteTarget(null);
-      load();
-    } catch {} finally { setDeleting(false); }
+      loadProjects();
+    } catch {
+    } finally {
+      setDeleting(false);
+    }
   };
+
+  /** 编辑项目回调 */
+  const handleEdit = useCallback((project) => {
+    setEditProject(project);
+  }, []);
+
+  /** 编辑弹窗关闭 */
+  const handleEditClose = useCallback(() => {
+    setEditProject(null);
+  }, []);
+
+  /** 编辑成功后刷新 */
+  const handleEditCreated = useCallback(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  const activeCount = useMemo(
+    () => projects.filter((p) => p.status === "进行中").length,
+    [projects]
+  );
 
   return (
     <Box>
+      {/* 标题栏 */}
       <Box
         sx={{
           display: "flex",
@@ -60,7 +178,7 @@ export default function DashboardPage() {
         }}
       >
         <Typography variant="h5" fontWeight={700}>
-          项目仪表盘
+          项目概览
         </Typography>
         <Button
           variant="contained"
@@ -71,6 +189,7 @@ export default function DashboardPage() {
         </Button>
       </Box>
 
+      {/* 筛选栏 */}
       <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap" }}>
         <TextField
           size="small"
@@ -125,9 +244,22 @@ export default function DashboardPage() {
           ))}
         </TextField>
         <Box sx={{ flexGrow: 1 }} />
-        <StatsBar projects={projects} />
+        {/* 统计栏 */}
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+          <Chip
+            icon={<Flag />}
+            label={`总数 ${projects.length}`}
+            variant="outlined"
+          />
+          <Chip
+            label={`进行中 ${activeCount}`}
+            color="primary"
+            variant="outlined"
+          />
+        </Box>
       </Box>
 
+      {/* 项目卡片网格 */}
       {loading ? (
         <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />
       ) : projects.length === 0 ? (
@@ -137,58 +269,29 @@ export default function DashboardPage() {
           </Typography>
         </Card>
       ) : (
-        <Grid container spacing={2}>
-          {projects.map((p) => (
-            <Grid item xs={12} sm={6} md={4} key={p.id}>
-              <Card
-                sx={{ cursor: "pointer", "&:hover": { boxShadow: 4 }, position: "relative" }}
-                onClick={() => navigate(`/plans?projectId=${p.id}`)}
-              >
-                <IconButton
-                  size="small"
-                  sx={{ position: "absolute", top: 4, right: 4, zIndex: 1 }}
-                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}
-                >
-                  <DeleteOutline sx={{ fontSize: 18, color: "text.disabled" }} />
-                </IconButton>
-                <CardContent>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <Box>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        {p.code}
-                      </Typography>
-                      <Typography variant="h6" fontWeight={700}>
-                        {p.name}
-                      </Typography>
-                    </Box>
-                    <Chip
-                      label={p.status}
-                      color={STATUS_COLORS[p.status] || "default"}
-                      size="small"
-                    />
-                  </Box>
-                  <Box sx={{ display: "flex", gap: 1, mt: 1.5 }}>
-                    <Chip label={p.category} size="small" variant="outlined" />
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ mt: 0.5 }}
-                    >
-                      更新于{" "}
-                      {new Date(p.updated_at).toLocaleDateString("zh-CN")}
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={projects.map((p) => p.id)}
+            strategy={rectSortingStrategy}
+          >
+            <Grid container spacing={2}>
+              {projects.map((p) => (
+                <Grid item xs={12} sm={6} md={4} key={p.id}>
+                  <SortableProjectCard
+                    project={p}
+                    tasks={tasksByProject[p.id] || []}
+                    onEdit={handleEdit}
+                    onDelete={setDeleteTarget}
+                  />
+                </Grid>
+              ))}
             </Grid>
-          ))}
-        </Grid>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* 删除确认弹窗 */}
@@ -201,29 +304,27 @@ export default function DashboardPage() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>取消</Button>
-          <Button onClick={handleDelete} color="error" variant="contained" disabled={deleting}>
+          <Button onClick={() => setDeleteTarget(null)} disabled={deleting}>
+            取消
+          </Button>
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            disabled={deleting}
+          >
             {deleting ? "删除中..." : "永久删除"}
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
-  );
-}
 
-function StatsBar({ projects }) {
-  const active = projects.filter((p) => p.status === "进行中").length;
-  return (
-    <Box sx={{ display: "flex", gap: 1.5 }}>
-      <Chip
-        icon={<Flag />}
-        label={`总数 ${projects.length}`}
-        variant="outlined"
-      />
-      <Chip
-        label={`进行中 ${active}`}
-        color="primary"
-        variant="outlined"
+      {/* 编辑项目弹窗 */}
+      <CreateProjectDialog
+        open={!!editProject}
+        onClose={handleEditClose}
+        onCreated={handleEditCreated}
+        project={editProject}
+        hideTemplate
       />
     </Box>
   );

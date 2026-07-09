@@ -24,7 +24,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import api from "../api/client";
-import ProjectCard from "../components/kanban/ProjectCard";
+import KanbanProjectView from "../components/kanban/KanbanProjectView";
 import CreateProjectDialog from "../components/common/CreateProjectDialog";
 
 /** 可拖拽的看板卡片包裹组件 */
@@ -43,24 +43,24 @@ function SortableKanbanCard({ id, children }) {
 }
 
 /**
- * 项目概览看板页面
+ * 多项目看板网格页面
  *
- * 展示所有项目的概览卡片，支持：
- * - 响应式网格布局（最小列宽 340px）
- * - 卡片信息聚合（订单号/库位/例会时间/当前阶段/待办摘要）
- * - 右键编辑项目
- * - 新建项目看板（增强表单）
- * - 拖拽排序
+ * 展示所有项目的看板卡片，支持：
+ * - 响应式网格布局（最小列宽 540px）
+ * - 每项目独立 KanbanProjectView（双栏：待办 + 已完成）
+ * - 全部完成自动折叠
+ * - 新建项目看板（弹窗）
+ * - 空状态引导
  */
 export default function TaskKanbanPage() {
   const [projects, setProjects] = useState([]);
   const [tasksByProject, setTasksByProject] = useState(
     /** @type {Map<number, Array>} */ new Map()
   );
+  const [statsMap, setStatsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [editProject, setEditProject] = useState(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -82,7 +82,7 @@ export default function TaskKanbanPage() {
   );
 
   /**
-   * 并行加载所有项目和任务
+   * 并行加载所有项目、所有任务，再为每个项目获取看板统计
    */
   const load = useCallback(() => {
     setLoading(true);
@@ -105,7 +105,30 @@ export default function TaskKanbanPage() {
 
         setProjects(projectsList);
         setTasksByProject(grouped);
-        setLoading(false);
+
+        // 无项目时直接结束
+        if (projectsList.length === 0) {
+          setStatsMap({});
+          setLoading(false);
+          return;
+        }
+
+        // 并行获取所有项目的看板统计
+        return Promise.all(
+          projectsList.map((p) =>
+            api.projects
+              .kanbanStats(p.id)
+              .then((r) => ({ id: p.id, stats: r.data }))
+              .catch(() => ({ id: p.id, stats: null }))
+          )
+        ).then((statsResults) => {
+          const map = {};
+          statsResults.forEach(({ id, stats }) => {
+            map[id] = stats;
+          });
+          setStatsMap(map);
+          setLoading(false);
+        });
       })
       .catch((err) => {
         setError(err.message || "加载失败");
@@ -117,16 +140,17 @@ export default function TaskKanbanPage() {
     load();
   }, [load]);
 
-  /** ProjectCard 右键编辑回调 */
-  const handleEditProject = useCallback((project) => {
-    setEditProject(project);
+  /**
+   * 单个项目的任务变更回调
+   * KanbanProjectView 内部乐观更新后回传完整任务列表
+   */
+  const handleProjectTasksChange = useCallback((projectId, newTasks) => {
+    setTasksByProject((prev) => {
+      const next = new Map(prev);
+      next.set(projectId, newTasks);
+      return next;
+    });
   }, []);
-
-  /** 编辑完成后刷新 */
-  const handleEditClose = useCallback((saved) => {
-    setEditProject(null);
-    if (saved) load();
-  }, [load]);
 
   // ---------- 加载态 ----------
   if (loading) {
@@ -150,7 +174,7 @@ export default function TaskKanbanPage() {
         }}
       >
         <Typography variant="h5" fontWeight={700}>
-          项目概览
+          每日待办
         </Typography>
         <Button
           variant="contained"
@@ -208,16 +232,20 @@ export default function TaskKanbanPage() {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(540px, 1fr))",
               gap: 3,
             }}
           >
             {projects.map((p) => (
               <SortableKanbanCard key={p.id} id={p.id}>
-                <ProjectCard
-                  project={p}
+                <KanbanProjectView
                   tasks={tasksByProject.get(p.id) || []}
-                  onEdit={handleEditProject}
+                  project={p}
+                  stats={statsMap[p.id]}
+                  onTasksChange={(newTasks) =>
+                    handleProjectTasksChange(p.id, newTasks)
+                  }
+                  onRefresh={load}
                 />
               </SortableKanbanCard>
             ))}
@@ -231,15 +259,6 @@ export default function TaskKanbanPage() {
         onClose={() => setCreateOpen(false)}
         onCreated={() => load()}
         hideTemplate
-        existingCount={projects.length}
-      />
-
-      {/* 编辑项目弹窗 */}
-      <CreateProjectDialog
-        open={editProject !== null}
-        project={editProject}
-        onClose={() => handleEditClose(false)}
-        onCreated={() => handleEditClose(true)}
       />
 
       {/* 全局错误 Snackbar */}

@@ -201,9 +201,7 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
             ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
             : undefined
         }
-        MenuProps={{
-          PaperProps: { sx: { minWidth: 140 } },
-        }}
+        PaperProps={{ sx: { minWidth: 140 } }}
       >
         <MenuItem onClick={handleEdit} dense>
           <Edit sx={{ fontSize: 18, mr: 1 }} />
