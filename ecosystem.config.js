@@ -27,7 +27,7 @@ module.exports = {
       script: "node_modules/vite/bin/vite.js",
       cwd: "D:/HPM/client",
       interpreter: "node",
-      args: "--host --port 5173",
+      args: "--host --port 5173 --force",
       instances: 1,
       autorestart: true,
       watch: false,
