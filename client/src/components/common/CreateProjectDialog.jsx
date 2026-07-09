@@ -20,23 +20,33 @@ const CATEGORIES = [
   "部件引入", "独立板卡", "机柜机箱", "产品维护",
 ];
 
-/** 预设主题色池，创建看板时自动轮换分配 */
-const THEME_COLORS = [
-  "#1565C0", "#E65100", "#2E7D32", "#6A1B9A",
-  "#C62828", "#00838F", "#4E342E", "#37474F",
+/** 预设主题色板，创建看板时按项目数取模自动分配 */
+const PALETTE = [
+  "#1565C0", "#2E7D32", "#ED6C02", "#6A1B9A", "#C62828",
+  "#00838F", "#4A148C", "#E65100", "#283593", "#00695C",
 ];
 
 /**
- * Global "Create Project" dialog.
- * Replaces the former /projects/new route page.
+ * Create / Edit Project dialog.
  *
  * Props:
- *   open      — whether the dialog is visible
- *   onClose   — called when the dialog is dismissed
- *   onCreated — called with new project id on successful creation
- *   hideTemplate — if true, skip template selector entirely (for kanban use)
+ *   open          — whether the dialog is visible
+ *   onClose       — called when the dialog is dismissed
+ *   onCreated     — called on successful creation/update
+ *   hideTemplate  — if true, skip template selector (for kanban use)
+ *   project       — if provided, dialog is in edit mode
+ *   existingCount — number of existing projects (for auto theme_color)
  */
-export default function CreateProjectDialog({ open, onClose, onCreated, hideTemplate }) {
+export default function CreateProjectDialog({
+  open,
+  onClose,
+  onCreated,
+  hideTemplate,
+  project,
+  existingCount = 0,
+}) {
+  const isEdit = !!project;
+
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -45,6 +55,11 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
     name: "",
     category: "新品",
     template_id: "",
+    department: "",
+    order_number: "",
+    storage_location: "",
+    meeting_time: "",
+    theme_color: "",
   });
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -56,8 +71,40 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
   // Reset form and load templates whenever the dialog opens
   useEffect(() => {
     if (open) {
-      setForm({ code: "", name: "", category: "新品", template_id: "" });
-      if (hideTemplate) { setLoading(false); return; }
+      if (isEdit) {
+        // 编辑模式：预填项目数据
+        setForm({
+          code: project.code || "",
+          name: project.name || "",
+          category: project.category || "新品",
+          template_id: "",
+          department: project.department || "",
+          order_number: project.order_number || "",
+          storage_location: project.storage_location || "",
+          meeting_time: project.meeting_time || "",
+          theme_color: project.theme_color || PALETTE[0],
+        });
+        setLoading(false);
+        return;
+      }
+
+      // 创建模式：重置表单
+      setForm({
+        code: "",
+        name: "",
+        category: "新品",
+        template_id: "",
+        department: "",
+        order_number: "",
+        storage_location: "",
+        meeting_time: "",
+        theme_color: PALETTE[existingCount % PALETTE.length],
+      });
+
+      if (hideTemplate) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       api.templates
         .list()
@@ -67,35 +114,61 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
         })
         .catch(() => setLoading(false));
     }
-  }, [open]);
+  }, [open, isEdit, project, hideTemplate, existingCount]);
 
   const handleSubmit = async () => {
     if (!form.code || !form.name) return;
     setSubmitting(true);
     try {
-      const payload = {
-        ...form,
-        template_id: form.template_id ? Number(form.template_id) : null,
-      };
-      // 看板模式：自动分配主题色
-      if (hideTemplate) {
-        payload.theme_color = THEME_COLORS[Math.floor(Math.random() * THEME_COLORS.length)];
+      if (isEdit) {
+        // 编辑模式
+        await api.projects.update(project.id, {
+          code: form.code,
+          name: form.name,
+          category: form.category,
+          department: form.department,
+          order_number: form.order_number,
+          storage_location: form.storage_location,
+          meeting_time: form.meeting_time,
+          theme_color: form.theme_color,
+        });
+        await refreshProjects();
+        setSnackbar({
+          open: true,
+          message: `项目 [${form.code}] ${form.name} 已更新`,
+          severity: "success",
+        });
+        if (onCreated) onCreated();
+        onClose();
+      } else {
+        // 创建模式
+        const payload = {
+          code: form.code,
+          name: form.name,
+          category: form.category,
+          template_id: form.template_id ? Number(form.template_id) : null,
+          department: form.department,
+          order_number: form.order_number,
+          storage_location: form.storage_location,
+          meeting_time: form.meeting_time,
+          theme_color: form.theme_color || PALETTE[existingCount % PALETTE.length],
+        };
+        const res = await api.projects.create(payload);
+        await refreshProjects();
+        setSnackbar({
+          open: true,
+          message: `项目 [${form.code}] ${form.name} 创建成功`,
+          severity: "success",
+        });
+        if (onCreated) {
+          onCreated(res.data?.id);
+        }
+        onClose();
       }
-      const res = await api.projects.create(payload);
-      await refreshProjects();
-      setSnackbar({
-        open: true,
-        message: `项目 [${form.code}] ${form.name} 创建成功`,
-        severity: "success",
-      });
-      if (onCreated) {
-        onCreated(res.data?.id);
-      }
-      onClose();
     } catch (err) {
       setSnackbar({
         open: true,
-        message: err.message || "创建失败",
+        message: err.message || (isEdit ? "更新失败" : "创建失败"),
         severity: "error",
       });
     } finally {
@@ -109,7 +182,7 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-        <DialogTitle>新建项目</DialogTitle>
+        <DialogTitle>{isEdit ? "编辑项目" : "新建项目"}</DialogTitle>
         <DialogContent>
           {loading ? (
             <CircularProgress sx={{ display: "block", mx: "auto", my: 4 }} />
@@ -150,28 +223,89 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
                   </MenuItem>
                 ))}
               </TextField>
-              {!hideTemplate && (
+
+              {/* 新增字段 */}
+              <TextField
+                label="部门"
+                value={form.department}
+                onChange={(e) =>
+                  setForm({ ...form, department: e.target.value })
+                }
+                helperText="如 硬件研发部"
+              />
+              <TextField
+                label="订单号"
+                value={form.order_number}
+                onChange={(e) =>
+                  setForm({ ...form, order_number: e.target.value })
+                }
+                helperText="如 ORD-2024-001"
+              />
+              <TextField
+                label="库位"
+                value={form.storage_location}
+                onChange={(e) =>
+                  setForm({ ...form, storage_location: e.target.value })
+                }
+                helperText="如 A-03"
+              />
+              <TextField
+                label="例会时间"
+                value={form.meeting_time}
+                onChange={(e) =>
+                  setForm({ ...form, meeting_time: e.target.value })
+                }
+                helperText="如 每周一 10:00"
+              />
+
+              {/* 主题色选择 */}
               <TextField
                 select
-                label="流程模板"
-                value={form.template_id}
+                label="主题色"
+                value={form.theme_color}
                 onChange={(e) =>
-                  setForm({ ...form, template_id: e.target.value })
-                }
-                helperText={
-                  form.template_id
-                    ? "选择模板后将自动创建阶段和门禁点"
-                    : "留空则创建空白项目"
+                  setForm({ ...form, theme_color: e.target.value })
                 }
               >
-                <MenuItem value="">空白模板（手动定义阶段）</MenuItem>
-                {templates.map((t) => (
-                  <MenuItem key={t.id} value={String(t.id)}>
-                    {t.name}
-                    {t.is_preset ? " (预设)" : ""}
+                {PALETTE.map((color) => (
+                  <MenuItem key={color} value={color}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box
+                        sx={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: "50%",
+                          bgcolor: color,
+                        }}
+                      />
+                      {color}
+                    </Box>
                   </MenuItem>
                 ))}
               </TextField>
+
+              {!hideTemplate && !isEdit && (
+                <TextField
+                  select
+                  label="流程模板"
+                  value={form.template_id}
+                  onChange={(e) =>
+                    setForm({ ...form, template_id: e.target.value })
+                  }
+                  helperText={
+                    form.template_id
+                      ? "选择模板后将自动创建阶段和门禁点"
+                      : "留空则创建空白项目"
+                  }
+                >
+                  <MenuItem value="">空白模板（手动定义阶段）</MenuItem>
+                  {templates.map((t) => (
+                    <MenuItem key={t.id} value={String(t.id)}>
+                      {t.name}
+                      {t.is_preset ? " (预设)" : ""}
+                    </MenuItem>
+                  ))}
+                </TextField>
               )}
             </Box>
           )}
@@ -185,7 +319,7 @@ export default function CreateProjectDialog({ open, onClose, onCreated, hideTemp
             onClick={handleSubmit}
             disabled={!form.code || !form.name || submitting}
           >
-            {submitting ? "创建中..." : "创建"}
+            {submitting ? (isEdit ? "保存中..." : "创建中...") : (isEdit ? "保存" : "创建")}
           </Button>
         </DialogActions>
       </Dialog>

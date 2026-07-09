@@ -23,6 +23,11 @@ CREATE TABLE IF NOT EXISTS projects (
     category TEXT DEFAULT '新品',
     status TEXT DEFAULT '进行中',
     template_id INTEGER REFERENCES phase_templates(id),
+    department TEXT DEFAULT '',
+    order_number TEXT DEFAULT '',
+    storage_location TEXT DEFAULT '',
+    meeting_time TEXT DEFAULT '',
+    theme_color TEXT DEFAULT '#1565C0',
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
@@ -327,6 +332,46 @@ try {
   if (rows.length > 0) console.log(`Migrated theme colors for ${rows.length} projects`);
 } catch (e) {
   console.warn("Migration theme_color assign:", e.message);
+}
+
+// =====================================================
+// HPM 项目看板大改版：projects 表新增字段
+// =====================================================
+
+// 迁移：projects.department
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN department TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration projects.department:", e.message);
+  }
+}
+
+// 迁移：projects.order_number
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN order_number TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration projects.order_number:", e.message);
+  }
+}
+
+// 迁移：projects.storage_location
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN storage_location TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration projects.storage_location:", e.message);
+  }
+}
+
+// 迁移：projects.meeting_time
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN meeting_time TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration projects.meeting_time:", e.message);
+  }
 }
 
 // 迁移：索引
