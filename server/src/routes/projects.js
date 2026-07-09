@@ -15,7 +15,7 @@ router.get("/projects", (req, res) => {
   if (status) { sql += " AND p.status = ?"; params.push(status); }
   if (category) { sql += " AND p.category = ?"; params.push(category); }
   if (search) { sql += " AND (p.code LIKE ? OR p.name LIKE ?)"; params.push(`%${search}%`, `%${search}%`); }
-  sql += " ORDER BY p.updated_at DESC";
+  sql += " ORDER BY p.sort_order ASC, p.updated_at DESC";
   res.json({ ok: true, data: db.prepare(sql).all(...params) });
 });
 
@@ -52,6 +52,18 @@ router.post("/projects", (req, res) => {
   }
 
   res.status(201).json({ ok: true, data: db.prepare("SELECT * FROM projects WHERE id = ?").get(projectId) });
+});
+
+// 批量更新项目排序
+router.put("/projects/reorder", (req, res) => {
+  const { orderedIds } = req.body;
+  if (!Array.isArray(orderedIds)) return res.status(400).json({ ok: false, error: "orderedIds 必须是数组" });
+  const update = db.prepare("UPDATE projects SET sort_order = ? WHERE id = ?");
+  const tx = db.transaction(() => {
+    orderedIds.forEach((id, index) => update.run(index, id));
+  });
+  tx();
+  res.json({ ok: true });
 });
 
 // 项目详情

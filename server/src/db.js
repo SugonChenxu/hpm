@@ -387,6 +387,15 @@ try {
   console.warn("Migration idx_subtasks_task:", e.message);
 }
 
+// 迁移：projects.sort_order（拖拽排序持久化）
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN sort_order INTEGER DEFAULT 0`);
+  db.exec(`UPDATE projects SET sort_order = id WHERE sort_order = 0 OR sort_order IS NULL`);
+  console.log("Migration projects.sort_order: done");
+} catch (e) {
+  if (!e.message.includes("duplicate column")) console.warn("Migration projects.sort_order:", e.message);
+}
+
 // =====================================================
 // 优先级数据迁移（仅执行一次）
 // =====================================================
