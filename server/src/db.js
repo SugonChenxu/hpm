@@ -436,4 +436,27 @@ try {
   console.warn("Migration idx_sync_cache_project_key:", e.message);
 }
 
+// =====================================================
+// M5 增量：AI 智能纪要缓存表
+// =====================================================
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS smart_minutes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE UNIQUE,
+    record_file_id TEXT,
+    content TEXT,
+    summary TEXT,
+    action_items_json TEXT,
+    fetched_at TEXT DEFAULT (datetime('now','localtime')),
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+`);
+
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_smart_minutes_meeting ON smart_minutes(meeting_id)`);
+} catch (e) {
+  console.warn("Migration idx_smart_minutes_meeting:", e.message);
+}
+
 export default db;

@@ -77,6 +77,8 @@ export const api = {
   // 会议纪要
   meetings: {
     list: (params) => request(`/meetings?${new URLSearchParams(params)}`),
+    fetch: () => request("/meetings/fetch", { method: "POST" }),
+    getMinutes: (id) => request(`/meetings/${id}/minutes`),
     create: (data) => request("/meetings", { method: "POST", body: JSON.stringify(data) }),
     get: (id) => request(`/meetings/${id}`),
     update: (id, data) => request(`/meetings/${id}`, { method: "PUT", body: JSON.stringify(data) }),
