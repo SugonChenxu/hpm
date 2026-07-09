@@ -1,29 +1,41 @@
 #!/bin/bash
-# HPM 启动脚本 — Windows Git Bash 可靠版
-# 使用 node 直接调用 + nohup 脱离终端
+# HPM 启动脚本 — PM2 进程守护版
+# 进程崩溃自动重启、重启后状态恢复、脱离终端独立运行
 
-echo "=== HPM 启动 ==="
+echo "=== HPM PM2 管理 ==="
 
-# 清理旧进程
-taskkill //F //IM node.exe 2>/dev/null
-sleep 1
+cd /d/HPM
 
-# 后端
-cd /d/HPM/server
-nohup node src/index.js > /d/HPM/server/server.log 2>&1 &
-echo "后端 PID=$! — http://localhost:3001"
-sleep 2
-
-# 前端 (直接用 node 调 vite，不用 npx)
-cd /d/HPM/client
-nohup node node_modules/vite/bin/vite.js --host --port 5173 > /d/HPM/client/vite.log 2>&1 &
-echo "前端 PID=$! — http://localhost:5173"
-sleep 5
-
-# 验证
-echo ""
-echo "=== 验证 ==="
-curl -s http://localhost:3001/api/health && echo " → 后端 OK" || echo " → 后端异常"
-curl -s -o /dev/null -w "前端 HTTP %{http_code}" http://localhost:5173 && echo " OK" || echo " 异常"
-echo ""
-echo "访问: http://localhost:5173"
+case "${1:-start}" in
+  start)
+    echo "启动 HPM 全栈服务..."
+    npx pm2 start ecosystem.config.js
+    npx pm2 save
+    echo ""
+    npx pm2 status
+    echo ""
+    echo "访问: http://localhost:5173"
+    echo "状态: npx pm2 status"
+    echo "日志: npx pm2 logs"
+    ;;
+  stop)
+    echo "停止 HPM 服务..."
+    npx pm2 stop ecosystem.config.js
+    ;;
+  restart)
+    echo "重启 HPM 服务..."
+    npx pm2 restart ecosystem.config.js
+    echo ""
+    npx pm2 status
+    ;;
+  status)
+    npx pm2 status
+    ;;
+  logs)
+    npx pm2 logs
+    ;;
+  *)
+    echo "用法: bash start.sh [start|stop|restart|status|logs]"
+    echo "默认: start"
+    ;;
+esac
