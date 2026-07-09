@@ -10,6 +10,18 @@ import {
 } from "@mui/material";
 import { Edit } from "@mui/icons-material";
 
+/** 优先级 → 颜色 + 中文 */
+const PRIORITY_CONFIG = {
+  urgent: { color: "#D32F2F", label: "紧急" },
+  high: { color: "#ED6C02", label: "高" },
+  medium: { color: "#2196F3", label: "中" },
+  low: { color: "#9E9E9E", label: "低" },
+};
+
+function priorityColor(p) {
+  return PRIORITY_CONFIG[p]?.color || "#9E9E9E";
+}
+
 /** InfoRow: 紧凑的 label : value 行 */
 function InfoRow({ label, value }) {
   if (!value) return null;
@@ -48,8 +60,6 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
   );
-  const todoPreview = activeTasks.slice(0, 3);
-  const remaining = Math.max(0, activeTasks.length - 3);
 
   /** 右键打开编辑菜单 */
   const handleContextMenu = (e) => {
@@ -132,12 +142,12 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
             />
           </Box>
 
-          {/* 待办摘要 */}
+          {/* 待办列表（全部显示 + 优先级状态灯） */}
           {activeTasks.length > 0 && (
             <>
               <Divider sx={{ my: 1 }} />
-              <Box>
-                {todoPreview.map((t) => (
+              <Box sx={{ maxHeight: 200, overflowY: "auto" }}>
+                {activeTasks.map((t) => (
                   <Typography
                     key={t.id}
                     variant="body2"
@@ -152,26 +162,19 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
                   >
                     <Box
                       component="span"
-                      sx={{ color: "grey.500", mr: 0.5 }}
-                    >
-                      ●
-                    </Box>
+                      sx={{
+                        display: "inline-block",
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: priorityColor(t.priority),
+                        mr: 0.75,
+                        verticalAlign: "middle",
+                      }}
+                    />
                     {t.title}
                   </Typography>
                 ))}
-                {remaining > 0 && (
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontSize: "0.75rem",
-                      color: "grey.400",
-                      mt: 0.25,
-                      fontStyle: "italic",
-                    }}
-                  >
-                    还有 {remaining} 条...
-                  </Typography>
-                )}
               </Box>
             </>
           )}
