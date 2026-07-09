@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box, Typography, Button, IconButton, CircularProgress, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
@@ -58,6 +58,7 @@ export default function WeekMeetingPage() {
   const [outputs, setOutputs] = useState({});
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [form, setForm] = useState({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "" });
+
   /** 行内 Popper 新建会议状态 */
   const [popper, setPopper] = useState({
     open: false,
@@ -67,6 +68,19 @@ export default function WeekMeetingPage() {
     endTime: "10:00",
     title: "",
   });
+
+  /** 拖拽状态 — ref 用于全局 mouseup 读取最新值，state 用于重新渲染高亮 */
+  const dragRef = useRef({ active: false, day: null, startIdx: -1, endIdx: -1, anchorEl: null });
+  const [dragState, setDragState] = useState({ active: false, day: null, startIdx: -1, endIdx: -1 });
+
+  /** 防止 Popper 的 blur 和 ClickAwayListener 重复触发创建 */
+  const addingRef = useRef(false);
+
+  /** Popper 刚弹出时阻止 ClickAwayListener 关闭（mouseup 后的 click 事件会误触发） */
+  const justOpenedRef = useRef(false);
+
+  /** TextField 引用，用于延迟聚焦（替代 autoFocus） */
+  const inputRef = useRef(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -124,23 +138,69 @@ export default function WeekMeetingPage() {
     }
   };
 
-  // === 行内 Popper 创建会议 ===
-  const handleCellClick = (event, day, rowIdx) => {
-    const startTime = TIME_SLOTS[rowIdx];
-    const endIdx = Math.min(rowIdx + 2, TIME_SLOTS.length - 1); // 默认 +1 小时
-    const endTime = TIME_SLOTS[endIdx];
-    setPopper({
-      open: true,
-      anchorEl: event.currentTarget,
-      weekday: day,
-      startTime,
-      endTime,
-      title: "",
-    });
-  };
+  // === 拖拽选择时间段 ===
+
+  /** mousedown 在空单元格上 → 开始拖拽选择 */
+  const handleCellMouseDown = useCallback((event, day, rowIdx) => {
+    // 不调用 preventDefault()，否则会阻止后续 Popper 内 TextField 的 autoFocus 生效
+    // 文字选中已由 Row 组件的 userSelect: "none" CSS 处理
+    dragRef.current = { active: true, day, startIdx: rowIdx, endIdx: rowIdx, anchorEl: event.currentTarget };
+    setDragState({ active: true, day, startIdx: rowIdx, endIdx: rowIdx });
+  }, []);
+
+  /** mouseenter 在同一列的格子上 → 扩展选择范围 */
+  const handleCellMouseEnter = useCallback((day, rowIdx) => {
+    if (!dragRef.current.active) return;
+    if (dragRef.current.day !== day) return;     // 不允许跨列拖拽
+    if (dragRef.current.endIdx === rowIdx) return; // 没有变化，跳过
+    dragRef.current.endIdx = rowIdx;
+    setDragState((prev) => ({ ...prev, endIdx: rowIdx }));
+  }, []);
+
+  /** 全局 mouseup — 确认选择范围，弹出 Popper */
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (!dragRef.current.active) return;
+      const { day, startIdx, endIdx, anchorEl } = dragRef.current;
+
+      // 计算时间范围
+      const minIdx = Math.min(startIdx, endIdx);
+      const maxIdx = Math.max(startIdx, endIdx);
+      // 单击（起点=终点）默认 1 小时（2 个 slot）
+      const actualEndIdx =
+        startIdx === endIdx
+          ? Math.min(startIdx + 2, TIME_SLOTS.length - 1)
+          : Math.min(maxIdx + 1, TIME_SLOTS.length - 1);
+
+      const startTime = TIME_SLOTS[minIdx];
+      const endTime = TIME_SLOTS[actualEndIdx];
+
+      // 弹出 Popper
+      setPopper({
+        open: true,
+        anchorEl,
+        weekday: day,
+        startTime,
+        endTime,
+        title: "",
+      });
+      // 标记刚弹出，阻止 mouseup 后紧接着的 click 事件触发 ClickAwayListener 关闭
+      justOpenedRef.current = true;
+      setTimeout(() => { justOpenedRef.current = false; }, 300);
+
+      // 重置拖拽状态
+      dragRef.current = { active: false, day: null, startIdx: -1, endIdx: -1, anchorEl: null };
+      setDragState({ active: false, day: null, startIdx: -1, endIdx: -1 });
+    };
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => window.removeEventListener("mouseup", handleMouseUp);
+  }, []);
+
+  // === 行内 Popper 创建会议（无按钮快速创建） ===
 
   const handlePopperAdd = async () => {
-    if (!popper.title.trim()) return;
+    if (!popper.title.trim() || addingRef.current) return;
+    addingRef.current = true;
     try {
       await api.weekMeetings.create({
         week_key: weekKey,
@@ -154,10 +214,34 @@ export default function WeekMeetingPage() {
       load();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
+    } finally {
+      addingRef.current = false;
     }
   };
 
-  const closePopper = () => setPopper((p) => ({ ...p, open: false }));
+  /**
+   * 关闭 Popper：
+   * - 如果已有标题内容 → 自动创建会议
+   * - 如果标题为空 → 仅关闭
+   */
+  const closePopper = () => {
+    // Popper 刚弹出时忽略 click away，给用户时间输入
+    if (justOpenedRef.current) return;
+    if (popper.title.trim() && !addingRef.current) {
+      handlePopperAdd();
+    } else if (!addingRef.current) {
+      setPopper((p) => ({ ...p, open: false }));
+    }
+  };
+
+  // === Popper 打开时延迟聚焦 TextField ===
+  useEffect(() => {
+    if (popper.open && inputRef.current) {
+      // 延迟聚焦，确保 Popper 已渲染完毕且 click 事件已消化
+      const timer = setTimeout(() => inputRef.current?.focus(), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [popper.open]);
 
   // === 输出物保存 ===
   const handleOutputBlur = async (weekday) => {
@@ -224,8 +308,10 @@ export default function WeekMeetingPage() {
             time={time}
             rowIdx={rowIdx}
             meetingsByDay={meetingsByDay}
+            dragState={dragState}
             onDelete={handleDelete}
-            onCellClick={handleCellClick}
+            onCellMouseDown={handleCellMouseDown}
+            onCellMouseEnter={handleCellMouseEnter}
           />
         ))}
 
@@ -260,7 +346,7 @@ export default function WeekMeetingPage() {
         ))}
       </Box>
 
-      {/* 行内会议创建 Popper */}
+      {/* 行内会议创建 Popper（无按钮：Enter 或 blur 有内容时自动创建） */}
       <ClickAwayListener onClickAway={closePopper}>
         <Popper
           open={popper.open}
@@ -273,21 +359,25 @@ export default function WeekMeetingPage() {
               {popper.weekday} {popper.startTime}—{popper.endTime}
             </Typography>
             <TextField
-              autoFocus
+              inputRef={inputRef}
               size="small"
               fullWidth
               placeholder="会议名称"
               value={popper.title}
               onChange={(e) => setPopper((p) => ({ ...p, title: e.target.value }))}
               onKeyDown={(e) => { if (e.key === "Enter") handlePopperAdd(); }}
-              sx={{ mb: 1 }}
+              onBlur={() => {
+                // 延迟判断，确保 Enter 键的 handlePopperAdd 先执行
+                setTimeout(() => {
+                  if (addingRef.current) return;
+                  if (popper.title.trim()) {
+                    handlePopperAdd();
+                  } else {
+                    setPopper((p) => ({ ...p, open: false }));
+                  }
+                }, 150);
+              }}
             />
-            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 0.5 }}>
-              <Button size="small" onClick={closePopper}>取消</Button>
-              <Button size="small" variant="contained" onClick={handlePopperAdd} disabled={!popper.title.trim()}>
-                确定
-              </Button>
-            </Box>
           </Paper>
         </Popper>
       </ClickAwayListener>
@@ -328,11 +418,13 @@ export default function WeekMeetingPage() {
 /**
  * 单行组件 — 时间标签 + 6天格子 + 叠加的会议卡片
  *
- * 会议卡片使用 position: absolute 精确定位，高度通过
- * meetingSpan × SLOT_HEIGHT 计算，保证首尾对齐、占满格子。
- * 空单元格可点击触发行内 Popper 快速创建会议。
+ * 支持拖拽选择时间段（mousedown → mousemove → mouseup）：
+ * - mousedown 在空单元格上开始拖拽
+ * - mouseenter 在同一列的格子上扩展选择
+ * - 拖拽中被选中的格子有视觉高亮
+ * - mouseup 后弹出 Popper 创建会议
  */
-function Row({ time, rowIdx, meetingsByDay, onDelete, onCellClick }) {
+function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown, onCellMouseEnter }) {
   return (
     <>
       {/* 时间标签列 */}
@@ -351,10 +443,18 @@ function Row({ time, rowIdx, meetingsByDay, onDelete, onCellClick }) {
         });
         const isEmpty = meetings.length === 0;
 
+        // 判断当前格子是否在拖拽选中范围内
+        const inDragRange =
+          dragState.active &&
+          dragState.day === day &&
+          rowIdx >= Math.min(dragState.startIdx, dragState.endIdx) &&
+          rowIdx <= Math.max(dragState.startIdx, dragState.endIdx);
+
         return (
           <Box
             key={`${day}-${rowIdx}`}
-            onClick={isEmpty ? (e) => onCellClick(e, day, rowIdx) : undefined}
+            onMouseDown={isEmpty ? (e) => onCellMouseDown(e, day, rowIdx) : undefined}
+            onMouseEnter={() => onCellMouseEnter(day, rowIdx)}
             sx={{
               borderBottom: "1px solid",
               borderLeft: "1px solid",
@@ -364,7 +464,9 @@ function Row({ time, rowIdx, meetingsByDay, onDelete, onCellClick }) {
               p: 0.25,
               cursor: isEmpty ? "pointer" : "default",
               transition: "background-color 0.15s",
-              "&:hover": isEmpty ? { bgcolor: "action.hover" } : {},
+              bgcolor: inDragRange ? "rgba(25, 118, 210, 0.15)" : "transparent",
+              "&:hover": (isEmpty && !dragState.active) ? { bgcolor: "action.hover" } : {},
+              userSelect: dragState.active ? "none" : undefined,
             }}
           >
             {meetings.map((m) => {
@@ -375,6 +477,7 @@ function Row({ time, rowIdx, meetingsByDay, onDelete, onCellClick }) {
                 <Tooltip key={m.id || m.title} title={m.title} arrow disableInteractive>
                   <Box
                     onClick={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                     sx={{
                       position: "absolute",
                       top: 0,
@@ -405,6 +508,7 @@ function Row({ time, rowIdx, meetingsByDay, onDelete, onCellClick }) {
                           size="small"
                           sx={{ p: 0, opacity: 0.5, "&:hover": { opacity: 1 } }}
                           onClick={(e) => { e.stopPropagation(); onDelete(m.id); }}
+                          onMouseDown={(e) => e.stopPropagation()}
                         >
                           <DeleteOutline sx={{ fontSize: 12 }} />
                         </IconButton>
