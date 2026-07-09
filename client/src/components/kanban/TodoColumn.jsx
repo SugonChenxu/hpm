@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Box, Typography, TextField } from "@mui/material";
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -15,18 +15,17 @@ export default function TodoColumn({ tasks, projectId, onTasksChange, onToggleCo
   const inputRef = useRef(null);
   const containerRef = useRef(null);
   const { capture, restore } = useKanbanScroll();
-  const tasksKeyRef = useRef(JSON.stringify(tasks.map((t) => t.id).sort()));
 
-  // 只在外部任务 ID 列表真正变化时同步（比如完成了/删除了/从外部刷新）
-  const tasksFingerprint = JSON.stringify(tasks.map((t) => t.id).sort());
-  if (tasksFingerprint !== tasksKeyRef.current) {
-    tasksKeyRef.current = tasksFingerprint;
-    const externalIds = new Set(tasks.map((t) => t.id));
+  // 监听 tasks prop 变化，同步 localTasks（保留 temp- 前缀的临时任务）
+  useEffect(() => {
     setLocalTasks((prev) => {
-      const temps = prev.filter((t) => typeof t.id === "string" && t.id.startsWith("temp-") && !externalIds.has(t.id));
+      const externalIds = new Set(tasks.map((t) => t.id));
+      const temps = prev.filter(
+        (t) => typeof t.id === "string" && t.id.startsWith("temp-") && !externalIds.has(t.id)
+      );
       return [...tasks, ...temps];
     });
-  }
+  }, [tasks]);
 
   const handleTaskUpdate = (taskId, updates) => {
     setLocalTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
