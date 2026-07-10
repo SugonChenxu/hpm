@@ -374,6 +374,21 @@ try {
   }
 }
 
+// 迁移：projects.current_phase（项目当前阶段）
+try {
+  db.exec(`ALTER TABLE projects ADD COLUMN current_phase TEXT DEFAULT 'pre_research'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration projects.current_phase:", e.message);
+  }
+}
+// 为历史项目回填默认值
+try {
+  db.prepare("UPDATE projects SET current_phase = 'pre_research' WHERE current_phase IS NULL OR current_phase = ''").run();
+} catch (e) {
+  console.warn("Migration projects.current_phase backfill:", e.message);
+}
+
 // 迁移：索引
 try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_tasks_sort ON tasks(project_id, sort_order)`);

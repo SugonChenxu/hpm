@@ -6,11 +6,7 @@ const router = Router();
 // 项目列表
 router.get("/projects", (req, res) => {
   const { status, category, search } = req.query;
-  let sql = `SELECT p.*,
-    (SELECT ph.name FROM phases ph 
-     WHERE ph.project_id = p.id AND ph.status = '进行中' 
-     ORDER BY ph.phase_order LIMIT 1) as current_phase
-    FROM projects p WHERE 1=1`;
+  let sql = `SELECT p.* FROM projects p WHERE 1=1`;
   const params = [];
   if (status) { sql += " AND p.status = ?"; params.push(status); }
   if (category) { sql += " AND p.category = ?"; params.push(category); }
@@ -21,16 +17,17 @@ router.get("/projects", (req, res) => {
 
 // 创建项目
 router.post("/projects", (req, res) => {
-  const { code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time } = req.body;
+  const { code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time, current_phase } = req.body;
   if (!code || !name) return res.status(400).json({ ok: false, error: "code 和 name 必填" });
 
   const result = db.prepare(
-    `INSERT INTO projects (code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO projects (code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time, current_phase) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     code, name, category || "新品", template_id || null,
     theme_color || "#1565C0",
-    department || "", order_number || "", storage_location || "", meeting_time || ""
+    department || "", order_number || "", storage_location || "", meeting_time || "",
+    current_phase || "pre_research"
   );
   const projectId = result.lastInsertRowid;
 
@@ -76,7 +73,7 @@ router.get("/projects/:id", (req, res) => {
 
 // 更新项目
 router.put("/projects/:id", (req, res) => {
-  const { code, name, category, status, theme_color, department, order_number, storage_location, meeting_time } = req.body;
+  const { code, name, category, status, theme_color, department, order_number, storage_location, meeting_time, current_phase } = req.body;
   const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id);
   if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
 
@@ -88,6 +85,7 @@ router.put("/projects/:id", (req, res) => {
       order_number=COALESCE(?, order_number),
       storage_location=COALESCE(?, storage_location),
       meeting_time=COALESCE(?, meeting_time),
+      current_phase=COALESCE(?, current_phase),
       updated_at=datetime('now','localtime') 
     WHERE id=?`
   ).run(
@@ -100,6 +98,7 @@ router.put("/projects/:id", (req, res) => {
     order_number !== undefined ? order_number : project.order_number,
     storage_location !== undefined ? storage_location : project.storage_location,
     meeting_time !== undefined ? meeting_time : project.meeting_time,
+    current_phase !== undefined ? current_phase : project.current_phase,
     req.params.id
   );
   res.json({ ok: true, data: db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id) });

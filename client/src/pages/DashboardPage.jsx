@@ -36,7 +36,7 @@ import api from "../api/client";
 import ProjectCard from "../components/kanban/ProjectCard";
 import CreateProjectDialog from "../components/common/CreateProjectDialog";
 
-function SortableProjectCard({ project, tasks, onEdit, onDelete }) {
+function SortableProjectCard({ project, tasks, onEdit, onDelete, onPhaseChange }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: project.id });
   const style = {
@@ -55,7 +55,7 @@ function SortableProjectCard({ project, tasks, onEdit, onDelete }) {
         >
           <DeleteOutline sx={{ fontSize: 18, color: "text.disabled" }} />
         </IconButton>
-        <ProjectCard project={project} tasks={tasks} onEdit={onEdit} />
+        <ProjectCard project={project} tasks={tasks} onEdit={onEdit} onPhaseChange={onPhaseChange} />
       </Box>
     </div>
   );
@@ -127,6 +127,14 @@ export default function DashboardPage() {
   const handleEdit = useCallback((project) => { setEditProject(project); }, []);
   const handleEditClose = useCallback(() => { setEditProject(null); }, []);
   const handleEditCreated = useCallback(() => { load(); }, [load]);
+  const handlePhaseChange = useCallback(async (projectId, phase) => {
+    try {
+      await api.projects.update(projectId, { current_phase: phase });
+      load();
+    } catch (e) {
+      console.error("更新阶段失败", e);
+    }
+  }, [load]);
 
   const activeCount = useMemo(
     () => projects.filter((p) => p.status === "进行中").length,
@@ -183,6 +191,7 @@ export default function DashboardPage() {
                   key={p.id} project={p}
                   tasks={tasksByProject[p.id] || []}
                   onEdit={handleEdit} onDelete={setDeleteTarget}
+                  onPhaseChange={handlePhaseChange}
                 />
               ))}
             </Box>

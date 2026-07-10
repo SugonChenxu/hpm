@@ -11,6 +11,17 @@ import {
 import { Edit } from "@mui/icons-material";
 import PriorityChip from "./PriorityChip";
 
+/** 项目阶段固定配置（6 个阶段，带固定配色） */
+const PROJECT_PHASES = [
+  { key: "pre_research",  label: "预研阶段", color: "#7C3AED" },
+  { key: "detail_design", label: "详细设计", color: "#2563EB" },
+  { key: "evt",           label: "EVT",      color: "#16A34A" },
+  { key: "dvt",           label: "DVT",      color: "#CA8A04" },
+  { key: "pilot",         label: "批量试制", color: "#EA580C" },
+  { key: "yield_ramp",    label: "直通率爬坡", color: "#DC2626" },
+];
+const PHASE_MAP = Object.fromEntries(PROJECT_PHASES.map((p) => [p.key, p]));
+
 /** InfoRow: 紧凑的 label : value 行 */
 function InfoRow({ label, value }) {
   if (!value) return null;
@@ -44,18 +55,17 @@ function InfoRow({ label, value }) {
  *   tasks   — 该项目的任务数组（含 status / kanban_column 字段）
  *   onEdit  — (project) => void  编辑回调
  */
-export default function ProjectCard({ project, tasks = [], onEdit }) {
+export default function ProjectCard({ project, tasks = [], onEdit, onPhaseChange }) {
   const [contextMenu, setContextMenu] = useState(null);
+  const [phaseAnchor, setPhaseAnchor] = useState(null);
   const themeColor = project.theme_color || "#7C3AED";
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
   );
 
-  /** 查找"进行中"任务作为当前阶段显示 */
-  const inProgressTask = tasks.find(
-    (t) => t.status === "进行中" || t.kanban_column === "进行中"
-  );
-  const currentPhaseDisplay = inProgressTask ? inProgressTask.title : (project.current_phase || "--");
+  /** 当前阶段（从 project.current_phase 取得，缺省为预研阶段） */
+  const phaseKey = project.current_phase || "pre_research";
+  const phase = PHASE_MAP[phaseKey] || PROJECT_PHASES[0];
 
   /** 右键打开编辑菜单 */
   const handleContextMenu = (e) => {
@@ -102,8 +112,8 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
         />
 
         <CardContent sx={{ pl: 2.5, pr: 2, py: 2, "&:last-child": { pb: 2 } }}>
-          {/* 标题区域：代号（单独一行，加大） + 名称（单独一行） */}
-          <Box sx={{ mb: 1.25 }}>
+          {/* 标题区域：代号 + 阶段毛玻璃框（同一行） + 名称（下一行） */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5, minWidth: 0 }}>
             <Typography
               sx={{
                 fontSize: "1.25rem",
@@ -113,33 +123,48 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
+                flexShrink: 0,
               }}
             >
               [{project.code}]
             </Typography>
-            <Typography
+            <Box
+              onClick={(e) => setPhaseAnchor(e.currentTarget)}
               sx={{
-                fontSize: "0.95rem",
-                fontWeight: 700,
-                lineHeight: 1.3,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                display: "inline-flex", alignItems: "center",
+                px: 1.1, py: 0.25, borderRadius: 1.5,
+                fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.02em",
+                color: phase.color,
+                bgcolor: `${phase.color}1A`,            // ~10% 透明度
+                border: `1px solid ${phase.color}55`,   // ~33% 透明度
+                backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
+                cursor: "pointer", userSelect: "none", flexShrink: 0,
+                transition: "background-color 0.15s",
+                "&:hover": { bgcolor: `${phase.color}2E` },
               }}
             >
-              {project.name}
-            </Typography>
+              {phase.label}
+            </Box>
           </Box>
+          <Typography
+            sx={{
+              fontSize: "0.95rem",
+              fontWeight: 700,
+              lineHeight: 1.3,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              mb: 1.25,
+            }}
+          >
+            {project.name}
+          </Typography>
 
           {/* 信息聚合区 */}
           <Box sx={{ mb: 1 }}>
             <InfoRow label="订单号" value={project.order_number} />
             <InfoRow label="库位" value={project.storage_location} />
             <InfoRow label="例会时间" value={project.meeting_time} />
-            <InfoRow
-              label="当前阶段"
-              value={currentPhaseDisplay}
-            />
           </Box>
 
           {/* 待办列表（全部显示 + 优先级状态灯） */}
@@ -209,6 +234,35 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
           <Edit sx={{ fontSize: 18, mr: 1 }} />
           编辑项目
         </MenuItem>
+      </Menu>
+
+      {/* 阶段选择菜单 */}
+      <Menu
+        open={phaseAnchor !== null}
+        anchorEl={phaseAnchor}
+        onClose={() => setPhaseAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        transformOrigin={{ vertical: "top", horizontal: "left" }}
+      >
+        {PROJECT_PHASES.map((p) => (
+          <MenuItem
+            key={p.key}
+            selected={p.key === phaseKey}
+            onClick={() => {
+              setPhaseAnchor(null);
+              if (p.key !== phaseKey && onPhaseChange) onPhaseChange(project.id, p.key);
+            }}
+            sx={{
+              fontSize: "0.82rem",
+              color: p.color,
+              "&.Mui-selected": { bgcolor: `${p.color}1A` },
+              "&:hover": { bgcolor: `${p.color}14` },
+            }}
+          >
+            <Box component="span" sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: p.color, mr: 1.25, display: "inline-block" }} />
+            {p.label}
+          </MenuItem>
+        ))}
       </Menu>
     </>
   );
