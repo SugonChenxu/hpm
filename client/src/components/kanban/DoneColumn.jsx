@@ -63,7 +63,7 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                 key={task.id}
                 sx={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   gap: 0.5,
                   py: 0.5,
                   px: 0.5,
@@ -80,7 +80,8 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                     display: "flex",
                     alignItems: "center",
                     flexShrink: 0,
-                    alignSelf: "center",
+                    mt: "2px",
+                    pt: 0,
                   }}
                 >
                   <PriorityChip priority={task.priority} />
