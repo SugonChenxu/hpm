@@ -24,6 +24,14 @@
 | **M5** | 会议纪要模块 | 对接拉取腾讯会议、全时会议会议数据——会议列表、纪要编辑、决议追踪、参会人管理 | **腾讯会议 API + 全时会议 API** | ⑤ |
 | **M6** | 周报模块 | 独立生成各项目专属总结周报——聚合进度/任务/故障/物料/会议数据 → 结构化模板输出 | —（数据聚合 M1–M5） | ⑥ |
 
+> **扩展功能（独立于六大核心模块）**：以下功能在 v2.0 定稿时尚未纳入六大核心模块，作为补充能力存在，详见各模块 PRD。
+
+| # | 模块 | 核心职责 | 外部对接 | 状态 |
+|---|------|---------|---------|:--:|
+| **M7** | 会议计划模块 | 周例会排期与未来周规划——课表式排期网格、拖拽创建、持续 N 周自动同步、输出物记录 | — | 已落地（v1.0） |
+
+> **项目概览已实现交互细节补充**：项目概览卡片「当前阶段」联动显示该项目【项目计划】中状态为「进行中」的任务名称（无进行中任务时回退显示 `current_phase`）；项目代号以加大字号单独成行（`[CODE]`），项目名称单独成行。
+
 ---
 
 ## 三、模块间关系
@@ -85,6 +93,8 @@
 | `meetings` | M5 | id, project_id, phase_id, platform(tencent/quanshi/manual), external_id, title, start_time, end_time, attendees_json, transcript |
 | `meeting_action_items` | M5 | id, meeting_id, content, assignee, due_date, status |
 | `weekly_reports` | M6 | id, project_id, week_start, week_end, content_json, status |
+| `week_meetings` | M7 | id, week_key(YYYY-MM-DD 周一), weekday, start_time, end_time, title, created_at, updated_at |
+| `week_meeting_outputs` | M7 | id, week_key, weekday, content, updated_at（UNIQUE(week_key, weekday)） |
 
 ---
 
@@ -98,7 +108,10 @@
 | M4 物料管理模块 | `docs/modules/04-物料管理模块-PRD.md` | 待编写 |
 | M5 会议纪要模块 | `docs/modules/05-会议纪要模块-PRD.md` | 待编写 |
 | M6 周报模块 | `docs/modules/06-周报模块-PRD.md` | 待编写 |
+| M7 会议计划模块 | `docs/modules/07-会议计划模块-PRD.md` | 已落地 |
 
 ---
 
 > **PRD 版本**: v2.0 | **变更**: 从"P0/P1/P2 三级需求池"重构为"六大核心模块"最终定稿结构；Mantis 对接从 P2 提升至 P0(M3)；新增 M5 会议纪要、M6 周报模块。
+
+> **2026-07-10 补充**: 新增扩展模块 **M7 会议计划**（见 `docs/modules/07-会议计划模块-PRD.md`，状态已落地）；「五、全局数据模型」补充 `week_meetings` / `week_meeting_outputs` 两表；「六、各模块详细 PRD 索引」补充 M7 行；「二」补充项目概览卡片「当前阶段」联动与代号/名称分两行的已实现交互细节。六大核心模块语义保持不变。
