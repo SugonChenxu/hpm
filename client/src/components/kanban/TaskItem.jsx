@@ -24,7 +24,7 @@ export default function TaskItem({ task, onToggleComplete, onTaskUpdate }) {
 
   const isCompleted = !!task.completed_at;
   const displayPriority = localPriority || task.priority || "low";
-  const priorityColor = PRIORITY_MAP[displayPriority]?.color || "#52c41a";
+  const priorityColor = PRIORITY_MAP[displayPriority]?.color || "#16A34A";
   const isHighPriority = displayPriority === "urgent" || displayPriority === "high";
   const subtaskCount = task.subtask_count || 0;
   const completedSubtaskCount = subtasks.filter((s) => s.is_completed && !s.deleted_at).length;
@@ -77,7 +77,7 @@ export default function TaskItem({ task, onToggleComplete, onTaskUpdate }) {
           py: 0.5,
           px: 0.75,
           borderRadius: 1,
-          bgcolor: "grey.50",
+          bgcolor: "grey.100",
           mb: 0.5,
           cursor: "grab",
         }}
@@ -130,7 +130,7 @@ export default function TaskItem({ task, onToggleComplete, onTaskUpdate }) {
           <Tooltip title={`${completedSubtaskCount || 0}/${totalSubtaskCount}`}>
             <Typography
               onClick={(e) => { e.stopPropagation(); handleToggleExpand(); }}
-              sx={{ fontSize: 12, color: "#1565C0", cursor: "pointer", flexShrink: 0, userSelect: "none" }}
+              sx={{ fontSize: 12, color: "primary.main", cursor: "pointer", flexShrink: 0, userSelect: "none" }}
             >📋</Typography>
           </Tooltip>
         ) : (
@@ -150,7 +150,7 @@ export default function TaskItem({ task, onToggleComplete, onTaskUpdate }) {
             flexShrink: 0, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 10, color: "white",
-            bgcolor: isCompleted ? "#52c41a" : "transparent",
+            bgcolor: isCompleted ? "#16A34A" : "transparent",
             "&:hover": { borderColor: "primary.main" },
           }}
         >{isCompleted && "✓"}</Box>

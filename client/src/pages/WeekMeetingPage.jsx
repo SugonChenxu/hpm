@@ -318,7 +318,7 @@ export default function WeekMeetingPage() {
         {/* 输出物行 — 表格底部 */}
         <Box sx={{
           p: 0.5, borderTop: "2px solid", borderColor: "divider",
-          bgcolor: "grey.50", display: "flex", alignItems: "flex-start",
+          bgcolor: "grey.100", display: "flex", alignItems: "flex-start",
           justifyContent: "center", pt: 1.5,
         }}>
           <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ fontSize: "0.72rem" }}>
@@ -328,7 +328,7 @@ export default function WeekMeetingPage() {
         {WEEKDAYS.map((d) => (
           <Box key={`out-${d}`} sx={{
             p: 0.5, borderTop: "2px solid", borderLeft: "1px solid",
-            borderColor: "divider", bgcolor: "grey.50",
+            borderColor: "divider", bgcolor: "grey.100",
           }}>
             <TextField
               multiline
@@ -472,7 +472,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
             {meetings.map((m) => {
               const span = meetingSpan(m.start_time, m.end_time);
               const isProject = m.source === "project";
-              const color = isProject ? (m.theme_color || "#1565C0") : "#1565C0";
+              const color = isProject ? (m.theme_color || "#1E40AF") : "#1E40AF";
               return (
                 <Tooltip key={m.id || m.title} title={m.title} arrow disableInteractive>
                   <Box

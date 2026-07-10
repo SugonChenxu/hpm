@@ -39,7 +39,7 @@ export default function Layout() {
   }, [createParam, searchParams, setSearchParams]);
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f5f5f5" }}>
+    <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       <AppBar
         position="fixed"
         sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}
@@ -53,13 +53,32 @@ export default function Layout() {
           >
             <MenuIcon />
           </IconButton>
-          <Typography
-            variant="h6"
-            noWrap
-            sx={{ flexGrow: 1, fontWeight: 700 }}
-          >
-            HPM 硬件项目管理
-          </Typography>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexGrow: 1 }}>
+            {/* Logo — blue rounded square with "H" monogram */}
+            <Box
+              sx={{
+                width: 32,
+                height: 32,
+                borderRadius: 2,
+                bgcolor: "primary.main",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <Typography sx={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1rem", lineHeight: 1 }}>
+                H
+              </Typography>
+            </Box>
+            <Typography
+              variant="h6"
+              noWrap
+              sx={{ fontWeight: 700, color: "text.primary" }}
+            >
+              HPM 硬件项目管理
+            </Typography>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -71,7 +90,7 @@ export default function Layout() {
 
       <Box
         component="main"
-        sx={{ flexGrow: 1, mt: 8, p: 3, maxWidth: 1400, mx: "auto" }}
+        sx={{ flexGrow: 1, mt: 8, p: { xs: 2, md: 3 }, maxWidth: 1280, mx: "auto" }}
       >
         <Outlet context={{ openCreateDialog }} />
       </Box>

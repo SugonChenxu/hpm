@@ -1,13 +1,13 @@
 import { Box } from "@mui/material";
 
 export const PRIORITY_MAP = {
-  urgent: { label: "紧急", color: "#cf1322" },
-  high: { label: "高", color: "#ff4d4f" },
-  medium: { label: "中", color: "#faad14" },
-  low: { label: "低", color: "#52c41a" },
-  P0: { label: "紧急", color: "#cf1322" },
-  P1: { label: "高", color: "#ff4d4f" },
-  P2: { label: "中", color: "#faad14" },
+  urgent: { label: "紧急", color: "#DC2626" },
+  high: { label: "高", color: "#EA580C" },
+  medium: { label: "中", color: "#D97706" },
+  low: { label: "低", color: "#16A34A" },
+  P0: { label: "紧急", color: "#DC2626" },
+  P1: { label: "高", color: "#EA580C" },
+  P2: { label: "中", color: "#D97706" },
 };
 
 export const PRIORITY_OPTIONS = ["urgent", "high", "medium", "low"];

@@ -200,7 +200,7 @@ export default function TaskKanbanPage() {
             py: 8,
             px: 4,
             borderRadius: 3,
-            bgcolor: "grey.50",
+            bgcolor: "grey.100",
           }}
         >
           <Typography variant="h6" color="text.secondary" gutterBottom>

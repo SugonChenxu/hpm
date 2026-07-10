@@ -102,7 +102,7 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
     [tasks, onTasksChange]
   );
 
-  const themeColor = project?.theme_color || "#1565C0";
+  const themeColor = project?.theme_color || "#1E40AF";
 
   /** 手动切换折叠（持久化） */
   const toggleCollapsed = () => {

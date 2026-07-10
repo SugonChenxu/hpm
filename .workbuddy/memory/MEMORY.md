@@ -28,6 +28,9 @@
 - **已抽取 PPTX 文本**: `D:\HPM\__pptx_extracted_xml\` (10 txt)
 - **团队**: `software-hwpm` (TeamCreate 已建)
 - **GitHub 连接**: connected
+- **PM2 进程守护**: hpm-server(3001) + hpm-client(5173)，autorestart=true
+- **PM2 开机自启**: 注册表 HKCU\Run → `D:\HPM\scripts\pm2-resurrect.bat` → pm2 resurrect
+- **PM2 管理**: `bash start.sh [start|stop|restart|status|logs]`
 
 ## 项目阶段追踪
 | 阶段 | 状态 | 完成日期 | 交付物 |
@@ -57,5 +60,120 @@
 - 文档导出：不做
 - 移动端：预留响应式 + PWA 接口，MVP 不实现
 
+## 运维知识库 — 服务器挂了排查 SOP
+
+### 排查步骤（按优先级执行）
+
+**第1步：检查 PM2 进程状态**
+```bash
+npx pm2 status
+```
+- 进程列表为空 → 跳到「情况A：PM2 daemon 未启动 / 进程丢失」
+- 进程 status=errored/stopped → 跳到「情况B：进程崩溃」
+- 进程 status=online 但网页打不开 → 跳到「情况C：进程在线但服务异常」
+
+**第2步：HTTP 健康检查**
+```bash
+curl -s -o /dev/null -w "Server: %{http_code}\n" http://localhost:3001/api/projects
+curl -s -o /dev/null -w "Client: %{http_code}\n" http://localhost:5173
+```
+- 非 200 → 查 PM2 日志 `npx pm2 logs --lines 50`
+
+---
+
+### 情况A：PM2 daemon 未启动 / 进程丢失（最常见）
+
+**症状**: `pm2 status` 进程列表为空，或 PM2 daemon 刚启动
+
+**原因**: 重启后 PM2 daemon 没有自动启动（Windows 原生不支持 pm2 startup）
+
+**修复**:
+```bash
+cd /d/HPM
+npx pm2 start ecosystem.config.js   # 启动进程
+npx pm2 save                         # 保存进程列表到 dump.pm2
+```
+
+**开机自启已配置**（2026-07-10）:
+- 注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\HPM-PM2-AutoStart`
+- → `D:\HPM\scripts\pm2-resurrect.bat`（延迟15秒 + 完整node路径执行 pm2 resurrect）
+- 如果开机自启失效，检查注册表项是否存在：
+  ```powershell
+  Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name HPM-PM2-AutoStart
+  ```
+- 如果不存在，重新注册：
+  ```powershell
+  Set-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name HPM-PM2-AutoStart -Value "D:\HPM\scripts\pm2-resurrect.bat"
+  ```
+
+---
+
+### 情况B：进程崩溃（status=errored）
+
+**症状**: PM2 进程存在但 status=errored，或频繁重启（↺ 数字大）
+
+**排查**:
+```bash
+npx pm2 logs hpm-server --lines 100 --err
+npx pm2 logs hpm-client --lines 100 --err
+```
+
+**历史 Bug 参考**:
+1. **react-dom 包损坏**（2026-07-09）: `node_modules/react-dom/cjs/react-dom.production.js` 文件缺失 → `npm install react-dom react` 重装 + 删 `node_modules/.vite` 缓存
+2. **Vite --force 无限循环**（2026-07-09）: ecosystem.config.js 的 `--force` 标志导致 Vite 优化中崩溃 → PM2 重启 → 又 --force → 死循环。修复：移除 `--force`
+3. **fastRefresh:false 白屏**（2026-07-09）: `@vitejs/plugin-react` 设 `fastRefresh:false` 后注入 `$RefreshSig$()` 但不加载运行时 → ReferenceError。修复：移除 `fastRefresh:false`
+4. **NODE_ENV 错误**: hpm-client 必须用 `NODE_ENV: "development"`（Vite 开发模式），hpm-server 用 `"production"`
+
+**修复后必做**:
+```bash
+npx pm2 restart ecosystem.config.js
+npx pm2 save   # 更新 dump.pm2
+```
+
+---
+
+### 情况C：进程在线但服务异常
+
+**症状**: PM2 status=online 但 HTTP 非 200 或白屏
+
+**排查**:
+1. 查日志: `npx pm2 logs --lines 50`
+2. 检查端口占用: `npx pm2 status` 看 PID，确认 3001/5173 没被其他进程抢占
+3. 检查 SQLite 文件锁: `server/data/hpm.db` 是否被其他进程锁定
+4. 检查磁盘空间: 内存 81%+ 时可能出问题
+
+**核武器（重启大法）**:
+```bash
+npx pm2 delete all
+npx pm2 start ecosystem.config.js
+npx pm2 save
+```
+
+---
+
+### PM2 常用命令速查
+| 命令 | 作用 |
+|------|------|
+| `npx pm2 status` | 查看进程状态 |
+| `npx pm2 logs` | 实时查看所有日志 |
+| `npx pm2 logs hpm-server --err` | 查看服务端错误日志 |
+| `npx pm2 restart ecosystem.config.js` | 重启所有进程 |
+| `npx pm2 restart hpm-server` | 重启单个进程 |
+| `npx pm2 delete all` | 删除所有进程（核武器） |
+| `npx pm2 start ecosystem.config.js` | 从配置启动 |
+| `npx pm2 save` | 保存当前进程列表到 dump.pm2 |
+| `npx pm2 resurrect` | 从 dump.pm2 恢复进程（开机自启用） |
+| `bash start.sh [start\|stop\|restart\|status\|logs]` | HPM 封装的管理脚本 |
+
+### 关键文件路径
+- PM2 配置: `D:\HPM\ecosystem.config.js`
+- 开机自启 bat: `D:\HPM\scripts\pm2-resurrect.bat`
+- 开机自启 vbs（备用）: `D:\HPM\scripts\pm2-autostart.vbs`
+- 管理脚本: `D:\HPM\start.sh`
+- PM2 dump: `C:\Users\chenxu\.pm2\dump.pm2`
+- 服务端日志: `D:\HPM\server\pm2-error.log` / `pm2-out.log`
+- 客户端日志: `D:\HPM\client\pm2-error.log` / `pm2-out.log`
+- Node 路径: `C:\Users\chenxu\.workbuddy\binaries\node\versions\22.22.2\node.exe`
+
 ## 上次任务
-2026-07-07: 完成六大模块详细 PRD 编制（M1-M6），顶层 PRD 从 v1.0 重构为 v2.0。
+2026-07-10: PM2 开机自启固化（注册表 HKCU\Run + pm2-resurrect.bat → pm2 resurrect），彻底解决重启后服务丢失问题。

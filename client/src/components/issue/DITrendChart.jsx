@@ -6,18 +6,18 @@ export default function DITrendChart({ data = [], loading = false }) {
   const chartData = filtered.map((d) => ({ name: d.date, di: Math.round(d.di * 100) / 100 }));
 
   if (loading) return <Box sx={{ mb: 3 }}><Typography variant="h6" gutterBottom>DI 趋势</Typography><Skeleton variant="rectangular" height={280} /></Box>;
-  if (chartData.length === 0) return <Box sx={{ mb: 3 }}><Typography variant="h6" gutterBottom>DI 趋势</Typography><Box sx={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "grey.50", borderRadius: 1 }}><Typography variant="body2" color="text.secondary">暂无 DI 趋势数据</Typography></Box></Box>;
+  if (chartData.length === 0) return <Box sx={{ mb: 3 }}><Typography variant="h6" gutterBottom>DI 趋势</Typography><Box sx={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "grey.100", borderRadius: 1 }}><Typography variant="body2" color="text.secondary">暂无 DI 趋势数据</Typography></Box></Box>;
 
   return (
     <Box sx={{ mb: 3 }}>
       <Typography variant="h6" gutterBottom>DI 趋势</Typography>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
           <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip formatter={(value) => [`DI ${value}`, ""]} />
-          <Line type="monotone" dataKey="di" stroke="#D32F2F" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+          <Line type="monotone" dataKey="di" stroke="#DC2626" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
         </LineChart>
       </ResponsiveContainer>
     </Box>

@@ -23,7 +23,7 @@ export default function ReportPanel({ reportText = "", loading = false }) {
   return (
     <Box sx={{ mt: 3 }}>
       <Typography variant="h6" gutterBottom>故障周报</Typography>
-      <Paper variant="outlined" sx={{ p: 2, position: "relative", bgcolor: "grey.50" }}>
+      <Paper variant="outlined" sx={{ p: 2, position: "relative", bgcolor: "grey.100" }}>
         {reportText && (
           <Button variant="contained" size="small" onClick={handleCopy}
             sx={{ position: "absolute", top: 8, right: 8, fontSize: 12 }}>

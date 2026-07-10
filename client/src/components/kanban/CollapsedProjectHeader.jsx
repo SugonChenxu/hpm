@@ -6,7 +6,7 @@ import { TaskAlt } from "@mui/icons-material";
  * 严格对标原型：主题色横条 + ✓ + 项目名 + "全部完成 · 点击展开"
  */
 export default function CollapsedProjectHeader({ project, taskCount, onExpand }) {
-  const themeColor = project?.theme_color || "#1565C0";
+  const themeColor = project?.theme_color || "#1E40AF";
 
   return (
     <Box
@@ -14,7 +14,7 @@ export default function CollapsedProjectHeader({ project, taskCount, onExpand })
       sx={{
         background: "var(--color-background-primary, #fff)",
         borderRadius: "var(--border-radius-lg, 12px)",
-        border: "0.5px solid var(--color-border-tertiary, #e0e0e0)",
+        border: "0.5px solid var(--color-border-tertiary, #E2E8F0)",
         overflow: "hidden",
         cursor: "pointer",
       }}
@@ -30,7 +30,7 @@ export default function CollapsedProjectHeader({ project, taskCount, onExpand })
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <TaskAlt sx={{ color: "#52c41a", fontSize: 16 }} />
+          <TaskAlt sx={{ color: "#16A34A", fontSize: 16 }} />
           <Typography
             variant="body2"
             fontWeight={500}

@@ -44,11 +44,11 @@ const thStyle = (width) => ({
   textAlign: "left",
   fontWeight: 600,
   fontSize: "0.8rem",
-  borderBottom: "2px solid #BDBDBD",
+  borderBottom: "2px solid #CBD5E1",
   whiteSpace: "nowrap",
   position: "sticky",
   top: 0,
-  backgroundColor: "#F5F5F5",
+  backgroundColor: "#F8FAFC",
   zIndex: 1,
   userSelect: "none",
 });
@@ -585,7 +585,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
               ))}
             </colgroup>
             <thead>
-              <tr style={{ backgroundColor: "#F5F5F5" }}>
+              <tr style={{ backgroundColor: "#F8FAFC" }}>
                 {renderHeader("order", "序号", colWidths.order)}
                 {renderHeader("name", "任务名称", colWidths.name)}
                 {renderHeader("start", "开始时间", colWidths.start)}
@@ -615,7 +615,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
                     style={{
                       ...getRowStyle(task),
                       backgroundColor: rowBg,
-                      borderBottom: "1px solid #e0e0e0",
+                      borderBottom: "1px solid #E2E8F0",
                     }}
                     onContextMenu={(e) => onContextMenu(e, task)}
                     className="schedule-row"

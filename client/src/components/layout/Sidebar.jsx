@@ -5,8 +5,9 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Divider,
+  Typography,
   Box,
+  Button,
 } from "@mui/material";
 import {
   Dashboard,
@@ -20,21 +21,40 @@ import {
   EventNote,
 } from "@mui/icons-material";
 
-const DRAWER_WIDTH = 220;
+const DRAWER_WIDTH = 240;
 
-const NAV_ITEMS = [
-  { text: "项目概览", icon: <Dashboard />, path: "/dashboard" },
-  { text: "项目计划", icon: <CalendarMonth />, path: "/plans" },
-  { text: "待办事项", icon: <Checklist />, path: "/todos" },
-  { text: "本周会议", icon: <EventNote />, path: "/week-meetings" },
-  { text: "物料管理", icon: <Inventory />, path: "/materials" },
-  { text: "故障管理", icon: <BugReport />, path: "/issues" },
-  { text: "会议纪要", icon: <Group />, path: "/meetings" },
-  { text: "周报记录", icon: <Description />, path: "/reports" },
+/**
+ * Navigation items grouped into three sections for visual hierarchy.
+ * Each group has a label and a list of route items.
+ */
+const NAV_GROUPS = [
+  {
+    title: "项目管理",
+    items: [
+      { text: "项目概览", icon: <Dashboard />, path: "/dashboard" },
+      { text: "项目计划", icon: <CalendarMonth />, path: "/plans" },
+      { text: "待办事项", icon: <Checklist />, path: "/todos" },
+    ],
+  },
+  {
+    title: "协作沟通",
+    items: [
+      { text: "本周会议", icon: <EventNote />, path: "/week-meetings" },
+      { text: "会议纪要", icon: <Group />, path: "/meetings" },
+    ],
+  },
+  {
+    title: "数据管理",
+    items: [
+      { text: "物料管理", icon: <Inventory />, path: "/materials" },
+      { text: "故障管理", icon: <BugReport />, path: "/issues" },
+      { text: "周报记录", icon: <Description />, path: "/reports" },
+    ],
+  },
 ];
 
 /**
- * Sidebar navigation with 7 items + "New Project" button.
+ * Sidebar navigation with grouped items + "New Project" button.
  * Supports permanent (desktop) and temporary (mobile) Drawer variants.
  *
  * Props:
@@ -68,30 +88,94 @@ export default function Sidebar({
 
   const drawerContent = (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* Navigation items */}
-      <List sx={{ pt: 1, flexGrow: 1 }}>
-        {NAV_ITEMS.map((item) => (
-          <ListItemButton
-            key={item.path}
-            selected={isSelected(item.path)}
-            onClick={() => handleNavigate(item.path)}
-          >
-            <ListItemIcon>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.text} />
-          </ListItemButton>
+      {/* Grouped navigation items */}
+      <Box sx={{ flexGrow: 1, overflowY: "auto", py: 1 }}>
+        {NAV_GROUPS.map((group) => (
+          <Box key={group.title}>
+            {/* Group header */}
+            <Typography
+              variant="overline"
+              color="text.secondary"
+              sx={{
+                display: "block",
+                px: 2.5,
+                pt: 2,
+                pb: 0.5,
+                fontSize: "0.65rem",
+                letterSpacing: "0.08em",
+                fontWeight: 500,
+              }}
+            >
+              {group.title}
+            </Typography>
+            <List sx={{ py: 0 }}>
+              {group.items.map((item) => {
+                const selected = isSelected(item.path);
+                return (
+                  <ListItemButton
+                    key={item.path}
+                    selected={selected}
+                    onClick={() => handleNavigate(item.path)}
+                    sx={{
+                      mx: 1,
+                      my: 0.25,
+                      borderRadius: 1,
+                      py: 0.75,
+                      // 3px left accent bar — always rendered to avoid layout shift
+                      borderLeft: "3px solid",
+                      borderColor: selected ? "primary.main" : "transparent",
+                      bgcolor: selected
+                        ? "rgba(30, 64, 175, 0.08)"
+                        : "transparent",
+                      "&:hover": {
+                        bgcolor: selected
+                          ? "rgba(30, 64, 175, 0.08)"
+                          : "#F1F5F9",
+                      },
+                      "&.Mui-selected": {
+                        bgcolor: "rgba(30, 64, 175, 0.08)",
+                      },
+                      "&.Mui-selected:hover": {
+                        bgcolor: "rgba(30, 64, 175, 0.12)",
+                      },
+                    }}
+                  >
+                    <ListItemIcon
+                      sx={{
+                        color: selected ? "primary.main" : "text.secondary",
+                        minWidth: 36,
+                      }}
+                    >
+                      {item.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.text}
+                      primaryTypographyProps={{
+                        fontWeight: selected ? 600 : 500,
+                        fontSize: "0.875rem",
+                        color: selected ? "primary.main" : "text.primary",
+                      }}
+                    />
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          </Box>
         ))}
-      </List>
+      </Box>
 
-      {/* Separator + New Project button */}
-      <Divider />
-      <List>
-        <ListItemButton onClick={handleCreateClick}>
-          <ListItemIcon>
-            <Add />
-          </ListItemIcon>
-          <ListItemText primary="新建项目" />
-        </ListItemButton>
-      </List>
+      {/* Bottom "New Project" button */}
+      <Box sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}>
+        <Button
+          fullWidth
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={handleCreateClick}
+          sx={{ justifyContent: "flex-start" }}
+        >
+          新建项目
+        </Button>
+      </Box>
     </Box>
   );
 
