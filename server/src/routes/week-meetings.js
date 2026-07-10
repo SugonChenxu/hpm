@@ -5,6 +5,16 @@ const router = Router();
 
 const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 
+/** "YYYY-MM-DD" + days 天 → "YYYY-MM-DD"（按本地时间，避免时区偏移） */
+function addDaysToWeekKey(weekKey, days) {
+  const [y, m, d] = weekKey.split("-").map(Number);
+  const date = new Date(y, m - 1, d + days);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
 /** 解析 projects.meeting_time "周一 09:00-10:00" → { weekday, start_time, end_time } */
 function parseMeetingTime(s) {
   if (!s) return null;
@@ -52,14 +62,24 @@ router.get("/week-meetings", (req, res) => {
 // POST /week-meetings
 router.post("/week-meetings", (req, res) => {
   const { week_key, weekday, start_time, end_time, title } = req.body;
+  const weeks = Math.max(1, Math.min(52, parseInt(req.body.weeks, 10) || 1));
   if (!week_key || !weekday || !start_time || !end_time || !title) {
     return res.status(400).json({ ok: false, error: "缺少必填字段" });
   }
-  const info = db.prepare(
+  const insert = db.prepare(
     "INSERT INTO week_meetings (week_key, weekday, start_time, end_time, title) VALUES (?, ?, ?, ?, ?)"
-  ).run(week_key, weekday, start_time, end_time, title);
-  const meeting = db.prepare("SELECT * FROM week_meetings WHERE id = ?").get(info.lastInsertRowid);
-  res.json({ ok: true, data: meeting });
+  );
+  const getOne = db.prepare("SELECT * FROM week_meetings WHERE id = ?");
+  const created = [];
+  const tx = db.transaction(() => {
+    for (let i = 0; i < weeks; i++) {
+      const wk = addDaysToWeekKey(week_key, i * 7);
+      const info = insert.run(wk, weekday, start_time, end_time, title);
+      created.push(getOne.get(info.lastInsertRowid));
+    }
+  });
+  tx();
+  res.json({ ok: true, data: created });
 });
 
 // PUT /week-meetings/:id

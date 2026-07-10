@@ -149,7 +149,7 @@ export default function WeekMeetingPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [outputs, setOutputs] = useState({});
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-  const [form, setForm] = useState({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "" });
+  const [form, setForm] = useState({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1 });
 
   /** 行内 Popper 新建会议状态 */
   const [popper, setPopper] = useState({
@@ -159,6 +159,7 @@ export default function WeekMeetingPage() {
     startTime: "09:00",
     endTime: "10:00",
     title: "",
+    weeks: 1,
   });
 
   /** 拖拽状态 — ref 用于全局 mouseup 读取最新值，state 用于重新渲染高亮 */
@@ -210,10 +211,15 @@ export default function WeekMeetingPage() {
   const handleAdd = async () => {
     if (!form.title.trim()) return;
     try {
-      await api.weekMeetings.create({ week_key: weekKey, ...form });
-      setSnackbar({ open: true, message: "会议已添加", severity: "success" });
+      await api.weekMeetings.create({ week_key: weekKey, ...form, weeks: Number(form.weeks) || 1 });
+      const wk = Number(form.weeks) || 1;
+      setSnackbar({
+        open: true,
+        message: wk > 1 ? `会议已添加（持续 ${wk} 周）` : "会议已添加",
+        severity: "success",
+      });
       setAddOpen(false);
-      setForm({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "" });
+      setForm({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1 });
       load();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
@@ -270,6 +276,7 @@ export default function WeekMeetingPage() {
         startTime,
         endTime,
         title: "",
+        weeks: 1,
       });
       justOpenedRef.current = true;
       setTimeout(() => { justOpenedRef.current = false; }, 300);
@@ -293,9 +300,15 @@ export default function WeekMeetingPage() {
         start_time: popper.startTime,
         end_time: popper.endTime,
         title: popper.title,
+        weeks: Number(popper.weeks) || 1,
       });
-      setSnackbar({ open: true, message: "会议已添加", severity: "success" });
-      setPopper((p) => ({ ...p, open: false, title: "" }));
+      const wk = Number(popper.weeks) || 1;
+      setSnackbar({
+        open: true,
+        message: wk > 1 ? `会议已添加（持续 ${wk} 周）` : "会议已添加",
+        severity: "success",
+      });
+      setPopper((p) => ({ ...p, open: false, title: "", weeks: 1 }));
       load();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
@@ -309,7 +322,7 @@ export default function WeekMeetingPage() {
     if (popper.title.trim() && !addingRef.current) {
       handlePopperAdd();
     } else if (!addingRef.current) {
-      setPopper((p) => ({ ...p, open: false }));
+      setPopper((p) => ({ ...p, open: false, weeks: 1 }));
     }
   };
 
@@ -459,11 +472,25 @@ export default function WeekMeetingPage() {
                   if (popper.title.trim()) {
                     handlePopperAdd();
                   } else {
-                    setPopper((p) => ({ ...p, open: false }));
+                    setPopper((p) => ({ ...p, open: false, title: "", weeks: 1 }));
                   }
                 }, 150);
               }}
             />
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+              <Typography variant="caption" color="text.secondary">持续周数</Typography>
+              <TextField
+                type="number"
+                size="small"
+                value={popper.weeks}
+                onChange={(e) =>
+                  setPopper((p) => ({ ...p, weeks: Math.max(1, Math.min(52, parseInt(e.target.value, 10) || 1)) }))
+                }
+                onKeyDown={(e) => { if (e.key === "Enter") handlePopperAdd(); }}
+                inputProps={{ min: 1, max: 52, style: { width: 44, textAlign: "center" } }}
+              />
+              <Typography variant="caption" color="text.secondary">周</Typography>
+            </Box>
           </Paper>
         </Popper>
       </ClickAwayListener>
@@ -485,6 +512,19 @@ export default function WeekMeetingPage() {
               </TextField>
             </Box>
             <TextField label="会议名称" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} autoFocus />
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Typography variant="caption" color="text.secondary">持续周数</Typography>
+              <TextField
+                type="number"
+                size="small"
+                value={form.weeks}
+                onChange={(e) =>
+                  setForm({ ...form, weeks: Math.max(1, Math.min(52, parseInt(e.target.value, 10) || 1)) })
+                }
+                inputProps={{ min: 1, max: 52, style: { width: 44, textAlign: "center" } }}
+              />
+              <Typography variant="caption" color="text.secondary">周</Typography>
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
