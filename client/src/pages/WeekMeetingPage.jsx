@@ -358,13 +358,13 @@ export default function WeekMeetingPage() {
         <Box sx={{
           p: 0, bgcolor: HEADER_BG, borderBottom: "1px solid",
           borderColor: "divider", position: "relative",
-          height: 36, overflow: "hidden",
+          height: 40, overflow: "hidden",
         }}>
-          <Box sx={{ position: "absolute", top: 3, left: 6, fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
-            星期
-          </Box>
-          <Box sx={{ position: "absolute", bottom: 3, right: 6, fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
+          <Box sx={{ position: "absolute", top: 6, left: 10, fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
             时间
+          </Box>
+          <Box sx={{ position: "absolute", bottom: 6, right: 10, fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
+            星期
           </Box>
           <svg width="100%" height="100%" style={{ position: "absolute", top: 0, left: 0 }}>
             <line x1="0" y1="0" x2="100%" y2="100%" stroke="#D1D5DB" strokeWidth="1" />
