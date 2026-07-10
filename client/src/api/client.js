@@ -140,7 +140,7 @@ export const api = {
     updateConnection: (data) =>
       request("/mantis/connection", { method: "PUT", body: JSON.stringify(data) }),
   },
-  // 本周会议
+  // 会议计划
   weekMeetings: {
     list: (week) => request(`/week-meetings?week=${week}`),
     create: (data) => request("/week-meetings", { method: "POST", body: JSON.stringify(data) }),

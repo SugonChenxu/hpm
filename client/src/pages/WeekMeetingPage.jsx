@@ -44,6 +44,16 @@ function weekRange(mondayStr) {
   return `${d.getMonth() + 1}/${d.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`;
 }
 
+/** 周一日期 → ISO 周号 "2026年 第28周" */
+function getWeekNumber(mondayStr) {
+  const d = new Date(mondayStr);
+  const thursday = new Date(d);
+  thursday.setDate(d.getDate() + 3);
+  const yearStart = new Date(thursday.getFullYear(), 0, 1);
+  const weekNum = Math.ceil(((thursday - yearStart) / 86400000 + 1) / 7);
+  return `${thursday.getFullYear()}年 第${weekNum}周`;
+}
+
 /** 时间 → 行索引(0-based, 09:00=0, 09:30=1, ...) */
 function timeToSlotIndex(time) {
   const [h, m] = time.split(":").map(Number);
@@ -334,13 +344,16 @@ export default function WeekMeetingPage() {
   return (
     <Box>
       {/* 顶部栏 */}
-      <PageHeader title="本周会议" subtitle="周例会安排与输出物">
+      <PageHeader title="会议计划" subtitle="规划与调整各周会议安排">
         <IconButton onClick={() => changeWeek(-1)}><ChevronLeft /></IconButton>
-        <Typography variant="body2" sx={{ minWidth: 100, textAlign: "center" }}>
+        <Typography variant="body2" sx={{ minWidth: 160, textAlign: "center" }}>
           {weekRange(weekKey)}
         </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 100, textAlign: "center" }}>
+          {getWeekNumber(weekKey)}
+        </Typography>
         <IconButton onClick={() => changeWeek(1)}><ChevronRight /></IconButton>
-        <Button size="small" onClick={() => setWeekKey(getMonday(new Date()))}>本周</Button>
+        <Button size="small" variant="outlined" onClick={() => setWeekKey(getMonday(new Date()))}>回到本周</Button>
         <Button variant="contained" startIcon={<Add />} onClick={() => setAddOpen(true)}>添加会议</Button>
       </PageHeader>
 

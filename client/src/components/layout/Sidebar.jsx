@@ -39,7 +39,7 @@ const NAV_GROUPS = [
   {
     title: "协作沟通",
     items: [
-      { text: "本周会议", icon: <EventNote />, path: "/week-meetings" },
+      { text: "会议计划", icon: <EventNote />, path: "/week-meetings" },
       { text: "会议纪要", icon: <Group />, path: "/meetings" },
     ],
   },
