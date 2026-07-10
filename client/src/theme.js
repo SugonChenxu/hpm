@@ -1,23 +1,24 @@
 import { createTheme } from "@mui/material";
 
 /**
- * HPM Design System Theme
+ * HPM Design System Theme — Dark Tech Purple + Glassmorphism
  *
- * Color palette: deep blue primary + slate neutral tones.
- * Shape: 8px global border radius.
- * Shadows: soft rgba(15,23,42,...) based.
+ * Color palette: deep violet-black backgrounds + violet primary accent.
+ * Glassmorphism: semi-transparent surfaces with backdrop-filter blur.
+ * Shape: 10px global border radius.
+ * Shadows: deep rgba(0,0,0,...) based for dark mode depth.
  *
  * Exported `theme` is consumed by ThemeProvider in main.jsx.
  */
 const theme = createTheme({
   palette: {
-    mode: "light",
+    mode: "dark",
 
-    // ── Primary — deep blue ──
+    // ── Primary — violet-500 (brighter on dark backgrounds) ──
     primary: {
-      main: "#1E40AF",
-      light: "#3B82F6",
-      dark: "#1E3A8A",
+      main: "#8B5CF6",
+      light: "#A78BFA",
+      dark: "#7C3AED",
       contrastText: "#FFFFFF",
     },
 
@@ -29,68 +30,69 @@ const theme = createTheme({
       contrastText: "#FFFFFF",
     },
 
-    // ── Semantic colors ──
+    // ── Semantic colors — vivid on dark ──
     success: {
-      main: "#16A34A",
-      light: "#22C55E",
-      dark: "#15803D",
+      main: "#10B981",
+      light: "#34D399",
+      dark: "#059669",
       contrastText: "#FFFFFF",
     },
     warning: {
-      main: "#D97706",
-      light: "#F59E0B",
-      dark: "#B45309",
+      main: "#F59E0B",
+      light: "#FBBF24",
+      dark: "#D97706",
       contrastText: "#FFFFFF",
     },
     error: {
-      main: "#DC2626",
-      light: "#EF4444",
-      dark: "#B91C1C",
+      main: "#EF4444",
+      light: "#F87171",
+      dark: "#DC2626",
       contrastText: "#FFFFFF",
     },
     info: {
-      main: "#0EA5E9",
-      light: "#38BDF8",
-      dark: "#0284C7",
+      main: "#3B82F6",
+      light: "#60A5FA",
+      dark: "#2563EB",
       contrastText: "#FFFFFF",
     },
 
-    // ── Neutral — slate warm-grey (replaces MUI default grey) ──
+    // ── Neutral — purple-tinted dark grey (replaces MUI default grey) ──
     grey: {
-      50: "#F8FAFC",
-      100: "#F1F5F9",
-      200: "#E2E8F0",
-      300: "#CBD5E1",
-      400: "#94A3B8",
-      500: "#64748B",
-      600: "#475569",
-      700: "#334155",
-      800: "#1E293B",
-      900: "#0F172A",
-      A100: "#F1F5F9",
-      A200: "#E2E8F0",
-      A400: "#94A3B8",
-      A700: "#334155",
+      50: "#1A1428",
+      100: "#221A33",
+      200: "#2A2040",
+      300: "#3A2E52",
+      400: "#4A3D66",
+      500: "#5B4D7A",
+      600: "#6B5B8A",
+      700: "#7B6B9A",
+      800: "#8B7BAA",
+      900: "#9B8BBA",
+      A100: "#221A33",
+      A200: "#2A2040",
+      A400: "#4A3D66",
+      A700: "#7B6B9A",
     },
 
-    // ── Background & text layers ──
+    // ── Background & text layers — deep purple-black ──
     background: {
-      default: "#F8FAFC",
-      paper: "#FFFFFF",
+      default: "#0B0815",
+      paper: "#15101F",
     },
 
     text: {
-      primary: "#0F172A",
-      secondary: "#64748B",
-      disabled: "#94A3B8",
+      primary: "#F5F3FF",
+      secondary: "#A89BC4",
+      disabled: "#6B5B8A",
     },
 
-    divider: "#E2E8F0",
+    divider: "rgba(255,255,255,0.08)",
 
-    // ── Custom action hover ──
+    // ── Custom action hover — subtle purple tint ──
     action: {
-      hover: "#F1F5F9",
-      selected: "rgba(30, 64, 175, 0.08)",
+      hover: "rgba(255,255,255,0.05)",
+      selected: "rgba(139,92,246,0.12)",
+      focus: "rgba(139,92,246,0.12)",
     },
   },
 
@@ -99,12 +101,12 @@ const theme = createTheme({
     fontFamily:
       '"Inter", "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
     fontSize: 14,
-    h1: { fontWeight: 700, fontSize: "2.5rem", lineHeight: 1.2 },
-    h2: { fontWeight: 700, fontSize: "2rem", lineHeight: 1.25 },
-    h3: { fontWeight: 700, fontSize: "1.75rem", lineHeight: 1.3 },
-    h4: { fontWeight: 700, fontSize: "1.5rem", lineHeight: 1.35 },
-    h5: { fontWeight: 700, fontSize: "1.25rem", lineHeight: 1.4 },
-    h6: { fontWeight: 700, fontSize: "1.125rem", lineHeight: 1.4 },
+    h1: { fontWeight: 700, fontSize: "2.5rem", lineHeight: 1.2, letterSpacing: "-0.02em" },
+    h2: { fontWeight: 700, fontSize: "2rem", lineHeight: 1.25, letterSpacing: "-0.02em" },
+    h3: { fontWeight: 700, fontSize: "1.75rem", lineHeight: 1.3, letterSpacing: "-0.02em" },
+    h4: { fontWeight: 700, fontSize: "1.5rem", lineHeight: 1.35, letterSpacing: "-0.01em" },
+    h5: { fontWeight: 700, fontSize: "1.25rem", lineHeight: 1.4, letterSpacing: "-0.02em" },
+    h6: { fontWeight: 700, fontSize: "1.125rem", lineHeight: 1.4, letterSpacing: "-0.01em" },
     subtitle1: { fontWeight: 600, fontSize: "1rem", lineHeight: 1.5 },
     subtitle2: { fontWeight: 600, fontSize: "0.875rem", lineHeight: 1.5 },
     body1: { fontWeight: 400, fontSize: "0.875rem", lineHeight: 1.5 },
@@ -121,54 +123,57 @@ const theme = createTheme({
 
   // ── Shape ──
   shape: {
-    borderRadius: 8,
+    borderRadius: 10,
   },
 
-  // ── Soft shadows (rgba(15,23,42,...) base) ──
+  // ── Deep shadows for dark mode depth ──
   shadows: [
     "none",
-    "0 1px 2px 0 rgba(15,23,42,0.04)",
-    "0 1px 3px 0 rgba(15,23,42,0.08), 0 1px 2px 0 rgba(15,23,42,0.04)",
-    "0 4px 6px -1px rgba(15,23,42,0.08), 0 2px 4px -2px rgba(15,23,42,0.04)",
-    "0 10px 15px -3px rgba(15,23,42,0.08), 0 4px 6px -4px rgba(15,23,42,0.04)",
-    "0 12px 20px -4px rgba(15,23,42,0.10), 0 4px 8px -4px rgba(15,23,42,0.04)",
-    "0 16px 24px -6px rgba(15,23,42,0.10), 0 6px 10px -6px rgba(15,23,42,0.04)",
-    "0 20px 28px -8px rgba(15,23,42,0.12), 0 8px 12px -8px rgba(15,23,42,0.04)",
-    "0 24px 32px -8px rgba(15,23,42,0.12), 0 10px 14px -10px rgba(15,23,42,0.04)",
-    "0 28px 36px -10px rgba(15,23,42,0.14), 0 12px 16px -12px rgba(15,23,42,0.04)",
-    "0 32px 40px -12px rgba(15,23,42,0.14), 0 14px 18px -14px rgba(15,23,42,0.04)",
-    "0 36px 44px -14px rgba(15,23,42,0.16), 0 16px 20px -16px rgba(15,23,42,0.04)",
-    "0 40px 48px -16px rgba(15,23,42,0.16), 0 18px 24px -18px rgba(15,23,42,0.04)",
-    "0 44px 52px -18px rgba(15,23,42,0.18), 0 20px 28px -20px rgba(15,23,42,0.04)",
-    "0 48px 56px -20px rgba(15,23,42,0.18), 0 22px 32px -22px rgba(15,23,42,0.04)",
-    "0 52px 60px -22px rgba(15,23,42,0.20), 0 24px 36px -24px rgba(15,23,42,0.04)",
-    "0 56px 64px -24px rgba(15,23,42,0.20), 0 26px 40px -26px rgba(15,23,42,0.04)",
-    "0 60px 68px -26px rgba(15,23,42,0.22), 0 28px 44px -28px rgba(15,23,42,0.04)",
-    "0 64px 72px -28px rgba(15,23,42,0.22), 0 30px 48px -30px rgba(15,23,42,0.04)",
-    "0 68px 76px -30px rgba(15,23,42,0.24), 0 32px 52px -32px rgba(15,23,42,0.04)",
-    "0 72px 80px -32px rgba(15,23,42,0.24), 0 34px 56px -34px rgba(15,23,42,0.04)",
-    "0 76px 84px -34px rgba(15,23,42,0.26), 0 36px 60px -36px rgba(15,23,42,0.04)",
-    "0 80px 88px -36px rgba(15,23,42,0.26), 0 38px 64px -38px rgba(15,23,42,0.04)",
-    "0 84px 92px -38px rgba(15,23,42,0.28), 0 40px 68px -40px rgba(15,23,42,0.04)",
-    "0 88px 96px -40px rgba(15,23,42,0.28), 0 42px 72px -42px rgba(15,23,42,0.04)",
+    "0 1px 2px rgba(0,0,0,0.3)",
+    "0 2px 4px rgba(0,0,0,0.3)",
+    "0 4px 8px rgba(0,0,0,0.4)",
+    "0 8px 16px rgba(0,0,0,0.4)",
+    "0 12px 24px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
+    "0 16px 32px rgba(0,0,0,0.5)",
   ],
 
-  // ── Component default overrides ──
+  // ── Component default overrides — glassmorphism + dark mode ──
   components: {
     MuiCssBaseline: {
       styleOverrides: {
         body: {
-          backgroundColor: "#F8FAFC",
-          scrollbarColor: "#CBD5E1 #F1F5F9",
+          backgroundColor: "#0B0815",
+          scrollbarColor: "#3A2E52 #0B0815",
           "&::-webkit-scrollbar": { width: 8, height: 8 },
-          "&::-webkit-scrollbar-track": { background: "#F1F5F9" },
+          "&::-webkit-scrollbar-track": { background: "#0B0815" },
           "&::-webkit-scrollbar-thumb": {
-            backgroundColor: "#CBD5E1",
+            backgroundColor: "#3A2E52",
             borderRadius: 4,
+            "&:hover": { backgroundColor: "#4A3D66" },
           },
-          "&::-webkit-scrollbar-thumb:hover": {
-            backgroundColor: "#94A3B8",
-          },
+        },
+        // Ensure all text uses our palette by default
+        "*": {
+          scrollbarWidth: "thin",
+          scrollbarColor: "#3A2E52 transparent",
         },
       },
     },
@@ -177,11 +182,12 @@ const theme = createTheme({
       defaultProps: { elevation: 0 },
       styleOverrides: {
         root: {
-          backgroundColor: "#FFFFFF",
-          color: "#0F172A",
-          boxShadow:
-            "0 1px 3px 0 rgba(15,23,42,0.08), 0 1px 2px 0 rgba(15,23,42,0.04)",
-          borderBottom: "1px solid #E2E8F0",
+          backgroundColor: "rgba(11,8,21,0.7)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
+          boxShadow: "none",
+          color: "#F5F3FF",
         },
       },
     },
@@ -189,8 +195,10 @@ const theme = createTheme({
     MuiDrawer: {
       styleOverrides: {
         paper: {
-          backgroundColor: "#FFFFFF",
-          borderRight: "1px solid #E2E8F0",
+          backgroundColor: "rgba(21,16,31,0.8)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
         },
       },
     },
@@ -198,15 +206,31 @@ const theme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
+          backgroundColor: "rgba(255,255,255,0.03)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          border: "1px solid rgba(255,255,255,0.08)",
           borderRadius: 12,
-          boxShadow: "0 1px 2px 0 rgba(15,23,42,0.04)",
-          border: "1px solid #E2E8F0",
-          transition:
-            "box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out",
+          boxShadow: "none",
+          transition: "all 0.25s cubic-bezier(0.25,1,0.5,1)",
           "&:hover": {
-            boxShadow:
-              "0 4px 6px -1px rgba(15,23,42,0.08), 0 2px 4px -2px rgba(15,23,42,0.04)",
+            backgroundColor: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(139,92,246,0.3)",
+            transform: "translateY(-2px)",
+            boxShadow: "0 8px 24px rgba(139,92,246,0.15)",
           },
+        },
+      },
+    },
+
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundColor: "rgba(21,16,31,0.6)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          borderRadius: 12,
+          backgroundImage: "none",
         },
       },
     },
@@ -217,13 +241,47 @@ const theme = createTheme({
           borderRadius: 8,
           textTransform: "none",
           fontWeight: 600,
+          transition: "all 0.15s cubic-bezier(0.25,1,0.5,1)",
+        },
+        containedPrimary: {
+          background: "linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)",
+          boxShadow: "0 4px 12px rgba(139,92,246,0.3)",
+          "&:hover": {
+            background: "linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)",
+            boxShadow: "0 6px 20px rgba(139,92,246,0.4)",
+            transform: "translateY(-1px)",
+          },
+          "&:active": { transform: "translateY(0) scale(0.98)" },
+        },
+        outlined: {
+          borderColor: "rgba(139,92,246,0.3)",
+          color: "#A78BFA",
+          "&:hover": {
+            borderColor: "#8B5CF6",
+            backgroundColor: "rgba(139,92,246,0.08)",
+          },
         },
       },
     },
 
-    MuiPaper: {
+    MuiListItemButton: {
       styleOverrides: {
-        root: { borderRadius: 12 },
+        root: {
+          borderRadius: 8,
+          margin: "2px 8px",
+          transition: "all 0.2s cubic-bezier(0.25,1,0.5,1)",
+          "&.Mui-selected": {
+            backgroundColor: "rgba(139,92,246,0.12)",
+            color: "#A78BFA",
+            "& .MuiListItemIcon-root": { color: "#A78BFA" },
+          },
+          "&.Mui-selected:hover": {
+            backgroundColor: "rgba(139,92,246,0.18)",
+          },
+          "&:hover": {
+            backgroundColor: "rgba(255,255,255,0.05)",
+          },
+        },
       },
     },
 
@@ -235,8 +293,19 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 8,
+          transition: "all 0.2s cubic-bezier(0.25,1,0.5,1)",
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: "rgba(255,255,255,0.1)",
+          },
           "&:hover .MuiOutlinedInput-notchedOutline": {
-            borderColor: "#CBD5E1",
+            borderColor: "rgba(139,92,246,0.4)",
+          },
+          "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+            borderColor: "#8B5CF6",
+            borderWidth: 2,
+          },
+          "&.Mui-focused": {
+            boxShadow: "0 0 0 4px rgba(139,92,246,0.1)",
           },
         },
       },
@@ -244,13 +313,22 @@ const theme = createTheme({
 
     MuiChip: {
       styleOverrides: {
-        root: { borderRadius: 6, fontWeight: 500 },
+        root: {
+          borderRadius: 6,
+          fontWeight: 500,
+        },
       },
     },
 
     MuiDialog: {
       styleOverrides: {
-        paper: { borderRadius: 16 },
+        paper: {
+          backgroundColor: "rgba(21,16,31,0.85)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 16,
+        },
       },
     },
 
@@ -260,19 +338,13 @@ const theme = createTheme({
       },
     },
 
-    MuiListItemButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 8,
-          transition: "background-color 0.15s ease-in-out",
-        },
-      },
-    },
-
     MuiTooltip: {
       styleOverrides: {
         tooltip: {
-          backgroundColor: "#1E293B",
+          backgroundColor: "rgba(21,16,31,0.9)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          border: "1px solid rgba(255,255,255,0.08)",
           fontSize: "0.75rem",
           borderRadius: 6,
         },
@@ -282,10 +354,81 @@ const theme = createTheme({
     MuiMenu: {
       styleOverrides: {
         paper: {
+          backgroundColor: "rgba(21,16,31,0.9)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
           borderRadius: 8,
-          boxShadow:
-            "0 4px 6px -1px rgba(15,23,42,0.08), 0 2px 4px -2px rgba(15,23,42,0.04)",
-          border: "1px solid #E2E8F0",
+          border: "1px solid rgba(255,255,255,0.08)",
+        },
+      },
+    },
+
+    MuiSnackbar: {
+      styleOverrides: {
+        root: { zIndex: 1400 },
+      },
+    },
+
+    MuiTableCell: {
+      styleOverrides: {
+        root: {
+          borderColor: "rgba(255,255,255,0.06)",
+        },
+        head: {
+          backgroundColor: "rgba(255,255,255,0.03)",
+          color: "#F5F3FF",
+          fontWeight: 600,
+        },
+      },
+    },
+
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          transition: "all 0.15s cubic-bezier(0.25,1,0.5,1)",
+          "&:hover": {
+            backgroundColor: "rgba(139,92,246,0.12)",
+          },
+        },
+      },
+    },
+
+    MuiCircularProgress: {
+      styleOverrides: {
+        root: { color: "#8B5CF6" },
+      },
+    },
+
+    MuiSwitch: {
+      styleOverrides: {
+        root: {
+          "& .MuiSwitch-switchBase.Mui-checked": {
+            color: "#8B5CF6",
+            "& + .MuiSwitch-track": { backgroundColor: "rgba(139,92,246,0.4)" },
+          },
+        },
+      },
+    },
+
+    MuiCheckbox: {
+      styleOverrides: {
+        root: {
+          color: "rgba(255,255,255,0.3)",
+          "&.Mui-checked": { color: "#8B5CF6" },
+        },
+      },
+    },
+
+    MuiDivider: {
+      styleOverrides: {
+        root: { borderColor: "rgba(255,255,255,0.08)" },
+      },
+    },
+
+    MuiAlert: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
         },
       },
     },

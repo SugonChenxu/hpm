@@ -54,17 +54,18 @@ export default function Layout() {
             <MenuIcon />
           </IconButton>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexGrow: 1 }}>
-            {/* Logo — blue rounded square with "H" monogram */}
+            {/* Logo — violet gradient rounded square with "H" monogram */}
             <Box
               sx={{
                 width: 32,
                 height: 32,
                 borderRadius: 2,
-                bgcolor: "primary.main",
+                background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
+                boxShadow: "0 4px 12px rgba(139,92,246,0.3)",
               }}
             >
               <Typography sx={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1rem", lineHeight: 1 }}>
@@ -90,6 +91,7 @@ export default function Layout() {
 
       <Box
         component="main"
+        className="page-enter"
         sx={{ flexGrow: 1, mt: 8, p: { xs: 2, md: 3 }, maxWidth: 1280, mx: "auto" }}
       >
         <Outlet context={{ openCreateDialog }} />

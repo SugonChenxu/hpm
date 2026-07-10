@@ -7,8 +7,8 @@ import api from "../../api/client";
 import { useProjectContext } from "../../context/ProjectContext";
 
 const PALETTE = [
-  "#1E40AF", "#16A34A", "#D97706", "#7C3AED", "#DC2626",
-  "#0EA5E9", "#6D28D9", "#EA580C", "#3730A3", "#0D9488",
+  "#8B5CF6", "#10B981", "#F59E0B", "#7C3AED", "#EF4444",
+  "#3B82F6", "#6D28D9", "#EA580C", "#3730A3", "#0D9488",
 ];
 
 const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];

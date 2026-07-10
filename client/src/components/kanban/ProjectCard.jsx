@@ -45,7 +45,7 @@ function InfoRow({ label, value }) {
  */
 export default function ProjectCard({ project, tasks = [], onEdit }) {
   const [contextMenu, setContextMenu] = useState(null);
-  const themeColor = project.theme_color || "#1E40AF";
+  const themeColor = project.theme_color || "#8B5CF6";
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
   );
@@ -78,16 +78,8 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
         sx={{
           position: "relative",
           borderRadius: 2,
-          boxShadow: "0 1px 2px 0 rgba(15,23,42,0.04)",
-          border: "1px solid",
-          borderColor: "divider",
           overflow: "hidden",
           cursor: "context-menu",
-          transition: "box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out",
-          "&:hover": {
-            boxShadow:
-              "0 4px 6px -1px rgba(15,23,42,0.08), 0 2px 4px -2px rgba(15,23,42,0.04)",
-          },
         }}
       >
         {/* 左侧 4px 彩色竖条 */}

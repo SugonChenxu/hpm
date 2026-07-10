@@ -97,7 +97,7 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                     </Typography>
                     <Typography
                       variant="caption"
-                      sx={{ color: "#16A34A", fontSize: 10, flexShrink: 0 }}
+                      sx={{ color: "success.main", fontSize: 10, flexShrink: 0 }}
                     >
                       {fmtDone(task.completed_at)}
                     </Typography>

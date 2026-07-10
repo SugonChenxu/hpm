@@ -361,7 +361,7 @@ export default function SchedulePage() {
   // --- Render: no project selected ---
   if (!projectId) {
     return (
-      <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
+      <Box sx={{ bgcolor: "background.default", minHeight: "100vh", p: 2 }}>
         <Box sx={{ mb: 2 }}>
           <ProjectSelector />
         </Box>
@@ -377,7 +377,7 @@ export default function SchedulePage() {
   // --- Render: loading ---
   if (loading) {
     return (
-      <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
+      <Box sx={{ bgcolor: "background.default", minHeight: "100vh", p: 2 }}>
         <Box sx={{ mb: 2 }}>
           <ProjectSelector />
         </Box>
@@ -388,7 +388,7 @@ export default function SchedulePage() {
 
   // --- Render: schedule table ---
   return (
-    <Box sx={{ bgcolor: "#FAFBFC", minHeight: "100vh", p: 2 }}>
+    <Box sx={{ bgcolor: "background.default", minHeight: "100vh", p: 2 }}>
       {/* Project selector */}
       <Box sx={{ mb: 2 }}>
         <ProjectSelector />

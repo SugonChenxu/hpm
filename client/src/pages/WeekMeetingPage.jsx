@@ -291,10 +291,10 @@ export default function WeekMeetingPage() {
         fontSize: "0.75rem",
       }}>
         {/* 表头 */}
-        <Box sx={{ p: 0.5, bgcolor: "grey.100", borderBottom: "1px solid", borderColor: "divider" }} />
+        <Box sx={{ p: 0.5, bgcolor: "rgba(255,255,255,0.04)", borderBottom: "1px solid", borderColor: "divider" }} />
         {WEEKDAYS.map((d) => (
           <Box key={d} sx={{
-            p: 0.5, textAlign: "center", fontWeight: 600, bgcolor: "grey.100",
+            p: 0.5, textAlign: "center", fontWeight: 600, bgcolor: "rgba(255,255,255,0.04)",
             borderBottom: "1px solid", borderLeft: "1px solid", borderColor: "divider",
           }}>
             {d}
@@ -318,7 +318,7 @@ export default function WeekMeetingPage() {
         {/* 输出物行 — 表格底部 */}
         <Box sx={{
           p: 0.5, borderTop: "2px solid", borderColor: "divider",
-          bgcolor: "grey.100", display: "flex", alignItems: "flex-start",
+          bgcolor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "flex-start",
           justifyContent: "center", pt: 1.5,
         }}>
           <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ fontSize: "0.72rem" }}>
@@ -328,7 +328,7 @@ export default function WeekMeetingPage() {
         {WEEKDAYS.map((d) => (
           <Box key={`out-${d}`} sx={{
             p: 0.5, borderTop: "2px solid", borderLeft: "1px solid",
-            borderColor: "divider", bgcolor: "grey.100",
+            borderColor: "divider", bgcolor: "rgba(255,255,255,0.04)",
           }}>
             <TextField
               multiline
@@ -464,7 +464,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
               p: 0.25,
               cursor: isEmpty ? "pointer" : "default",
               transition: "background-color 0.15s",
-              bgcolor: inDragRange ? "rgba(25, 118, 210, 0.15)" : "transparent",
+              bgcolor: inDragRange ? "rgba(139,92,246,0.15)" : "transparent",
               "&:hover": (isEmpty && !dragState.active) ? { bgcolor: "action.hover" } : {},
               userSelect: dragState.active ? "none" : undefined,
             }}
@@ -472,7 +472,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
             {meetings.map((m) => {
               const span = meetingSpan(m.start_time, m.end_time);
               const isProject = m.source === "project";
-              const color = isProject ? (m.theme_color || "#1E40AF") : "#1E40AF";
+              const color = isProject ? (m.theme_color || "#8B5CF6") : "#8B5CF6";
               return (
                 <Tooltip key={m.id || m.title} title={m.title} arrow disableInteractive>
                   <Box

@@ -44,11 +44,12 @@ const thStyle = (width) => ({
   textAlign: "left",
   fontWeight: 600,
   fontSize: "0.8rem",
-  borderBottom: "2px solid #CBD5E1",
+  borderBottom: "2px solid rgba(255,255,255,0.12)",
   whiteSpace: "nowrap",
   position: "sticky",
   top: 0,
-  backgroundColor: "#F8FAFC",
+  backgroundColor: "rgba(255,255,255,0.04)",
+  color: "#F5F3FF",
   zIndex: 1,
   userSelect: "none",
 });
@@ -57,7 +58,7 @@ const tdStyle = (align) => ({
   padding: "2px 6px",
   textAlign: align || "left",
   fontSize: "0.8rem",
-  borderBottom: "1px solid #e8e8e8",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
 });
 
 export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskUpdate, onPredecessorSave, onBgColorSave, predTriggerTaskId, onPredTriggerHandled }) {
@@ -556,7 +557,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
   // ===================== 空状态 =====================
   if (visibleTasks.length === 0 && tasks.length === 0) {
     return (
-      <Card elevation={1} sx={{ borderRadius: 2, p: 6, textAlign: "center", bgcolor: "#FAFBFC" }}>
+      <Card elevation={1} sx={{ borderRadius: 2, p: 6, textAlign: "center", bgcolor: "rgba(255,255,255,0.02)" }}>
         <Typography variant="h6" color="text.secondary" gutterBottom>
           📋 该项目的排期数据为空
         </Typography>
@@ -585,7 +586,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
               ))}
             </colgroup>
             <thead>
-              <tr style={{ backgroundColor: "#F8FAFC" }}>
+              <tr style={{ backgroundColor: "rgba(255,255,255,0.04)" }}>
                 {renderHeader("order", "序号", colWidths.order)}
                 {renderHeader("name", "任务名称", colWidths.name)}
                 {renderHeader("start", "开始时间", colWidths.start)}
@@ -604,8 +605,8 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
                 const seqNum = idx + 1;
 
                 let rowBg = "transparent";
-                if (isPhase) rowBg = "#E8F0FE";
-                else if (isNode) rowBg = "#FFF8E1";
+                if (isPhase) rowBg = "rgba(139,92,246,0.08)";
+                else if (isNode) rowBg = "rgba(245,158,11,0.08)";
                 const customBg = getBgColor(task);
                 if (customBg) rowBg = customBg;
 
@@ -615,7 +616,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
                     style={{
                       ...getRowStyle(task),
                       backgroundColor: rowBg,
-                      borderBottom: "1px solid #E2E8F0",
+                      borderBottom: "1px solid rgba(255,255,255,0.06)",
                     }}
                     onContextMenu={(e) => onContextMenu(e, task)}
                     className="schedule-row"

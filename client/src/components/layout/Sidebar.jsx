@@ -125,18 +125,18 @@ export default function Sidebar({
                       borderLeft: "3px solid",
                       borderColor: selected ? "primary.main" : "transparent",
                       bgcolor: selected
-                        ? "rgba(30, 64, 175, 0.08)"
+                        ? "rgba(139,92,246,0.12)"
                         : "transparent",
                       "&:hover": {
                         bgcolor: selected
-                          ? "rgba(30, 64, 175, 0.08)"
-                          : "#F1F5F9",
+                          ? "rgba(139,92,246,0.12)"
+                          : "rgba(255,255,255,0.05)",
                       },
                       "&.Mui-selected": {
-                        bgcolor: "rgba(30, 64, 175, 0.08)",
+                        bgcolor: "rgba(139,92,246,0.12)",
                       },
                       "&.Mui-selected:hover": {
-                        bgcolor: "rgba(30, 64, 175, 0.12)",
+                        bgcolor: "rgba(139,92,246,0.18)",
                       },
                     }}
                   >
@@ -168,7 +168,7 @@ export default function Sidebar({
       <Box sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}>
         <Button
           fullWidth
-          variant="outlined"
+          variant="contained"
           startIcon={<Add />}
           onClick={handleCreateClick}
           sx={{ justifyContent: "flex-start" }}

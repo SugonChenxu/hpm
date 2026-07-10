@@ -13,11 +13,19 @@ export default function DITrendChart({ data = [], loading = false }) {
       <Typography variant="h6" gutterBottom>DI 趋势</Typography>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip formatter={(value) => [`DI ${value}`, ""]} />
-          <Line type="monotone" dataKey="di" stroke="#DC2626" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+          <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#A89BC4" }} angle={-45} textAnchor="end" height={60} />
+          <YAxis tick={{ fontSize: 12, fill: "#A89BC4" }} />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "rgba(21,16,31,0.9)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 8,
+              color: "#F5F3FF",
+            }}
+            formatter={(value) => [`DI ${value}`, ""]}
+          />
+          <Line type="monotone" dataKey="di" stroke="#EF4444" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 4 }} />
         </LineChart>
       </ResponsiveContainer>
     </Box>
