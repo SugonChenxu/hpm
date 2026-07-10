@@ -125,18 +125,18 @@ export default function Sidebar({
                       borderLeft: "3px solid",
                       borderColor: selected ? "primary.main" : "transparent",
                       bgcolor: selected
-                        ? "rgba(139,92,246,0.12)"
+                        ? "rgba(124,58,237,0.08)"
                         : "transparent",
                       "&:hover": {
                         bgcolor: selected
-                          ? "rgba(139,92,246,0.12)"
-                          : "rgba(255,255,255,0.05)",
+                          ? "rgba(124,58,237,0.12)"
+                          : "#F3F4F6",
                       },
                       "&.Mui-selected": {
-                        bgcolor: "rgba(139,92,246,0.12)",
+                        bgcolor: "rgba(124,58,237,0.08)",
                       },
                       "&.Mui-selected:hover": {
-                        bgcolor: "rgba(139,92,246,0.18)",
+                        bgcolor: "rgba(124,58,237,0.12)",
                       },
                     }}
                   >

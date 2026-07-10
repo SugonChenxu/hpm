@@ -13,13 +13,14 @@ import {
   Chip,
   TextField,
   Button,
-  CircularProgress,
   MenuItem,
   Card,
 } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import api from "../api/client";
 import ProjectSelector from "../components/common/ProjectSelector";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 
 const SEV_COLORS = {
   Critical: "error",
@@ -70,7 +71,7 @@ export default function IssueListPage() {
   };
 
   if (loading)
-    return <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />;
+    return <PageLoading />;
 
   return (
     <Box>
@@ -78,9 +79,7 @@ export default function IssueListPage() {
         <ProjectSelector />
       </Box>
 
-      <Typography variant="h5" fontWeight={700} mb={2}>
-        {project ? `${project.name} — 故障管理` : "全部项目 — 故障管理"}
-      </Typography>
+      <PageHeader title="故障管理" subtitle="缺陷跟踪与 DI 计算" />
 
       {projectId ? (
         <Box sx={{ display: "flex", gap: 1, mb: 3 }}>

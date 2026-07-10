@@ -60,12 +60,12 @@ export default function Layout() {
                 width: 32,
                 height: 32,
                 borderRadius: 2,
-                background: "linear-gradient(135deg, #8B5CF6, #7C3AED)",
+                background: "linear-gradient(135deg, #7C3AED, #6D28D9)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 flexShrink: 0,
-                boxShadow: "0 4px 12px rgba(139,92,246,0.3)",
+                boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
               }}
             >
               <Typography sx={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1rem", lineHeight: 1 }}>

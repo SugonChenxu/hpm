@@ -7,7 +7,6 @@ import {
   CardContent,
   TextField,
   Button,
-  CircularProgress,
   Table,
   TableBody,
   TableCell,
@@ -18,6 +17,8 @@ import {
 import { AutoAwesome } from "@mui/icons-material";
 import api from "../api/client";
 import ProjectSelector from "../components/common/ProjectSelector";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 
 function getWeekRange() {
   const now = new Date();
@@ -77,7 +78,7 @@ export default function WeeklyReportPage() {
   };
 
   if (loading)
-    return <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />;
+    return <PageLoading />;
 
   return (
     <Box>
@@ -85,9 +86,7 @@ export default function WeeklyReportPage() {
         <ProjectSelector />
       </Box>
 
-      <Typography variant="h5" fontWeight={700} mb={2}>
-        {project ? `${project.name} — 周报` : "全部项目 — 周报"}
-      </Typography>
+      <PageHeader title="周报记录" subtitle="聚合本周项目数据" />
 
       {projectId ? (
         <Box

@@ -18,6 +18,8 @@ import {
 } from "@mui/material";
 import { Refresh } from "@mui/icons-material";
 import api from "../api/client";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 import MeetingDrawer from "../components/meeting/MeetingDrawer";
 
 /**
@@ -115,19 +117,7 @@ export default function MeetingListPage() {
   return (
     <Box>
       {/* ---- 头部：标题 + 拉取按钮 ---- */}
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          mb: 3,
-          flexWrap: "wrap",
-          gap: 1,
-        }}
-      >
-        <Typography variant="h5" fontWeight={700}>
-          会议纪要
-        </Typography>
+      <PageHeader title="会议纪要" subtitle="腾讯会议同步与 AI 纪要">
         <Button
           variant="contained"
           startIcon={
@@ -142,7 +132,7 @@ export default function MeetingListPage() {
         >
           {fetching ? "拉取中..." : "🔄 拉取腾讯会议"}
         </Button>
-      </Box>
+      </PageHeader>
 
       {/* ---- 搜索框 ---- */}
       <TextField
@@ -155,9 +145,7 @@ export default function MeetingListPage() {
 
       {/* ---- 会议表格 ---- */}
       {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-          <CircularProgress />
-        </Box>
+        <PageLoading />
       ) : meetings.length === 0 ? (
         <Card sx={{ textAlign: "center", py: 6 }}>
           <Typography color="text.secondary" variant="body1">

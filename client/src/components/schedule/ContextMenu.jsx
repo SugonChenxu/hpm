@@ -42,7 +42,7 @@ export default function ContextMenu({
   const taskTypes = ["普通任务", "阶段任务", "节点任务"];
 
   const presetColors = [
-    "transparent", "rgba(139,92,246,0.12)", "rgba(245,158,11,0.12)", "rgba(59,130,246,0.12)", "rgba(16,185,129,0.12)",
+    "transparent", "rgba(124,58,237,0.12)", "rgba(245,158,11,0.12)", "rgba(59,130,246,0.12)", "rgba(16,185,129,0.12)",
     "rgba(236,72,153,0.12)", "rgba(168,85,247,0.12)", "rgba(14,165,233,0.12)", "rgba(249,115,22,0.12)",
     "rgba(120,113,108,0.12)", "rgba(100,116,139,0.12)",
   ];
@@ -173,7 +173,7 @@ export default function ContextMenu({
             <Box
               component="input"
               type="color"
-              defaultValue={task.bg_color || "#8B5CF6"}
+              defaultValue={task.bg_color || "#7C3AED"}
               sx={{ width: 28, height: 28, border: "none", cursor: "pointer", p: 0 }}
               onChange={(e) => {
                 // on change triggered on picker close

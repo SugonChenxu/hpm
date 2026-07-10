@@ -13,13 +13,14 @@ import {
   Chip,
   TextField,
   Button,
-  CircularProgress,
   MenuItem,
   Card,
 } from "@mui/material";
 import { Add } from "@mui/icons-material";
 import api from "../api/client";
 import ProjectSelector from "../components/common/ProjectSelector";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 
 const STATUS_COLORS = {
   待下单: "default",
@@ -83,7 +84,7 @@ export default function MaterialListPage() {
   };
 
   if (loading)
-    return <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />;
+    return <PageLoading />;
 
   return (
     <Box>
@@ -91,9 +92,7 @@ export default function MaterialListPage() {
         <ProjectSelector />
       </Box>
 
-      <Typography variant="h5" fontWeight={700} mb={2}>
-        {project ? `${project.name} — 物料管理` : "全部项目 — 物料管理"}
-      </Typography>
+      <PageHeader title="物料管理" subtitle="BOM 与备料跟踪" />
 
       {projectId ? (
         <Box sx={{ display: "flex", gap: 1, mb: 3, flexWrap: "wrap" }}>

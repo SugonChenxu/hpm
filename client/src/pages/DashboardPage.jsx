@@ -5,7 +5,6 @@ import {
   Card,
   Typography,
   Chip,
-  CircularProgress,
   Button,
   TextField,
   MenuItem,
@@ -17,6 +16,8 @@ import {
   DialogActions,
 } from "@mui/material";
 import { Add, Flag, DeleteOutline } from "@mui/icons-material";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 import {
   DndContext,
   closestCenter,
@@ -134,10 +135,9 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>项目概览</Typography>
+      <PageHeader title="项目概览" subtitle="管理和跟踪所有硬件项目">
         <Button variant="contained" startIcon={<Add />} onClick={openCreateDialog}>新建项目</Button>
-      </Box>
+      </PageHeader>
 
       <Box sx={{ display: "flex", gap: 2, mb: 3, flexWrap: "wrap" }}>
         <TextField
@@ -165,7 +165,7 @@ export default function DashboardPage() {
       </Box>
 
       {loading ? (
-        <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />
+        <PageLoading />
       ) : projects.length === 0 ? (
         <Card sx={{ textAlign: "center", py: 8 }}>
           <Typography color="text.secondary">暂无项目，点击「新建项目」开始</Typography>

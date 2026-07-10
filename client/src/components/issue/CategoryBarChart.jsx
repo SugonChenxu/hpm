@@ -1,7 +1,7 @@
 import { Box, Typography, Skeleton } from "@mui/material";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-const COLORS = ["#8B5CF6", "#F59E0B", "#10B981", "#7C3AED", "#EF4444", "#3B82F6", "#6D28D9", "#6B5B8A"];
+const COLORS = ["#7C3AED", "#F59E0B", "#10B981", "#8B5CF6", "#EF4444", "#3B82F6", "#6D28D9", "#9CA3AF"];
 
 export default function CategoryBarChart({ data = [], loading = false }) {
   const filtered = data.filter((d) => d.count > 0);
@@ -20,7 +20,7 @@ export default function CategoryBarChart({ data = [], loading = false }) {
     <Box sx={{ mb: 3, position: "relative" }}>
       <Typography variant="h6" gutterBottom>缺陷分布（按分类）</Typography>
       {/* 右上方图注 */}
-      <Box sx={{ position: "absolute", top: 30, right: 16, zIndex: 2, p: 1, bgcolor: "rgba(21,16,31,0.85)", borderRadius: 1, boxShadow: 1, border: "1px solid rgba(255,255,255,0.08)" }}>
+      <Box sx={{ position: "absolute", top: 30, right: 16, zIndex: 2, p: 1, bgcolor: "#FFFFFF", borderRadius: 1, boxShadow: 1, border: "1px solid #E5E7EB" }}>
         {chartData.map((d, i) => (
           <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.8, mb: 0.6 }}>
             <Box sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: COLORS[i % COLORS.length], flexShrink: 0 }} />
@@ -30,15 +30,15 @@ export default function CategoryBarChart({ data = [], loading = false }) {
       </Box>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#A89BC4" }} />
-          <YAxis tick={{ fontSize: 12, fill: "#A89BC4" }} />
+          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+          <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6B7280" }} />
+          <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} />
           <Tooltip
             contentStyle={{
-              backgroundColor: "rgba(21,16,31,0.9)",
-              border: "1px solid rgba(255,255,255,0.08)",
+              backgroundColor: "#FFFFFF",
+              border: "1px solid #E5E7EB",
               borderRadius: 8,
-              color: "#F5F3FF",
+              color: "#1E1B2E",
             }}
             formatter={(value) => [`DI ${value}`, ""]}
           />

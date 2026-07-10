@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  Box, Typography, Button, IconButton, CircularProgress, Dialog,
+  Box, Typography, Button, IconButton, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
   Tooltip, Snackbar, Alert, Popper, ClickAwayListener, Paper,
 } from "@mui/material";
 import { ChevronLeft, ChevronRight, Add, DeleteOutline } from "@mui/icons-material";
 import api from "../api/client";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 
 /** 6天: 周一~周六（不含周日） */
 const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六"];
@@ -261,24 +263,21 @@ export default function WeekMeetingPage() {
   };
 
   if (loading) {
-    return <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />;
+    return <PageLoading />;
   }
 
   return (
     <Box>
       {/* 顶部栏 */}
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography variant="h5" fontWeight={700}>本周会议</Typography>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <IconButton onClick={() => changeWeek(-1)}><ChevronLeft /></IconButton>
-          <Typography variant="body2" sx={{ minWidth: 100, textAlign: "center" }}>
-            {weekRange(weekKey)}
-          </Typography>
-          <IconButton onClick={() => changeWeek(1)}><ChevronRight /></IconButton>
-          <Button size="small" onClick={() => setWeekKey(getMonday(new Date()))}>本周</Button>
-          <Button variant="contained" startIcon={<Add />} onClick={() => setAddOpen(true)}>添加会议</Button>
-        </Box>
-      </Box>
+      <PageHeader title="本周会议" subtitle="周例会安排与输出物">
+        <IconButton onClick={() => changeWeek(-1)}><ChevronLeft /></IconButton>
+        <Typography variant="body2" sx={{ minWidth: 100, textAlign: "center" }}>
+          {weekRange(weekKey)}
+        </Typography>
+        <IconButton onClick={() => changeWeek(1)}><ChevronRight /></IconButton>
+        <Button size="small" onClick={() => setWeekKey(getMonday(new Date()))}>本周</Button>
+        <Button variant="contained" startIcon={<Add />} onClick={() => setAddOpen(true)}>添加会议</Button>
+      </PageHeader>
 
       {/* 课表网格 — 7列等宽：时间列 + 6天 */}
       <Box sx={{
@@ -291,10 +290,10 @@ export default function WeekMeetingPage() {
         fontSize: "0.75rem",
       }}>
         {/* 表头 */}
-        <Box sx={{ p: 0.5, bgcolor: "rgba(255,255,255,0.04)", borderBottom: "1px solid", borderColor: "divider" }} />
+        <Box sx={{ p: 0.5, bgcolor: "#F9FAFB", borderBottom: "1px solid", borderColor: "divider" }} />
         {WEEKDAYS.map((d) => (
           <Box key={d} sx={{
-            p: 0.5, textAlign: "center", fontWeight: 600, bgcolor: "rgba(255,255,255,0.04)",
+            p: 0.5, textAlign: "center", fontWeight: 600, bgcolor: "#F9FAFB",
             borderBottom: "1px solid", borderLeft: "1px solid", borderColor: "divider",
           }}>
             {d}
@@ -318,7 +317,7 @@ export default function WeekMeetingPage() {
         {/* 输出物行 — 表格底部 */}
         <Box sx={{
           p: 0.5, borderTop: "2px solid", borderColor: "divider",
-          bgcolor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "flex-start",
+          bgcolor: "#F9FAFB", display: "flex", alignItems: "flex-start",
           justifyContent: "center", pt: 1.5,
         }}>
           <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ fontSize: "0.72rem" }}>
@@ -328,7 +327,7 @@ export default function WeekMeetingPage() {
         {WEEKDAYS.map((d) => (
           <Box key={`out-${d}`} sx={{
             p: 0.5, borderTop: "2px solid", borderLeft: "1px solid",
-            borderColor: "divider", bgcolor: "rgba(255,255,255,0.04)",
+            borderColor: "divider", bgcolor: "#F9FAFB",
           }}>
             <TextField
               multiline
@@ -464,7 +463,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
               p: 0.25,
               cursor: isEmpty ? "pointer" : "default",
               transition: "background-color 0.15s",
-              bgcolor: inDragRange ? "rgba(139,92,246,0.15)" : "transparent",
+              bgcolor: inDragRange ? "rgba(124,58,237,0.15)" : "transparent",
               "&:hover": (isEmpty && !dragState.active) ? { bgcolor: "action.hover" } : {},
               userSelect: dragState.active ? "none" : undefined,
             }}
@@ -472,7 +471,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
             {meetings.map((m) => {
               const span = meetingSpan(m.start_time, m.end_time);
               const isProject = m.source === "project";
-              const color = isProject ? (m.theme_color || "#8B5CF6") : "#8B5CF6";
+              const color = isProject ? (m.theme_color || "#7C3AED") : "#7C3AED";
               return (
                 <Tooltip key={m.id || m.title} title={m.title} arrow disableInteractive>
                   <Box

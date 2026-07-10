@@ -11,7 +11,7 @@ import PriorityChip from "./PriorityChip";
 import api from "../../api/client";
 
 const COLUMNS = [
-  { key: "待开始", label: "待开始", color: "#8B5CF6" },
+  { key: "待开始", label: "待开始", color: "#7C3AED" },
   { key: "进行中", label: "进行中", color: "#F59E0B" },
   { key: "待验证", label: "待验证", color: "#6366F1" },
   { key: "已完成", label: "已完成", color: "#10B981" },
@@ -81,7 +81,7 @@ export default function KanbanGlobalView({ tasks, onTasksChange }) {
               sx={{
                 minWidth: 250,
                 flex: 1,
-                bgcolor: "rgba(255,255,255,0.03)",
+                bgcolor: "#F9FAFB",
                 borderTop: `3px solid ${col.color}`,
                 maxHeight: "calc(100vh - 220px)",
                 display: "flex",

@@ -102,7 +102,7 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
     [tasks, onTasksChange]
   );
 
-  const themeColor = project?.theme_color || "#8B5CF6";
+  const themeColor = project?.theme_color || "#7C3AED";
 
   /** 手动切换折叠（持久化） */
   const toggleCollapsed = () => {
@@ -127,7 +127,7 @@ export default function KanbanProjectView({ tasks, project, stats, onTasksChange
   return (
     <Box
       sx={{
-        background: "rgba(255,255,255,0.03)",
+        background: "#FFFFFF",
         borderRadius: "12px",
         border: "0.5px solid",
         borderColor: "divider",

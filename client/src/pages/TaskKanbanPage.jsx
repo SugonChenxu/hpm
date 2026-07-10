@@ -2,13 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import {
   Box,
   Typography,
-  CircularProgress,
   Alert,
   Card,
   Button,
   Snackbar,
 } from "@mui/material";
 import { Add } from "@mui/icons-material";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 import {
   DndContext,
   closestCenter,
@@ -154,28 +155,13 @@ export default function TaskKanbanPage() {
 
   // ---------- 加载态 ----------
   if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", mt: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <PageLoading />;
   }
 
   // ---------- 渲染 ----------
   return (
     <Box>
-      {/* 顶部栏：标题 + 新建按钮 */}
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 3,
-        }}
-      >
-        <Typography variant="h5" fontWeight={700}>
-          每日待办
-        </Typography>
+      <PageHeader title="待办事项" subtitle="任务看板与进度跟踪">
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -183,7 +169,7 @@ export default function TaskKanbanPage() {
         >
           新建项目看板
         </Button>
-      </Box>
+      </PageHeader>
 
       {/* 错误提示 */}
       {error && (

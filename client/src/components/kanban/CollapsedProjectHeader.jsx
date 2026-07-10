@@ -6,15 +6,15 @@ import { TaskAlt } from "@mui/icons-material";
  * 严格对标原型：主题色横条 + ✓ + 项目名 + "全部完成 · 点击展开"
  */
 export default function CollapsedProjectHeader({ project, taskCount, onExpand }) {
-  const themeColor = project?.theme_color || "#8B5CF6";
+  const themeColor = project?.theme_color || "#7C3AED";
 
   return (
     <Box
       onClick={onExpand}
       sx={{
-        background: "var(--color-background-primary, rgba(255,255,255,0.03))",
+        background: "var(--color-background-primary, #FFFFFF)",
         borderRadius: "var(--border-radius-lg, 12px)",
-        border: "0.5px solid var(--color-border-tertiary, rgba(255,255,255,0.08))",
+        border: "0.5px solid var(--color-border-tertiary, #E5E7EB)",
         overflow: "hidden",
         cursor: "pointer",
       }}

@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Box, Typography, CircularProgress } from "@mui/material";
+import { Box, Typography } from "@mui/material";
 import api from "../api/client";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 import RefreshBar from "../components/issue/RefreshBar";
 import StatsCards from "../components/issue/StatsCards";
 import DITrendChart from "../components/issue/DITrendChart";
@@ -44,7 +46,7 @@ export default function IssueDashboardPage() {
 
   if (!projectId) return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" fontWeight={600} gutterBottom>故障仪表盘</Typography>
+      <PageHeader title="故障仪表板" subtitle="DI 趋势与分类统计" />
       <Box sx={{ textAlign:"center", py:8 }}>
         <Typography variant="h6" color="text.secondary" gutterBottom>请选择一个 Mantis 项目</Typography>
         <RefreshBar projectId="" projects={mantisProjects} onRefresh={()=>{}} onProjectChange={(pid)=>setSearchParams(pid?{projectId:pid}:{})} />
@@ -54,9 +56,9 @@ export default function IssueDashboardPage() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h5" fontWeight={600} gutterBottom>故障仪表盘</Typography>
+      <PageHeader title="故障仪表板" subtitle="DI 趋势与分类统计" />
       <RefreshBar projectId={projectId} projects={mantisProjects} loading={loading} onRefresh={refresh} onProjectChange={(pid)=>setSearchParams(pid?{projectId:pid}:{})} />
-      {loading ? <CircularProgress sx={{ mx:"auto", mt:6, display:"block" }} /> :
+      {loading ? <PageLoading /> :
        error ? <ErrorState type="unknown" message={error} onRetry={refresh} /> : (
         <>
           <StatsCards di={stats?.di||0} total={stats?.total||0} rate={stats?.rate||0} />

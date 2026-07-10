@@ -6,7 +6,6 @@ import {
   Button,
   Snackbar,
   Alert,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -14,7 +13,6 @@ import {
   List,
   ListItemButton,
   ListItemText,
-  Paper,
   Card,
 } from "@mui/material";
 import {
@@ -26,6 +24,8 @@ import {
 import api from "../api/client";
 import { useProjectContext } from "../context/ProjectContext";
 import ProjectSelector from "../components/common/ProjectSelector";
+import PageHeader from "../components/common/PageHeader";
+import PageLoading from "../components/common/PageLoading";
 import ScheduleTable from "../components/schedule/ScheduleTable";
 import ContextMenu from "../components/schedule/ContextMenu";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
@@ -361,7 +361,8 @@ export default function SchedulePage() {
   // --- Render: no project selected ---
   if (!projectId) {
     return (
-      <Box sx={{ bgcolor: "background.default", minHeight: "100vh", p: 2 }}>
+      <Box>
+        <PageHeader title="项目计划" subtitle="阶段排期与里程碑管理" />
         <Box sx={{ mb: 2 }}>
           <ProjectSelector />
         </Box>
@@ -377,43 +378,25 @@ export default function SchedulePage() {
   // --- Render: loading ---
   if (loading) {
     return (
-      <Box sx={{ bgcolor: "background.default", minHeight: "100vh", p: 2 }}>
+      <Box>
+        <PageHeader title="项目计划" subtitle="阶段排期与里程碑管理" />
         <Box sx={{ mb: 2 }}>
           <ProjectSelector />
         </Box>
-        <CircularProgress sx={{ display: "block", mx: "auto", mt: 8 }} />
+        <PageLoading />
       </Box>
     );
   }
 
   // --- Render: schedule table ---
   return (
-    <Box sx={{ bgcolor: "background.default", minHeight: "100vh", p: 2 }}>
+    <Box>
       {/* Project selector */}
       <Box sx={{ mb: 2 }}>
         <ProjectSelector />
       </Box>
 
-      {/* Page title */}
-      {project && (
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
-          [{project.code}] {project.name} — 项目排期表
-        </Typography>
-      )}
-
-      {/* Toolbar */}
-      <Paper
-        elevation={1}
-        sx={{
-          borderRadius: 2,
-          p: 1.5,
-          mb: 2,
-          display: "flex",
-          alignItems: "center",
-          gap: 1,
-          flexWrap: "wrap",
-        }}
-      >
+      <PageHeader title="项目计划" subtitle="阶段排期与里程碑管理">
         <Button
           size="small"
           variant="contained"
@@ -422,7 +405,6 @@ export default function SchedulePage() {
         >
           从模板生成
         </Button>
-
         <Button
           size="small"
           variant="outlined"
@@ -432,7 +414,6 @@ export default function SchedulePage() {
         >
           {saving ? "保存中..." : "保存版本"}
         </Button>
-
         <Button
           size="small"
           variant="outlined"
@@ -441,7 +422,6 @@ export default function SchedulePage() {
         >
           版本历史
         </Button>
-
         <Button
           size="small"
           variant="outlined"
@@ -451,7 +431,7 @@ export default function SchedulePage() {
         >
           导出 Excel
         </Button>
-      </Paper>
+      </PageHeader>
 
       {/* Schedule table */}
       <ScheduleTable

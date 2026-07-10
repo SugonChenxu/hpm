@@ -45,7 +45,7 @@ function InfoRow({ label, value }) {
  */
 export default function ProjectCard({ project, tasks = [], onEdit }) {
   const [contextMenu, setContextMenu] = useState(null);
-  const themeColor = project.theme_color || "#8B5CF6";
+  const themeColor = project.theme_color || "#7C3AED";
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
   );
