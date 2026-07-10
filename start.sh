@@ -1,6 +1,7 @@
 #!/bin/bash
 # HPM 启动脚本 — PM2 进程守护版
 # 进程崩溃自动重启、重启后状态恢复、脱离终端独立运行
+# 开机自启：已通过注册表 HKCU\Run + pm2-resurrect.bat 配置
 
 echo "=== HPM PM2 管理 ==="
 
@@ -17,6 +18,8 @@ case "${1:-start}" in
     echo "访问: http://localhost:5173"
     echo "状态: npx pm2 status"
     echo "日志: npx pm2 logs"
+    echo ""
+    echo "开机自启: 已配置（注册表 HKCU\\Run → pm2-resurrect.bat → pm2 resurrect）"
     ;;
   stop)
     echo "停止 HPM 服务..."
