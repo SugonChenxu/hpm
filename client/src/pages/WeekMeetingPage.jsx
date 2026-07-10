@@ -319,11 +319,8 @@ export default function WeekMeetingPage() {
 
   const closePopper = () => {
     if (justOpenedRef.current) return;
-    if (popper.title.trim() && !addingRef.current) {
-      handlePopperAdd();
-    } else if (!addingRef.current) {
-      setPopper((p) => ({ ...p, open: false, weeks: 1 }));
-    }
+    if (addingRef.current) return;
+    setPopper((p) => ({ ...p, open: false, title: "", weeks: 1 }));
   };
 
   useEffect(() => {
@@ -466,16 +463,6 @@ export default function WeekMeetingPage() {
               value={popper.title}
               onChange={(e) => setPopper((p) => ({ ...p, title: e.target.value }))}
               onKeyDown={(e) => { if (e.key === "Enter") handlePopperAdd(); }}
-              onBlur={() => {
-                setTimeout(() => {
-                  if (addingRef.current) return;
-                  if (popper.title.trim()) {
-                    handlePopperAdd();
-                  } else {
-                    setPopper((p) => ({ ...p, open: false, title: "", weeks: 1 }));
-                  }
-                }, 150);
-              }}
             />
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
               <Typography variant="caption" color="text.secondary">持续周数</Typography>
@@ -490,6 +477,10 @@ export default function WeekMeetingPage() {
                 inputProps={{ min: 1, max: 52, style: { width: 44, textAlign: "center" } }}
               />
               <Typography variant="caption" color="text.secondary">周</Typography>
+            </Box>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, mt: 1.5 }}>
+              <Button size="small" onClick={closePopper}>取消</Button>
+              <Button size="small" variant="contained" onClick={handlePopperAdd}>确认</Button>
             </Box>
           </Paper>
         </Popper>
