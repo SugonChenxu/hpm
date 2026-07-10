@@ -554,4 +554,28 @@ CREATE TABLE IF NOT EXISTS week_meeting_outputs (
 `);
 console.log("Migration week_meetings + week_meeting_outputs: done");
 
+// 迁移：week_meeting_outputs（单 blob）→ meeting_outputs（逐条 item + 完成态）
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS meeting_outputs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    week_key TEXT NOT NULL,
+    weekday TEXT NOT NULL,
+    title TEXT NOT NULL,
+    is_done INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  )`);
+  const oldTbl = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='week_meeting_outputs'").get();
+  if (oldTbl) {
+    const rows = db.prepare("SELECT week_key, weekday, content FROM week_meeting_outputs WHERE content IS NOT NULL AND content != ''").all();
+    const ins = db.prepare("INSERT INTO meeting_outputs (week_key, weekday, title, is_done, sort_order) VALUES (?, ?, ?, 0, 0)");
+    const tx = db.transaction(() => { rows.forEach((r) => ins.run(r.week_key, r.weekday, r.content)); });
+    tx();
+    db.exec("DROP TABLE week_meeting_outputs");
+  }
+} catch (e) {
+  console.warn("Migration meeting_outputs:", e.message);
+}
+
 export default db;

@@ -146,7 +146,11 @@ export const api = {
     create: (data) => request("/week-meetings", { method: "POST", body: JSON.stringify(data) }),
     update: (id, data) => request(`/week-meetings/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id) => request(`/week-meetings/${id}`, { method: "DELETE" }),
-    saveOutputs: (data) => request("/week-meetings/outputs", { method: "PUT", body: JSON.stringify(data) }),
+    meetingOutputs: {
+      add: (data) => request("/week-meetings/outputs", { method: "POST", body: JSON.stringify(data) }),
+      update: (id, data) => request(`/week-meetings/outputs/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+      remove: (id) => request(`/week-meetings/outputs/${id}`, { method: "DELETE" }),
+    },
   },
   // 缓存管理
   cache: {

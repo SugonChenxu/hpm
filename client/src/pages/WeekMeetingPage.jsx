@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box, Typography, Button, IconButton, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
-  Tooltip, Snackbar, Alert, Popper, ClickAwayListener, Paper,
+  Tooltip, Snackbar, Alert, Popper, ClickAwayListener, Paper, Checkbox,
 } from "@mui/material";
 import { ChevronLeft, ChevronRight, Add, DeleteOutline } from "@mui/icons-material";
 import api from "../api/client";
@@ -68,80 +68,6 @@ function meetingSpan(start, end) {
   return timeToSlotIndex(end) - timeToSlotIndex(start);
 }
 
-/**
- * 行内可编辑输出物组件
- *
- * - 点击空白区域 → 出现输入框
- * - 输入后 Enter/blur → 保存为文本
- * - 再次点击文本 → 切回编辑模式
- */
-function InlineOutput({ value, onChange, onSave }) {
-  const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(value || "");
-
-  const handleClick = () => {
-    setText(value || "");
-    setEditing(true);
-  };
-
-  const handleSave = () => {
-    setEditing(false);
-    if (text !== value) {
-      onChange(text);
-      onSave(text);
-    }
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSave();
-    }
-    if (e.key === "Escape") {
-      setEditing(false);
-      setText(value || "");
-    }
-  };
-
-  if (editing) {
-    return (
-      <TextField
-        multiline
-        minRows={1}
-        maxRows={3}
-        size="small"
-        fullWidth
-        autoFocus
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={handleSave}
-        onKeyDown={handleKeyDown}
-        sx={{ "& .MuiInputBase-root": { fontSize: "0.7rem" } }}
-      />
-    );
-  }
-
-  return (
-    <Box
-      onClick={handleClick}
-      sx={{
-        minHeight: 32,
-        p: 0.5,
-        borderRadius: 1,
-        cursor: "pointer",
-        fontSize: "0.7rem",
-        color: value ? "text.primary" : "text.disabled",
-        fontStyle: value ? "normal" : "italic",
-        "&:hover": { bgcolor: "action.hover" },
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-all",
-      }}
-    >
-      {value || "点击添加输出物..."}
-    </Box>
-  );
-}
-
 export default function WeekMeetingPage() {
   const [weekKey, setWeekKey] = useState(getMonday(new Date()));
   const [data, setData] = useState({ meetings: [], outputs: [], recurring: [] });
@@ -181,8 +107,11 @@ export default function WeekMeetingPage() {
       .then((res) => {
         setData(res.data);
         const outMap = {};
-        (res.data.outputs || []).forEach((o) => { outMap[o.weekday] = o.content; });
-        WEEKDAYS.forEach((d) => { if (!(d in outMap)) outMap[d] = ""; });
+        WEEKDAYS.forEach((d) => { outMap[d] = []; });
+        (res.data.outputs || []).forEach((o) => {
+          if (!outMap[o.weekday]) outMap[o.weekday] = [];
+          outMap[o.weekday].push(o);
+        });
         setOutputs(outMap);
         setLoading(false);
       })
@@ -330,19 +259,42 @@ export default function WeekMeetingPage() {
     }
   }, [popper.open]);
 
-  // === 输出物处理 ===
-  const handleOutputChange = useCallback((weekday, content) => {
-    setOutputs((prev) => ({ ...prev, [weekday]: content }));
-  }, []);
-
-  const handleOutputSave = useCallback(async (weekday, content) => {
-    const payload = { week_key: weekKey, outputs: [{ weekday, content }] };
+  // === 输出物：逐条 CRUD ===
+  const handleAddOutput = useCallback(async (weekday, title) => {
+    const trimmed = (title || "").trim();
+    if (!trimmed) return;
+    const tempId = `temp-${Date.now()}`;
+    const optimistic = { id: tempId, week_key: weekKey, weekday, title: trimmed, is_done: 0, sort_order: 999 };
+    setOutputs((prev) => ({ ...prev, [weekday]: [...(prev[weekday] || []), optimistic] }));
     try {
-      await api.weekMeetings.saveOutputs(payload);
+      const res = await api.weekMeetings.meetingOutputs.add({ week_key: weekKey, weekday, title: trimmed });
+      setOutputs((prev) => ({ ...prev, [weekday]: (prev[weekday] || []).map((o) => (o.id === tempId ? res.data : o)) }));
     } catch (err) {
-      setSnackbar({ open: true, message: "保存失败", severity: "error" });
+      setOutputs((prev) => ({ ...prev, [weekday]: (prev[weekday] || []).filter((o) => o.id !== tempId) }));
+      setSnackbar({ open: true, message: "添加失败", severity: "error" });
     }
   }, [weekKey]);
+
+  const handleToggleOutput = useCallback(async (item) => {
+    const nextDone = item.is_done ? 0 : 1;
+    setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: nextDone } : o)) }));
+    try {
+      await api.weekMeetings.meetingOutputs.update(item.id, { is_done: nextDone });
+    } catch (err) {
+      setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: item.is_done } : o)) }));
+      setSnackbar({ open: true, message: "更新失败", severity: "error" });
+    }
+  }, []);
+
+  const handleDeleteOutput = useCallback(async (item) => {
+    setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).filter((o) => o.id !== item.id) }));
+    try {
+      await api.weekMeetings.meetingOutputs.remove(item.id);
+    } catch (err) {
+      setOutputs((prev) => ({ ...prev, [item.weekday]: [...(prev[item.weekday] || []), item] }));
+      setSnackbar({ open: true, message: "删除失败", severity: "error" });
+    }
+  }, []);
 
   const changeWeek = (delta) => {
     const [y, m, d] = weekKey.split("-").map(Number);
@@ -434,11 +386,12 @@ export default function WeekMeetingPage() {
             p: 0.5, borderTop: "2px solid", borderLeft: "1px solid",
             borderColor: "divider", bgcolor: HEADER_BG,
           }}>
-            <InlineOutput
-              value={outputs[d] || ""}
-              onChange={(content) => handleOutputChange(d, content)}
-              onSave={(content) => handleOutputSave(d, content)}
-            />
+            <MeetingOutputList
+            items={outputs[d] || []}
+            onAdd={(title) => handleAddOutput(d, title)}
+            onToggle={handleToggleOutput}
+            onDelete={handleDeleteOutput}
+          />
           </Box>
         ))}
       </Box>
@@ -528,6 +481,69 @@ export default function WeekMeetingPage() {
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
         <Alert severity={snackbar.severity} variant="filled">{snackbar.message}</Alert>
       </Snackbar>
+    </Box>
+  );
+}
+
+// ============================================================
+// MeetingOutputList — 某星期格内的逐条输出物列表（对齐 SubtaskItem 风格）
+// ============================================================
+
+function MeetingOutputList({ items, onAdd, onToggle, onDelete }) {
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const addRef = useRef(null);
+  useEffect(() => { if (adding && addRef.current) addRef.current.focus(); }, [adding]);
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) { setAdding(false); return; }
+    onAdd(t);
+    setText("");
+    // 保持连续添加：不清空 adding，便于继续输入
+  };
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, py: 0.25 }}>
+      {(items || []).map((it) => (
+        <Box key={it.id} sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1, "&:hover": { bgcolor: "action.hover" }, "&:hover .del-btn": { opacity: 1 } }}>
+          <Checkbox
+            size="small"
+            checked={!!it.is_done}
+            onChange={() => onToggle(it)}
+            sx={{ p: 0.25, flexShrink: 0 }}
+          />
+          <Typography sx={{ flex: 1, fontSize: "0.72rem", lineHeight: 1.3, textDecoration: it.is_done ? "line-through" : "none", color: it.is_done ? "text.disabled" : "text.primary", wordBreak: "break-all" }}>
+            {it.title}
+          </Typography>
+          <IconButton className="del-btn" size="small" onClick={() => onDelete(it)} sx={{ opacity: 0, transition: "opacity 0.15s", p: 0.1, flexShrink: 0 }}>
+            <DeleteOutline sx={{ fontSize: 13 }} />
+          </IconButton>
+        </Box>
+      ))}
+      {adding ? (
+        <TextField
+          inputRef={addRef}
+          size="small"
+          fullWidth
+          value={text}
+          placeholder="输入后回车添加"
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => { if (!text.trim()) setAdding(false); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); submit(); }
+            if (e.key === "Escape") { setText(""); setAdding(false); }
+          }}
+          sx={{ "& .MuiInputBase-root": { fontSize: "0.7rem" } }}
+        />
+      ) : (
+        <Box
+          onClick={() => setAdding(true)}
+          sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.5, py: 0.25, borderRadius: 1, cursor: "pointer", color: "text.secondary", fontSize: "0.7rem", "&:hover": { bgcolor: "action.hover" } }}
+        >
+          <Add sx={{ fontSize: 14 }} /> 添加
+        </Box>
+      )}
     </Box>
   );
 }

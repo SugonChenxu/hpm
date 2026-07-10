@@ -33,7 +33,7 @@ router.get("/week-meetings", (req, res) => {
   ).all(weekKey);
 
   const outputs = db.prepare(
-    "SELECT * FROM week_meeting_outputs WHERE week_key = ?"
+    "SELECT * FROM meeting_outputs WHERE week_key = ? ORDER BY weekday, sort_order, id"
   ).all(weekKey);
 
   // 从 projects 表拉取例会（projects 表为硬删除，无 deleted_at 列）
@@ -98,21 +98,39 @@ router.delete("/week-meetings/:id", (req, res) => {
   res.json({ ok: true });
 });
 
-// PUT /week-meetings/outputs — 批量保存输出物
-router.put("/week-meetings/outputs", (req, res) => {
-  const { week_key, outputs } = req.body;
-  if (!week_key || !Array.isArray(outputs)) {
-    return res.status(400).json({ ok: false, error: "参数错误" });
+// POST /week-meetings/outputs — 新增一条输出物
+router.post("/week-meetings/outputs", (req, res) => {
+  const { week_key, weekday, title } = req.body;
+  if (!week_key || !weekday || !title || !title.trim()) {
+    return res.status(400).json({ ok: false, error: "缺少必填字段" });
   }
-  const upsert = db.prepare(`
-    INSERT INTO week_meeting_outputs (week_key, weekday, content, updated_at)
-    VALUES (?, ?, ?, datetime('now','localtime'))
-    ON CONFLICT(week_key, weekday) DO UPDATE SET content=excluded.content, updated_at=datetime('now','localtime')
-  `);
-  const tx = db.transaction(() => {
-    outputs.forEach((o) => upsert.run(week_key, o.weekday, o.content || ""));
-  });
-  tx();
+  const maxSort = db.prepare(
+    "SELECT COALESCE(MAX(sort_order), -1) as m FROM meeting_outputs WHERE week_key = ? AND weekday = ?"
+  ).get(week_key, weekday);
+  const info = db.prepare(
+    "INSERT INTO meeting_outputs (week_key, weekday, title, is_done, sort_order, created_at, updated_at) VALUES (?, ?, ?, 0, ?, datetime('now','localtime'), datetime('now','localtime'))"
+  ).run(week_key, weekday, title.trim(), maxSort.m + 1);
+  const item = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(info.lastInsertRowid);
+  res.json({ ok: true, data: item });
+});
+
+// PUT /week-meetings/outputs/:id — 切换完成态 / 改标题
+router.put("/week-meetings/outputs/:id", (req, res) => {
+  const { title, is_done } = req.body;
+  const existing = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(404).json({ ok: false, error: "输出物不存在" });
+  const newTitle = title !== undefined ? title : existing.title;
+  const newDone = is_done !== undefined ? (is_done ? 1 : 0) : existing.is_done;
+  db.prepare(
+    "UPDATE meeting_outputs SET title = ?, is_done = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+  ).run(newTitle, newDone, req.params.id);
+  const item = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(req.params.id);
+  res.json({ ok: true, data: item });
+});
+
+// DELETE /week-meetings/outputs/:id — 删除一条输出物
+router.delete("/week-meetings/outputs/:id", (req, res) => {
+  db.prepare("DELETE FROM meeting_outputs WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
 });
 
