@@ -73,8 +73,16 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                   "&:hover .done-actions": { opacity: 1 },
                 }}
               >
-                {/* 优先级灯 */}
-                <Box sx={{ opacity: 0.35 }}>
+                {/* 优先级灯 — 垂直居中 */}
+                <Box
+                  sx={{
+                    opacity: 0.35,
+                    display: "flex",
+                    alignItems: "center",
+                    flexShrink: 0,
+                    alignSelf: "center",
+                  }}
+                >
                   <PriorityChip priority={task.priority} />
                 </Box>
 
@@ -97,7 +105,7 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                     </Typography>
                     <Typography
                       variant="caption"
-                      sx={{ color: "success.main", fontSize: 10, flexShrink: 0 }}
+                      sx={{ color: "success.main", fontSize: 10, flexShrink: 0, lineHeight: 1 }}
                     >
                       {fmtDone(task.completed_at)}
                     </Typography>

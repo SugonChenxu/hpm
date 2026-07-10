@@ -15,6 +15,9 @@ const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六"];
 /** 统一槽位高度，所有卡片和格子共用 */
 const SLOT_HEIGHT = 28;
 
+/** 表头和首列背景色 */
+const HEADER_BG = "#F3F4F6";
+
 const TIME_SLOTS = [];
 for (let h = 9; h <= 20; h++) {
   TIME_SLOTS.push(`${String(h).padStart(2, "0")}:00`);
@@ -50,6 +53,80 @@ function timeToSlotIndex(time) {
 /** 会议卡片在 grid 中的行数(跨度) */
 function meetingSpan(start, end) {
   return timeToSlotIndex(end) - timeToSlotIndex(start);
+}
+
+/**
+ * 行内可编辑输出物组件
+ *
+ * - 点击空白区域 → 出现输入框
+ * - 输入后 Enter/blur → 保存为文本
+ * - 再次点击文本 → 切回编辑模式
+ */
+function InlineOutput({ value, onChange, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(value || "");
+
+  const handleClick = () => {
+    setText(value || "");
+    setEditing(true);
+  };
+
+  const handleSave = () => {
+    setEditing(false);
+    if (text !== value) {
+      onChange(text);
+      onSave(text);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    }
+    if (e.key === "Escape") {
+      setEditing(false);
+      setText(value || "");
+    }
+  };
+
+  if (editing) {
+    return (
+      <TextField
+        multiline
+        minRows={1}
+        maxRows={3}
+        size="small"
+        fullWidth
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={handleKeyDown}
+        sx={{ "& .MuiInputBase-root": { fontSize: "0.7rem" } }}
+      />
+    );
+  }
+
+  return (
+    <Box
+      onClick={handleClick}
+      sx={{
+        minHeight: 32,
+        p: 0.5,
+        borderRadius: 1,
+        cursor: "pointer",
+        fontSize: "0.7rem",
+        color: value ? "text.primary" : "text.disabled",
+        fontStyle: value ? "normal" : "italic",
+        "&:hover": { bgcolor: "action.hover" },
+        whiteSpace: "pre-wrap",
+        wordBreak: "break-all",
+      }}
+    >
+      {value || "点击添加输出物..."}
+    </Box>
+  );
 }
 
 export default function WeekMeetingPage() {
@@ -144,8 +221,6 @@ export default function WeekMeetingPage() {
 
   /** mousedown 在空单元格上 → 开始拖拽选择 */
   const handleCellMouseDown = useCallback((event, day, rowIdx) => {
-    // 不调用 preventDefault()，否则会阻止后续 Popper 内 TextField 的 autoFocus 生效
-    // 文字选中已由 Row 组件的 userSelect: "none" CSS 处理
     dragRef.current = { active: true, day, startIdx: rowIdx, endIdx: rowIdx, anchorEl: event.currentTarget };
     setDragState({ active: true, day, startIdx: rowIdx, endIdx: rowIdx });
   }, []);
@@ -153,8 +228,8 @@ export default function WeekMeetingPage() {
   /** mouseenter 在同一列的格子上 → 扩展选择范围 */
   const handleCellMouseEnter = useCallback((day, rowIdx) => {
     if (!dragRef.current.active) return;
-    if (dragRef.current.day !== day) return;     // 不允许跨列拖拽
-    if (dragRef.current.endIdx === rowIdx) return; // 没有变化，跳过
+    if (dragRef.current.day !== day) return;
+    if (dragRef.current.endIdx === rowIdx) return;
     dragRef.current.endIdx = rowIdx;
     setDragState((prev) => ({ ...prev, endIdx: rowIdx }));
   }, []);
@@ -165,10 +240,8 @@ export default function WeekMeetingPage() {
       if (!dragRef.current.active) return;
       const { day, startIdx, endIdx, anchorEl } = dragRef.current;
 
-      // 计算时间范围
       const minIdx = Math.min(startIdx, endIdx);
       const maxIdx = Math.max(startIdx, endIdx);
-      // 单击（起点=终点）默认 1 小时（2 个 slot）
       const actualEndIdx =
         startIdx === endIdx
           ? Math.min(startIdx + 2, TIME_SLOTS.length - 1)
@@ -177,7 +250,6 @@ export default function WeekMeetingPage() {
       const startTime = TIME_SLOTS[minIdx];
       const endTime = TIME_SLOTS[actualEndIdx];
 
-      // 弹出 Popper
       setPopper({
         open: true,
         anchorEl,
@@ -186,11 +258,9 @@ export default function WeekMeetingPage() {
         endTime,
         title: "",
       });
-      // 标记刚弹出，阻止 mouseup 后紧接着的 click 事件触发 ClickAwayListener 关闭
       justOpenedRef.current = true;
       setTimeout(() => { justOpenedRef.current = false; }, 300);
 
-      // 重置拖拽状态
       dragRef.current = { active: false, day: null, startIdx: -1, endIdx: -1, anchorEl: null };
       setDragState({ active: false, day: null, startIdx: -1, endIdx: -1 });
     };
@@ -198,7 +268,7 @@ export default function WeekMeetingPage() {
     return () => window.removeEventListener("mouseup", handleMouseUp);
   }, []);
 
-  // === 行内 Popper 创建会议（无按钮快速创建） ===
+  // === 行内 Popper 创建会议 ===
 
   const handlePopperAdd = async () => {
     if (!popper.title.trim() || addingRef.current) return;
@@ -221,13 +291,7 @@ export default function WeekMeetingPage() {
     }
   };
 
-  /**
-   * 关闭 Popper：
-   * - 如果已有标题内容 → 自动创建会议
-   * - 如果标题为空 → 仅关闭
-   */
   const closePopper = () => {
-    // Popper 刚弹出时忽略 click away，给用户时间输入
     if (justOpenedRef.current) return;
     if (popper.title.trim() && !addingRef.current) {
       handlePopperAdd();
@@ -236,25 +300,26 @@ export default function WeekMeetingPage() {
     }
   };
 
-  // === Popper 打开时延迟聚焦 TextField ===
   useEffect(() => {
     if (popper.open && inputRef.current) {
-      // 延迟聚焦，确保 Popper 已渲染完毕且 click 事件已消化
       const timer = setTimeout(() => inputRef.current?.focus(), 100);
       return () => clearTimeout(timer);
     }
   }, [popper.open]);
 
-  // === 输出物保存 ===
-  const handleOutputBlur = async (weekday) => {
-    const content = outputs[weekday] || "";
+  // === 输出物处理 ===
+  const handleOutputChange = useCallback((weekday, content) => {
+    setOutputs((prev) => ({ ...prev, [weekday]: content }));
+  }, []);
+
+  const handleOutputSave = useCallback(async (weekday, content) => {
     const payload = { week_key: weekKey, outputs: [{ weekday, content }] };
     try {
       await api.weekMeetings.saveOutputs(payload);
     } catch (err) {
       setSnackbar({ open: true, message: "保存失败", severity: "error" });
     }
-  };
+  }, [weekKey]);
 
   const changeWeek = (delta) => {
     const d = new Date(weekKey);
@@ -289,11 +354,25 @@ export default function WeekMeetingPage() {
         overflow: "hidden",
         fontSize: "0.75rem",
       }}>
-        {/* 表头 */}
-        <Box sx={{ p: 0.5, bgcolor: "#F9FAFB", borderBottom: "1px solid", borderColor: "divider" }} />
+        {/* 表头 — 左上角斜线表头 */}
+        <Box sx={{
+          p: 0, bgcolor: HEADER_BG, borderBottom: "1px solid",
+          borderColor: "divider", position: "relative",
+          height: 36, overflow: "hidden",
+        }}>
+          <Box sx={{ position: "absolute", top: 3, left: 6, fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
+            星期
+          </Box>
+          <Box sx={{ position: "absolute", bottom: 3, right: 6, fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
+            时间
+          </Box>
+          <svg width="100%" height="100%" style={{ position: "absolute", top: 0, left: 0 }}>
+            <line x1="0" y1="0" x2="100%" y2="100%" stroke="#D1D5DB" strokeWidth="1" />
+          </svg>
+        </Box>
         {WEEKDAYS.map((d) => (
           <Box key={d} sx={{
-            p: 0.5, textAlign: "center", fontWeight: 600, bgcolor: "#F9FAFB",
+            p: 0.5, textAlign: "center", fontWeight: 600, bgcolor: HEADER_BG,
             borderBottom: "1px solid", borderLeft: "1px solid", borderColor: "divider",
           }}>
             {d}
@@ -317,7 +396,7 @@ export default function WeekMeetingPage() {
         {/* 输出物行 — 表格底部 */}
         <Box sx={{
           p: 0.5, borderTop: "2px solid", borderColor: "divider",
-          bgcolor: "#F9FAFB", display: "flex", alignItems: "flex-start",
+          bgcolor: HEADER_BG, display: "flex", alignItems: "flex-start",
           justifyContent: "center", pt: 1.5,
         }}>
           <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ fontSize: "0.72rem" }}>
@@ -327,25 +406,18 @@ export default function WeekMeetingPage() {
         {WEEKDAYS.map((d) => (
           <Box key={`out-${d}`} sx={{
             p: 0.5, borderTop: "2px solid", borderLeft: "1px solid",
-            borderColor: "divider", bgcolor: "#F9FAFB",
+            borderColor: "divider", bgcolor: HEADER_BG,
           }}>
-            <TextField
-              multiline
-              minRows={1}
-              maxRows={3}
-              size="small"
-              fullWidth
-              placeholder="输出物..."
+            <InlineOutput
               value={outputs[d] || ""}
-              onChange={(e) => setOutputs({ ...outputs, [d]: e.target.value })}
-              onBlur={() => handleOutputBlur(d)}
-              sx={{ "& .MuiInputBase-root": { fontSize: "0.7rem" } }}
+              onChange={(content) => handleOutputChange(d, content)}
+              onSave={(content) => handleOutputSave(d, content)}
             />
           </Box>
         ))}
       </Box>
 
-      {/* 行内会议创建 Popper（无按钮：Enter 或 blur 有内容时自动创建） */}
+      {/* 行内会议创建 Popper */}
       <ClickAwayListener onClickAway={closePopper}>
         <Popper
           open={popper.open}
@@ -366,7 +438,6 @@ export default function WeekMeetingPage() {
               onChange={(e) => setPopper((p) => ({ ...p, title: e.target.value }))}
               onKeyDown={(e) => { if (e.key === "Enter") handlePopperAdd(); }}
               onBlur={() => {
-                // 延迟判断，确保 Enter 键的 handlePopperAdd 先执行
                 setTimeout(() => {
                   if (addingRef.current) return;
                   if (popper.title.trim()) {
@@ -414,22 +485,18 @@ export default function WeekMeetingPage() {
   );
 }
 
-/**
- * 单行组件 — 时间标签 + 6天格子 + 叠加的会议卡片
- *
- * 支持拖拽选择时间段（mousedown → mousemove → mouseup）：
- * - mousedown 在空单元格上开始拖拽
- * - mouseenter 在同一列的格子上扩展选择
- * - 拖拽中被选中的格子有视觉高亮
- * - mouseup 后弹出 Popper 创建会议
- */
+// ============================================================
+// Row — 单行组件：时间标签 + 6天格子 + 叠加的会议卡片
+// ============================================================
+
 function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown, onCellMouseEnter }) {
   return (
     <>
-      {/* 时间标签列 */}
+      {/* 时间标签列 — 带背景色 */}
       <Box sx={{
         p: 0.5, textAlign: "center", color: "text.secondary",
         borderBottom: "1px solid", borderColor: "divider", fontSize: "0.7rem",
+        bgcolor: "#F3F4F6",
       }}>
         {time}
       </Box>
@@ -442,6 +509,13 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
         });
         const isEmpty = meetings.length === 0;
 
+        // 判断当前格子是否被会议卡片覆盖（跨行会议）
+        const coveredByMeeting = !isEmpty || (meetingsByDay[day] || []).some((m) => {
+          const startIdx = timeToSlotIndex(m.start_time);
+          const endIdx = startIdx + meetingSpan(m.start_time, m.end_time);
+          return startIdx < rowIdx && rowIdx < endIdx;
+        });
+
         // 判断当前格子是否在拖拽选中范围内
         const inDragRange =
           dragState.active &&
@@ -452,19 +526,19 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
         return (
           <Box
             key={`${day}-${rowIdx}`}
-            onMouseDown={isEmpty ? (e) => onCellMouseDown(e, day, rowIdx) : undefined}
+            onMouseDown={isEmpty && !coveredByMeeting ? (e) => onCellMouseDown(e, day, rowIdx) : undefined}
             onMouseEnter={() => onCellMouseEnter(day, rowIdx)}
             sx={{
-              borderBottom: "1px solid",
+              borderBottom: coveredByMeeting ? "none" : "1px solid",
               borderLeft: "1px solid",
               borderColor: "divider",
               minHeight: SLOT_HEIGHT,
               position: "relative",
               p: 0.25,
-              cursor: isEmpty ? "pointer" : "default",
+              cursor: (isEmpty && !coveredByMeeting) ? "pointer" : "default",
               transition: "background-color 0.15s",
               bgcolor: inDragRange ? "rgba(124,58,237,0.15)" : "transparent",
-              "&:hover": (isEmpty && !dragState.active) ? { bgcolor: "action.hover" } : {},
+              "&:hover": (isEmpty && !coveredByMeeting && !dragState.active) ? { bgcolor: "action.hover" } : {},
               userSelect: dragState.active ? "none" : undefined,
             }}
           >
@@ -497,7 +571,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
                   >
                     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.25 }}>
                       <Typography sx={{
-                        fontSize: "0.68rem", fontWeight: 600, flex: 1, lineHeight: 1.2,
+                        fontSize: "0.72rem", fontWeight: 600, flex: 1, lineHeight: 1.2,
                         color: color, wordBreak: "break-all",
                       }}>
                         {m.title}
@@ -513,7 +587,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
                         </IconButton>
                       )}
                     </Box>
-                    <Typography sx={{ fontSize: "0.62rem", color: "text.secondary" }}>
+                    <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>
                       {m.start_time}-{m.end_time}
                     </Typography>
                   </Box>

@@ -24,6 +24,7 @@ function InfoRow({ label, value }) {
         overflow: "hidden",
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
+        mb: 0.25,
       }}
     >
       <Box component="span" sx={{ fontWeight: 600, color: "text.primary" }}>
@@ -40,7 +41,7 @@ function InfoRow({ label, value }) {
  * Props:
  *   project — { id, code, name, theme_color, order_number, storage_location,
  *               meeting_time, current_phase, ... }
- *   tasks   — 该项目的任务数组
+ *   tasks   — 该项目的任务数组（含 status / kanban_column 字段）
  *   onEdit  — (project) => void  编辑回调
  */
 export default function ProjectCard({ project, tasks = [], onEdit }) {
@@ -49,6 +50,12 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
   );
+
+  /** 查找"进行中"任务作为当前阶段显示 */
+  const inProgressTask = tasks.find(
+    (t) => t.status === "进行中" || t.kanban_column === "进行中"
+  );
+  const currentPhaseDisplay = inProgressTask ? inProgressTask.title : (project.current_phase || "--");
 
   /** 右键打开编辑菜单 */
   const handleContextMenu = (e) => {
@@ -95,23 +102,34 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
         />
 
         <CardContent sx={{ pl: 2.5, pr: 2, py: 2, "&:last-child": { pb: 2 } }}>
-          {/* 标题行：[代号] + 名称 */}
-          <Typography
-            variant="subtitle1"
-            fontWeight={700}
-            sx={{
-              mb: 1,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-              fontSize: "0.95rem",
-            }}
-          >
-            <Box component="span" sx={{ color: themeColor, fontWeight: 800 }}>
+          {/* 标题区域：代号（单独一行，加大） + 名称（单独一行） */}
+          <Box sx={{ mb: 1.25 }}>
+            <Typography
+              sx={{
+                fontSize: "1.25rem",
+                fontWeight: 800,
+                color: themeColor,
+                lineHeight: 1.3,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
               [{project.code}]
-            </Box>{" "}
-            {project.name}
-          </Typography>
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: "0.95rem",
+                fontWeight: 700,
+                lineHeight: 1.3,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {project.name}
+            </Typography>
+          </Box>
 
           {/* 信息聚合区 */}
           <Box sx={{ mb: 1 }}>
@@ -120,7 +138,7 @@ export default function ProjectCard({ project, tasks = [], onEdit }) {
             <InfoRow label="例会时间" value={project.meeting_time} />
             <InfoRow
               label="当前阶段"
-              value={project.current_phase || "-"}
+              value={currentPhaseDisplay}
             />
           </Box>
 
