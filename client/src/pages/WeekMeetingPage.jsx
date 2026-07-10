@@ -33,22 +33,25 @@ function getMonday(date) {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
   d.setDate(d.getDate() - (d.getDay() === 0 ? 6 : d.getDay() - 1));
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /** 周一日期 → 显示范围 "7/6 - 7/11"（周一~周六） */
 function weekRange(mondayStr) {
-  const d = new Date(mondayStr);
-  const end = new Date(d);
-  end.setDate(end.getDate() + 5); // +5 = 周六
-  return `${d.getMonth() + 1}/${d.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`;
+  const [y, m, d] = mondayStr.split("-").map(Number);
+  const start = new Date(y, m - 1, d);
+  const end = new Date(y, m - 1, d + 5);
+  return `${start.getMonth() + 1}/${start.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`;
 }
 
 /** 周一日期 → ISO 周号 "2026年 第28周" */
 function getWeekNumber(mondayStr) {
-  const d = new Date(mondayStr);
-  const thursday = new Date(d);
-  thursday.setDate(d.getDate() + 3);
+  const [y, m, d] = mondayStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  const thursday = new Date(y, m - 1, d + 3);
   const yearStart = new Date(thursday.getFullYear(), 0, 1);
   const weekNum = Math.ceil(((thursday - yearStart) / 86400000 + 1) / 7);
   return `${thursday.getFullYear()}年 第${weekNum}周`;
@@ -332,9 +335,9 @@ export default function WeekMeetingPage() {
   }, [weekKey]);
 
   const changeWeek = (delta) => {
-    const d = new Date(weekKey);
-    d.setDate(d.getDate() + delta * 7);
-    setWeekKey(getMonday(d));
+    const [y, m, d] = weekKey.split("-").map(Number);
+    const date = new Date(y, m - 1, d + delta * 7);
+    setWeekKey(getMonday(date));
   };
 
   if (loading) {
