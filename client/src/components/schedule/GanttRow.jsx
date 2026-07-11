@@ -51,7 +51,7 @@ export default function GanttRow({
           bgcolor: bg,
           display: "flex",
           alignItems: "center",
-          pl: 1 + model.depth * 16,
+          paddingLeft: `${8 + model.depth * 16}px`,
           pr: 1,
           borderRight: "1px solid #E5E7EB",
           fontSize: "0.8rem",
