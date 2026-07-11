@@ -1054,8 +1054,8 @@ function hasCycle(taskList) {
 router.get("/templates/schedule/:file", (req, res) => {
   try {
     const fileName = req.params.file;
-    // 文件名白名单校验（防目录穿越）
-    if (!/^[A-Za-z0-9_\-]+\.json$/.test(fileName || "")) {
+    // 文件名白名单校验（防目录穿越，允许 CJK 中文名读回）
+    if (!/^[\u4e00-\u9fa5A-Za-z0-9_\-]+\.json$/.test(fileName || "")) {
       return res.status(400).json({ ok: false, error: "非法文件名" });
     }
     const filePath = join(TEMPLATES_DIR, fileName);
@@ -1087,6 +1087,11 @@ router.post("/templates/schedule", (req, res) => {
     }
     if (!Array.isArray(tasks)) {
       return res.status(400).json({ ok: false, error: "tasks 必须为数组" });
+    }
+
+    // 路径穿越字符显式拒绝（与 GET 守卫一致），而非静默清洗
+    if (/[\/\\]|\.\./.test(name)) {
+      return res.status(400).json({ ok: false, error: "模板名称含非法字符（禁止路径分隔符或 ..）" });
     }
 
     const safeName = sanitizeTemplateName(name);

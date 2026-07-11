@@ -2,6 +2,25 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-11 — 排期模板接口契约对齐（GET 支持中文名读回 + POST 拒绝路径穿越字符）
+
+- **缺陷修复**
+  - 【中文名模板读回】`GET /api/templates/schedule/:file` 文件名白名单原为 `^[A-Za-z0-9_\-]+\.json$`，拒绝 CJK，导致中文名模板能存不能读（返回 400），「编辑已有模板」链路断裂；改为 `^[\u4e00-\u9fa5A-Za-z0-9_\-]+\.json$`，与 `POST` 端 `sanitizeTemplateName`（保留中文）保持一致
+  - 【路径穿越显式拒绝】`POST /api/templates/schedule` 原仅靠 `sanitizeTemplateName` 静默剥除 `/`、`\`、`..`，`../etcpasswd` 被洗成 `etcpasswd.json` 仍落盘并返回 200，不符合「拒绝→400」契约且与 `***`→400 不一致；改为在清洗前先做显式校验，原始 `name` 含 `/`、`\` 或 `..` 直接 400 拒绝（保留 `dirname` 守卫作纵深防御）
+
+- **修改模块**
+  - `server/src/routes/schedule.js`：仅改上述两处（GET 白名单字符类、POST 路径穿越前置校验），`custom-hardware.json` 等已有模板文件不受影响
+
+- **接口调整**
+  - `GET /api/templates/schedule/:file`：现接受中文名（如 `我的模板A.json`），返回 200 + 完整模板内容（含 `bg_color`）；`dirname` 穿越守卫不变
+  - `POST /api/templates/schedule`：新增前置校验，body.name 含路径分隔符（`/`、`\`）或 `..` 时返回 `400 { ok:false, error:"模板名称含非法字符（禁止路径分隔符或 ..）" }`；普通中文/字母/数字名正常通过并保留
+
+- **参数变动**
+  - 无新增依赖，无数据模型变动；仅收紧输入校验契约
+
+- **新增功能**
+  - 无
+
 ## 2026-07-11 — 项目计划页三项增量（阶段折叠联动 + 甘特图时间轴单位切换 + 模板阶段背景色）
 
 - **新增功能**
