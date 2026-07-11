@@ -578,4 +578,34 @@ try {
   console.warn("Migration meeting_outputs:", e.message);
 }
 
+// =====================================================
+// P0 增量：PLM 连接与只读探针（曙光 PLM / 经典 ENOVIA v6）
+// 本次只建表 + 连接配置，不实现实际排程同步（P1 负责）
+// =====================================================
+
+// PLM 适配器：连接配置（单用户，取第一条）
+db.exec(`CREATE TABLE IF NOT EXISTS plm_connection (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  server_url TEXT NOT NULL,
+  api_token TEXT,
+  collab_space TEXT DEFAULT 'GLOBAL',
+  tls_reject_unauthorized INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  updated_at TEXT DEFAULT (datetime('now','localtime'))
+)`);
+
+// PLM 任务映射（预留给 P1/P2 增量同步，本次仅建表）
+db.exec(`CREATE TABLE IF NOT EXISTS plm_task_map (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hpm_project_id INTEGER,
+  hpm_task_id TEXT,
+  plm_object_id TEXT,
+  plm_object_type TEXT,
+  sync_state TEXT DEFAULT 'pending',
+  created_at TEXT DEFAULT (datetime('now','localtime')),
+  updated_at TEXT DEFAULT (datetime('now','localtime'))
+)`);
+
+console.log("Migration plm_connection + plm_task_map: done");
+
 export default db;

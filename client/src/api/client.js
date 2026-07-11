@@ -140,6 +140,14 @@ export const api = {
     updateConnection: (data) =>
       request("/mantis/connection", { method: "PUT", body: JSON.stringify(data) }),
   },
+  // PLM 连接与只读探针（P0）
+  plm: {
+    getConnection: () => request("/plm/connection"),
+    saveConnection: (data) =>
+      request("/plm/connection", { method: "PUT", body: JSON.stringify(data) }),
+    probe: (url) =>
+      request("/plm/probe", { method: "POST", body: JSON.stringify({ url }) }),
+  },
   // 会议计划
   weekMeetings: {
     list: (week) => request(`/week-meetings?week=${week}`),

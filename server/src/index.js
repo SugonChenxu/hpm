@@ -13,6 +13,7 @@ import meetingsRouter from "./routes/meetings.js";
 import weeklyReportsRouter from "./routes/weekly-reports.js";
 import scheduleRouter from "./routes/schedule.js";
 import weekMeetingsRouter from "./routes/week-meetings.js";
+import plmRouter from "./routes/plm.js";
 
 const app = express();
 const PORT = 3001;
@@ -35,6 +36,7 @@ app.use("/api", meetingsRouter);
 app.use("/api", weeklyReportsRouter);
 app.use("/api", scheduleRouter);
 app.use("/api", weekMeetingsRouter);
+app.use("/api", plmRouter);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);

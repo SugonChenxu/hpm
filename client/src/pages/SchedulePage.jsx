@@ -20,6 +20,7 @@ import {
   FileDownload,
   AutoAwesome,
   History,
+  Hub,
 } from "@mui/icons-material";
 import api from "../api/client";
 import { useProjectContext } from "../context/ProjectContext";
@@ -29,6 +30,7 @@ import PageLoading from "../components/common/PageLoading";
 import ScheduleTable from "../components/schedule/ScheduleTable";
 import ContextMenu from "../components/schedule/ContextMenu";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
+import PlmConnectionDialog from "../components/plm/PlmConnectionDialog";
 import { calcCompletionStatus } from "../utils/schedule-date";
 
 export default function SchedulePage() {
@@ -57,6 +59,9 @@ export default function SchedulePage() {
 
   // Predecessor trigger
   const [predTriggerTaskId, setPredTriggerTaskId] = useState(null);
+
+  // PLM 连接/探针对话框
+  const [plmDialogOpen, setPlmDialogOpen] = useState(false);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState({
@@ -431,6 +436,14 @@ export default function SchedulePage() {
         >
           导出 Excel
         </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<Hub />}
+          onClick={() => setPlmDialogOpen(true)}
+        >
+          PLM 连接/探针
+        </Button>
       </PageHeader>
 
       {/* Schedule table */}
@@ -509,6 +522,12 @@ export default function SchedulePage() {
           <Button onClick={() => setTemplateOpen(false)}>取消</Button>
         </DialogActions>
       </Dialog>
+
+      {/* PLM 连接/探针对话框 */}
+      <PlmConnectionDialog
+        open={plmDialogOpen}
+        onClose={() => setPlmDialogOpen(false)}
+      />
 
       {/* Snackbar */}
       <Snackbar
