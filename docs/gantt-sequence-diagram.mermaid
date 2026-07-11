@@ -1,0 +1,22 @@
+sequenceDiagram
+  participant SP as SchedulePage
+  participant API as api.schedule.list
+  participant GC as GanttChart
+  participant TL as GanttTimeline
+  participant GR as GanttRow
+  participant GL as GanttLinks
+
+  SP->>API: list(projectId)
+  API-->>SP: { ok, data: tasks[] }
+  SP->>GC: <GanttChart tasks={tasks} />
+
+  Note over GC: useMemo 计算（仅一次）
+  GC->>GC: computeTimeline() 取 min/max + PAD_DAYS
+  GC->>GC: buildRows() 行映射 x/width/color
+  GC->>GC: buildLinks() JSON.parse(predecessor_ids) → FS 连线坐标
+
+  GC->>TL: 渲染月/周双行表头 + 网格
+  GC->>GR: 逐行渲染条形（depth 缩进 / 着色 / 今天线 / Tooltip）
+  GC->>GL: 渲染 SVG 依赖箭头（情形A/B 折线 + 防御）
+
+  Note over GC,GL: 本期为只读视图，无任何后端写操作

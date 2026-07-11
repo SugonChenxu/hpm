@@ -60,6 +60,15 @@
 - 文档导出：不做
 - 移动端：预留响应式 + PWA 接口，MVP 不实现
 
+## 预留 / 待办功能（跨会话 tracking）
+| 功能 | 状态 | 说明 / 续做前置 |
+|------|------|---------------|
+| PLM 排程同步 P0 | ✅ 已完成 | 连接配置表 + 只读探针 + 前端连接对话框（提交 35e52d7）；链路/鉴权/真实接口 `emxFreezePaneGetData.jsp` 已验证打通 |
+| PLM 排程同步 P1/P2 | ⏸ 预留（用户 07-11 确认先暂停） | P1=单向推送闭环（向 PLM 写 WBS 任务）；P2=增量同步+前端「推送」按钮。**续做前置**：①用户 F12 抓「新增/编辑 WBS 任务」的 curl；②或 `emxFreezePaneGetData.jsp` 真实 Response XML。根因=ENOVIA v6 强 session 依赖，裸 curl 无法独立 bootstrap |
+| Mantis 缺陷双向同步 | ⏸ 预留 | 架构/Adapter 已预留（mantis.js 模式），待启动 |
+
+> 注：PLM 连接配置已落库（plm_connection id=1）；SSO Cookie 会过期，续做时需重新向用户索取，严禁硬编码进源码。
+
 ## 运维知识库 — 服务器挂了排查 SOP
 
 ### 排查步骤（按优先级执行）

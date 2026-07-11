@@ -1,0 +1,78 @@
+classDiagram
+  class GanttChart {
+    +tasks: TaskDTO[]
+    +timelineStart: Dayjs
+    +timelineEnd: Dayjs
+    +DAY_WIDTH: number
+    +rowModels: GanttRowModel[]
+    +linkModels: GanttLinkModel[]
+    +computeTimeline()
+    +buildRows()
+    +buildLinks()
+  }
+
+  class GanttTimeline {
+    +timelineStart: Dayjs
+    +timelineEnd: Dayjs
+    +DAY_WIDTH: number
+    +renderMonthHeader()
+    +renderWeekHeader()
+    +renderGrid()
+  }
+
+  class GanttRow {
+    +rowModel: GanttRowModel
+    +renderName(depthIndent)
+    +renderBar(color)
+    +renderTodayLine()
+  }
+
+  class GanttLinks {
+    +links: GanttLinkModel[]
+    +renderArrowFS(pathType)
+  }
+
+  class TaskDTO {
+    +id: number
+    +name: string
+    +planned_start: string
+    +planned_end: string
+    +duration_days: number
+    +depth: number
+    +predecessor_ids: string
+    +task_type: string
+    +completion_status: string
+    +bg_color: string
+  }
+
+  class GanttRowModel {
+    +id: number
+    +name: string
+    +depth: number
+    +rowIndex: number
+    +startDate: Dayjs
+    +endDate: Dayjs
+    +x: number
+    +width: number
+    +color: string
+  }
+
+  class GanttLinkModel {
+    +fromId: number
+    +toId: number
+    +fromRowIndex: number
+    +toRowIndex: number
+    +fromX: number
+    +fromY: number
+    +toX: number
+    +toY: number
+  }
+
+  GanttChart "1" *-- "1" GanttTimeline : composes
+  GanttChart "1" *-- "*" GanttRow : renders per row
+  GanttChart "1" *-- "1" GanttLinks : composes overlay
+  GanttChart ..> TaskDTO : receives via props
+  GanttChart ..> GanttRowModel : builds
+  GanttChart ..> GanttLinkModel : builds
+  GanttRowModel ..> TaskDTO : derives from
+  GanttLinkModel ..> GanttRowModel : reads x/width/rowIndex
