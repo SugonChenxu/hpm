@@ -28,6 +28,7 @@ import ProjectSelector from "../components/common/ProjectSelector";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
 import ScheduleTable from "../components/schedule/ScheduleTable";
+import GanttChart from "../components/schedule/GanttChart";
 import ContextMenu from "../components/schedule/ContextMenu";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
 import PlmConnectionDialog from "../components/plm/PlmConnectionDialog";
@@ -457,6 +458,11 @@ export default function SchedulePage() {
         predTriggerTaskId={predTriggerTaskId}
         onPredTriggerHandled={() => setPredTriggerTaskId(null)}
       />
+
+      {/* Gantt chart (read-only) */}
+      <Box sx={{ overflowX: "auto", mt: 2 }}>
+        <GanttChart tasks={tasks} />
+      </Box>
 
       {/* Context menu */}
       <ContextMenu
