@@ -519,7 +519,12 @@ export default function SchedulePage() {
 
       {/* Gantt chart (read-only) */}
       <Box sx={{ overflowX: "auto", mt: 1 }}>
-        <GanttChart tasks={visibleTasks} unit={unit} />
+        <GanttChart
+          tasks={visibleTasks}
+          unit={unit}
+          collapsedPhases={collapsedPhases}
+          onToggleCollapse={toggleCollapse}
+        />
       </Box>
 
       {/* Context menu */}

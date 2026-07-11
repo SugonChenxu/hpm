@@ -1,4 +1,6 @@
 import { Box, Tooltip } from "@mui/material";
+import ExpandMore from "@mui/icons-material/ExpandMore";
+import ExpandLess from "@mui/icons-material/ExpandLess";
 
 /**
  * 甘特图单行：左侧任务名列（depth 缩进、sticky）+ 右侧时间轴条形。
@@ -15,6 +17,8 @@ export default function GanttRow({
   barHeight = 22,
   nameColWidth = 220,
   chartWidth = 0,
+  collapsedPhases = new Set(),
+  onToggleCollapse = () => {},
 }) {
   const barTop = (rowHeight - barHeight) / 2;
   const bg = model.rowIndex % 2 === 1 ? "#FAFAFA" : "#FFFFFF";
@@ -62,6 +66,37 @@ export default function GanttRow({
           textOverflow: "ellipsis",
         }}
       >
+        {/* 阶段任务显示折叠箭头（与排期表共用 collapsedPhases 单一数据源） */}
+        {isPhase && (
+          <Box
+            component="span"
+            role="button"
+            aria-label={collapsedPhases.has(model.id) ? "展开" : "折叠"}
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse(model.id);
+            }}
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: 20,
+              height: 20,
+              mr: 0.5,
+              flexShrink: 0,
+              borderRadius: "4px",
+              cursor: "pointer",
+              color: "#6B7280",
+              "&:hover": { bgcolor: "rgba(0,0,0,0.06)" },
+            }}
+          >
+            {collapsedPhases.has(model.id) ? (
+              <ExpandMore fontSize="small" />
+            ) : (
+              <ExpandLess fontSize="small" />
+            )}
+          </Box>
+        )}
         {model.name}
       </Box>
 

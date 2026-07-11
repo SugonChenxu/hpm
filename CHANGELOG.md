@@ -2,6 +2,25 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-11 — 甘特图：子任务继承阶段颜色 + 名称列折叠箭头
+
+- **缺陷修复**
+  - 【甘特图阶段色继承】`GanttChart.buildGanttModel` 原取色（`resolveColor`）只认 `task.bg_color`，否则按 completion_status 给状态色，子任务无法继承父阶段颜色，与排期表 `getBgColor` 语义不一致。现改为：自身 `bg_color` 优先；否则沿 `parentMap`/`byId` 向上查找最近祖先的非空 `bg_color`（`getInheritedBg`，visited Set 防环，祖先不在可见子集内则停止返回 null）；仍无则走原状态色映射。对齐 `ScheduleTable.getBgColor` 继承语义。
+
+- **新增功能**
+  - 【甘特图阶段可折叠】`GanttRow` 为「阶段任务」在名称列最左渲染 `ExpandMore`/`ExpandLess` 箭头（`@mui/icons-material`，已在依赖中，零新增），点击经 `onToggleCollapse` 联动 `SchedulePage` 的 `collapsedPhases` 单一数据源，与排期表折叠状态同步；普通/节点任务不显示箭头。`SchedulePage` 向 `<GanttChart>` 透传 `collapsedPhases` 与 `onToggleCollapse`（复用与排期表相同的 `toggleCollapse` setter）。
+
+- **修改模块**
+  - `client/src/components/schedule/GanttChart.jsx`：新增 `getInheritedBg`，`resolveColor` 改为接收 `effectiveBg`，`buildGanttModel` 增加 `byId`/`parentMap` 索引；`GanttChart` 新增 `collapsedPhases`/`onToggleCollapse` props 并透传 `GanttRow`
+  - `client/src/components/schedule/GanttRow.jsx`：新增折叠箭头（仅阶段任务），引入 `ExpandMore`/`ExpandLess`
+  - `client/src/pages/SchedulePage.jsx`：`<GanttChart>` 补传 `collapsedPhases` 与 `onToggleCollapse`
+
+- **接口调整**
+  - 无（纯前端；未改后端/数据模型）
+
+- **参数变动**
+  - 零新增 npm 依赖；`PX_PER_DAY`、时间轴单位逻辑、空态逻辑、`computeVisibleTasks`、`TemplateEditorDialog`、`ContextMenu` 均未改动
+
 ## 2026-07-11 — 排期模板接口契约对齐（GET 支持中文名读回 + POST 拒绝路径穿越字符）
 
 - **缺陷修复**

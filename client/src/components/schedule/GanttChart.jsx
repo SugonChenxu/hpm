@@ -30,10 +30,10 @@ dayjs.extend(quarterOfYear);
 dayjs.locale("zh-cn");
 
 /**
- * 取色：优先 bg_color，否则按 completion_status 映射
+ * 取色：优先 effectiveBg（自身 bg_color 或继承到的祖先色），否则按 completion_status 映射
  */
-function resolveColor(task) {
-  if (task.bg_color) return task.bg_color;
+function resolveColor(task, effectiveBg) {
+  if (effectiveBg) return effectiveBg;
   switch (task.completion_status) {
     case "已完成":
       return "#22c55e";
@@ -139,6 +139,27 @@ const UNIT_CONFIG = {
 };
 
 /**
+ * 颜色继承：从 task 沿 parentMap 向上走，返回第一个非空祖先 bg_color；
+ * 都空返回 null。visibleTasks 是过滤子集，可见任务的祖先必也在子集内，
+ * 故向上不会越界；若某祖先恰不在 byId 中则停止（与 getBgColor 的
+ * `parent ? ... : ""` 行为一致，仅语义上用 null 表示"无"）。
+ * 用 visited Set 防环。
+ */
+function getInheritedBg(task, byId, parentMap) {
+  const visited = new Set();
+  let currentId = parentMap.get(task.id) ?? null;
+  while (currentId != null) {
+    if (visited.has(currentId)) break; // 防环
+    visited.add(currentId);
+    const parent = byId.get(currentId);
+    if (!parent) break; // 祖先不在子集内，停止
+    if (parent.bg_color) return parent.bg_color;
+    currentId = parentMap.get(parent.id) ?? null;
+  }
+  return null;
+}
+
+/**
  * 纯函数：将扁平任务列表转换为甘特图绘图模型
  * 计算：时间轴范围 / 行模型 / id→rowIndex 映射 / FS 依赖连线 / 刻度分段 / 今天线
  * 防御：无效日期、无依赖、自依赖、缺失 id、坐标 NaN 一律跳过，绝不抛错
@@ -148,6 +169,10 @@ function buildGanttModel(tasksInput, unit = "day") {
   const validTasks = tasks.filter(
     (t) => t && t.id != null && t.planned_start && t.planned_end
   );
+
+  // 建索引：id→task、id→parent_id，供颜色向上继承查找
+  const byId = new Map(validTasks.map((t) => [t.id, t]));
+  const parentMap = new Map(validTasks.map((t) => [t.id, t.parent_id ?? null]));
 
   if (validTasks.length === 0) {
     return {
@@ -198,7 +223,8 @@ function buildGanttModel(tasksInput, unit = "day") {
       endDate,
       x: daysFromStart(startDate) * PX,
       width: duration * PX,
-      color: resolveColor(t),
+      // 颜色：自身 bg_color 优先，否则继承最近祖先的 bg_color，再否则走状态色
+      color: resolveColor(t, t.bg_color || getInheritedBg(t, byId, parentMap)),
     };
   });
   const idToRow = new Map(rowModels.map((m) => [m.id, m.rowIndex]));
@@ -288,8 +314,15 @@ function buildGanttModel(tasksInput, unit = "day") {
  * Props:
  *   tasks — TaskDTO[]（已过滤后的可见任务，由 SchedulePage 传 visibleTasks）
  *   unit  — 'day' | 'week' | 'month' | 'quarter'，时间轴单位，决定像素缩放与刻度粒度
+ *   collapsedPhases  — Set<number>，折叠的阶段 id（与排期表共用单一数据源）
+ *   onToggleCollapse — (phaseId) => void，切换阶段折叠状态
  */
-export default function GanttChart({ tasks, unit = "day" }) {
+export default function GanttChart({
+  tasks,
+  unit = "day",
+  collapsedPhases = new Set(),
+  onToggleCollapse = () => {},
+}) {
   const model = useMemo(() => buildGanttModel(tasks, unit), [tasks, unit]);
 
   if (model.empty) {
@@ -364,6 +397,8 @@ export default function GanttChart({ tasks, unit = "day" }) {
               barHeight={BAR_HEIGHT}
               nameColWidth={NAME_COL_WIDTH}
               chartWidth={chartWidth}
+              collapsedPhases={collapsedPhases}
+              onToggleCollapse={onToggleCollapse}
             />
           ))}
 
