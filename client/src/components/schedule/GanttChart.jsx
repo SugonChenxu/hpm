@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Box, Typography } from "@mui/material";
 import dayjs from "dayjs";
 import isoWeek from "dayjs/plugin/isoWeek";
+import quarterOfYear from "dayjs/plugin/quarterOfYear";
 import "dayjs/locale/zh-cn";
 import { toDayjs } from "../../utils/schedule-date";
 import EmptyState from "../common/EmptyState";
@@ -12,7 +13,9 @@ import GanttLinks from "./GanttLinks";
 // ==============================
 // 绘图常量（全组件统一，改一处即可缩放）
 // ==============================
-const DAY_WIDTH = 24; // 每天像素宽
+// 单位 → 每天像素宽（数值越小越"缩"）。真正的缩放模型：
+// 单位越粗 → 每天像素越少 → 整图越"缩"，使日/周/月/季度真正改变显示比例。
+const PX_PER_DAY = { day: 24, week: 12, month: 4, quarter: 1.5 };
 const ROW_HEIGHT = 36; // 每行高
 const BAR_HEIGHT = 22; // 条形高（垂直居中于行）
 const HEADER_HEIGHT = 48; // 双行表头（月 24 + 周 24）
@@ -21,8 +24,9 @@ const PAD_DAYS = 3; // 时间轴两端留白天数
 const ARROW_GAP = 12; // 连线从条形端点外扩的水平距离
 const TODAY_COLOR = "#ef4444"; // 今天线颜色
 
-// 扩展 dayjs 插件（isoWeek 用于按「周一」分段周刻度）
+// 扩展 dayjs 插件（isoWeek 用于按「周一」分段周刻度；quarterOfYear 用于季度刻度）
 dayjs.extend(isoWeek);
+dayjs.extend(quarterOfYear);
 dayjs.locale("zh-cn");
 
 /**
@@ -57,11 +61,89 @@ function parsePredecessors(str) {
 }
 
 /**
+ * 生成刻度分段：自 timelineStart 起，按给定粒度（day/week/month/quarter/year）
+ * 在 [timelineStart, timelineEnd] 范围内切分，返回 {label,x,width}[]
+ * 所有坐标均相对 timelineStart，乘以 PX 即为像素位置。
+ */
+function buildSegments(timelineStart, timelineEnd, level, px, labelFn) {
+  const segments = [];
+  const startOf = (d) => {
+    switch (level) {
+      case "week":
+        return d.startOf("isoWeek");
+      case "month":
+        return d.startOf("month");
+      case "quarter":
+        return d.startOf("quarter");
+      case "year":
+        return d.startOf("year");
+      default:
+        return d.startOf("day");
+    }
+  };
+  const addUnit = (d) => {
+    switch (level) {
+      case "week":
+        return d.add(1, "week");
+      case "month":
+        return d.add(1, "month");
+      case "quarter":
+        return d.add(1, "quarter");
+      case "year":
+        return d.add(1, "year");
+      default:
+        return d.add(1, "day");
+    }
+  };
+
+  let cursor = startOf(timelineStart);
+  let guard = 0;
+  while (!cursor.isAfter(timelineEnd) && guard < 10000) {
+    guard += 1;
+    const segEnd = addUnit(cursor).subtract(1, "day"); // 含首尾
+    const end = segEnd.isAfter(timelineEnd) ? timelineEnd : segEnd;
+    const startX = cursor.diff(timelineStart, "day") * px;
+    const days = end.diff(cursor, "day") + 1;
+    segments.push({ label: labelFn(cursor), x: startX, width: days * px });
+    cursor = addUnit(cursor);
+  }
+  return segments;
+}
+
+// 单位 → 主(minor 下行)/次(major 上行)刻度配置
+const UNIT_CONFIG = {
+  day: {
+    minor: "day",
+    minorLabel: (d) => d.format("DD"),
+    major: "month",
+    majorLabel: (d) => `${d.year()}年${d.month() + 1}月`,
+  },
+  week: {
+    minor: "week",
+    minorLabel: (d) => d.format("MM/DD"),
+    major: "month",
+    majorLabel: (d) => `${d.year()}年${d.month() + 1}月`,
+  },
+  month: {
+    minor: "month",
+    minorLabel: (d) => `${d.year()}年${d.month() + 1}月`,
+    major: "quarter",
+    majorLabel: (d) => `${d.year()}年 Q${d.quarter()}`,
+  },
+  quarter: {
+    minor: "quarter",
+    minorLabel: (d) => `${d.year()}年Q${d.quarter()}`,
+    major: "year",
+    majorLabel: (d) => `${d.year()}年`,
+  },
+};
+
+/**
  * 纯函数：将扁平任务列表转换为甘特图绘图模型
  * 计算：时间轴范围 / 行模型 / id→rowIndex 映射 / FS 依赖连线 / 刻度分段 / 今天线
  * 防御：无效日期、无依赖、自依赖、缺失 id、坐标 NaN 一律跳过，绝不抛错
  */
-function buildGanttModel(tasksInput) {
+function buildGanttModel(tasksInput, unit = "day") {
   const tasks = Array.isArray(tasksInput) ? tasksInput : [];
   const validTasks = tasks.filter(
     (t) => t && t.id != null && t.planned_start && t.planned_end
@@ -72,14 +154,17 @@ function buildGanttModel(tasksInput) {
       empty: true,
       rowModels: [],
       links: [],
-      monthSegments: [],
-      weekSegments: [],
+      majorSegments: [],
+      minorSegments: [],
       gridLines: [],
       chartWidth: 0,
       chartHeight: 0,
       todayX: null,
     };
   }
+
+  // 按单位取得「每天像素宽」
+  const PX = PX_PER_DAY[unit] || PX_PER_DAY.day;
 
   // ---- 时间轴范围 ----
   const starts = validTasks.map((t) => toDayjs(t.planned_start));
@@ -89,8 +174,11 @@ function buildGanttModel(tasksInput) {
   const timelineStart = minStart.subtract(PAD_DAYS, "day");
   const timelineEnd = maxEnd.add(PAD_DAYS, "day");
   const totalDays = timelineEnd.diff(timelineStart, "day") + 1;
-  const chartWidth = totalDays * DAY_WIDTH;
+  const chartWidth = totalDays * PX;
   const chartHeight = validTasks.length * ROW_HEIGHT;
+
+  // 相对时间轴起点的天数差 → 像素坐标（统一换算入口）
+  const daysFromStart = (d) => toDayjs(d).diff(timelineStart, "day");
 
   // ---- 行模型（rowIndex = 数组下标，复用后端深度优先排序）----
   const rowModels = validTasks.map((t, i) => {
@@ -108,8 +196,8 @@ function buildGanttModel(tasksInput) {
       rowIndex: i,
       startDate,
       endDate,
-      x: startDate.diff(timelineStart, "day") * DAY_WIDTH,
-      width: duration * DAY_WIDTH,
+      x: daysFromStart(startDate) * PX,
+      width: duration * PX,
       color: resolveColor(t),
     };
   });
@@ -145,45 +233,30 @@ function buildGanttModel(tasksInput) {
     }
   }
 
-  // ---- 月分段（粗网格 + 标签 YYYY年MM月）----
-  const monthSegments = [];
-  let mc = timelineStart.startOf("month");
-  while (mc.isBefore(timelineEnd)) {
-    const monthEnd = mc.endOf("month");
-    const segEnd = monthEnd.isAfter(timelineEnd) ? timelineEnd : monthEnd;
-    const startX = mc.diff(timelineStart, "day") * DAY_WIDTH;
-    const days = segEnd.diff(mc, "day") + 1;
-    monthSegments.push({
-      label: `${mc.year()}年${mc.month() + 1}月`,
-      x: startX,
-      width: days * DAY_WIDTH,
-    });
-    mc = mc.add(1, "month").startOf("month");
-  }
+  // ---- 刻度分段（按 unit 切换粒度）----
+  const cfg = UNIT_CONFIG[unit] || UNIT_CONFIG.day;
+  const minorSegments = buildSegments(
+    timelineStart,
+    timelineEnd,
+    cfg.minor,
+    PX,
+    cfg.minorLabel
+  );
+  const majorSegments = buildSegments(
+    timelineStart,
+    timelineEnd,
+    cfg.major,
+    PX,
+    cfg.majorLabel
+  );
 
-  // ---- 周分段（细网格 + 标签 MM/DD，按周一为界）----
-  const weekSegments = [];
-  let wc = timelineStart.startOf("isoWeek");
-  while (wc.isBefore(timelineEnd)) {
-    const weekEnd = wc.endOf("isoWeek");
-    const segEnd = weekEnd.isAfter(timelineEnd) ? timelineEnd : weekEnd;
-    const startX = wc.diff(timelineStart, "day") * DAY_WIDTH;
-    const days = segEnd.diff(wc, "day") + 1;
-    weekSegments.push({
-      label: wc.format("MM/DD"),
-      x: startX,
-      width: days * DAY_WIDTH,
-    });
-    wc = wc.add(1, "week").startOf("isoWeek");
-  }
-
-  // ---- 竖向网格线（月粗 / 周细，去重）----
+  // ---- 竖向网格线（major 粗 / minor 细，去重）----
   const gridLines = [];
-  monthSegments.forEach((s) => {
+  majorSegments.forEach((s) => {
     if (s.x > 0) gridLines.push({ x: s.x, strong: true });
   });
-  weekSegments.forEach((s) => {
-    if (s.x > 0 && !monthSegments.some((m) => m.x === s.x)) {
+  minorSegments.forEach((s) => {
+    if (s.x > 0 && !majorSegments.some((m) => m.x === s.x)) {
       gridLines.push({ x: s.x, strong: false });
     }
   });
@@ -192,15 +265,15 @@ function buildGanttModel(tasksInput) {
   const today = dayjs().startOf("day");
   let todayX = null;
   if (!today.isBefore(timelineStart) && !today.isAfter(timelineEnd)) {
-    todayX = today.diff(timelineStart, "day") * DAY_WIDTH;
+    todayX = daysFromStart(today) * PX;
   }
 
   return {
     empty: false,
     rowModels,
     links,
-    monthSegments,
-    weekSegments,
+    majorSegments,
+    minorSegments,
     gridLines,
     chartWidth,
     chartHeight,
@@ -213,10 +286,11 @@ function buildGanttModel(tasksInput) {
  * 纯展示：数据由 SchedulePage 已取好的 tasks 通过 props 传入，组件内不发请求。
  *
  * Props:
- *   tasks — TaskDTO[]（api.schedule.list 返回的扁平数组，按 task_order 深度优先排序）
+ *   tasks — TaskDTO[]（已过滤后的可见任务，由 SchedulePage 传 visibleTasks）
+ *   unit  — 'day' | 'week' | 'month' | 'quarter'，时间轴单位，决定像素缩放与刻度粒度
  */
-export default function GanttChart({ tasks }) {
-  const model = useMemo(() => buildGanttModel(tasks), [tasks]);
+export default function GanttChart({ tasks, unit = "day" }) {
+  const model = useMemo(() => buildGanttModel(tasks, unit), [tasks, unit]);
 
   if (model.empty) {
     return (
@@ -232,8 +306,8 @@ export default function GanttChart({ tasks }) {
   const {
     rowModels,
     links,
-    monthSegments,
-    weekSegments,
+    majorSegments,
+    minorSegments,
     gridLines,
     chartWidth,
     chartHeight,
@@ -247,8 +321,9 @@ export default function GanttChart({ tasks }) {
       </Typography>
       <Box sx={{ position: "relative", width: NAME_COL_WIDTH + chartWidth }}>
         <GanttTimeline
-          monthSegments={monthSegments}
-          weekSegments={weekSegments}
+          majorSegments={majorSegments}
+          minorSegments={minorSegments}
+          unit={unit}
           chartWidth={chartWidth}
           nameColWidth={NAME_COL_WIDTH}
           headerHeight={HEADER_HEIGHT}

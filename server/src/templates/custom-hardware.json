@@ -5,7 +5,8 @@
     {
       "name": "M1 预研阶段",
       "task_type": "阶段任务",
-      "duration_days": 1
+      "duration_days": 1,
+      "bg_color": "rgba(124,58,237,0.12)"
     },
     {
       "name": "L3 立项筹备",
@@ -16,7 +17,8 @@
     {
       "name": "M2 计划阶段",
       "task_type": "阶段任务",
-      "duration_days": 7
+      "duration_days": 7,
+      "bg_color": "rgba(59,130,246,0.12)"
     },
     {
       "name": "L4 概要设计",
@@ -39,19 +41,22 @@
     {
       "name": "M3 研发测试阶段",
       "task_type": "阶段任务",
-      "duration_days": 212
+      "duration_days": 212,
+      "bg_color": "rgba(16,185,129,0.12)"
     },
     {
       "name": "L6 详细设计",
       "task_type": "阶段任务",
       "duration_days": 98,
-      "parent_ref": 5
+      "parent_ref": 5,
+      "bg_color": "rgba(14,165,233,0.12)"
     },
     {
       "name": "板卡详设",
       "task_type": "阶段任务",
       "duration_days": 98,
-      "parent_ref": 6
+      "parent_ref": 6,
+      "bg_color": "rgba(59,130,246,0.12)"
     },
     {
       "name": "原理图",
@@ -113,7 +118,8 @@
       "name": "结构详设",
       "task_type": "阶段任务",
       "duration_days": 40,
-      "parent_ref": 6
+      "parent_ref": 6,
+      "bg_color": "rgba(168,85,247,0.12)"
     },
     {
       "name": "结构设计",
@@ -137,7 +143,8 @@
       "name": "散热详设",
       "task_type": "阶段任务",
       "duration_days": 40,
-      "parent_ref": 6
+      "parent_ref": 6,
+      "bg_color": "rgba(249,115,22,0.12)"
     },
     {
       "name": "散热设计",
@@ -170,7 +177,8 @@
       "name": "L9 DVT",
       "task_type": "阶段任务",
       "duration_days": 94,
-      "parent_ref": 5
+      "parent_ref": 5,
+      "bg_color": "rgba(236,72,153,0.12)"
     },
     {
       "name": "组装评审",
@@ -212,7 +220,8 @@
       "name": "板卡改版",
       "task_type": "阶段任务",
       "duration_days": 58,
-      "parent_ref": 21
+      "parent_ref": 21,
+      "bg_color": "rgba(120,113,108,0.12)"
     },
     {
       "name": "A02原理图改版",
@@ -253,7 +262,8 @@
     {
       "name": "M4 试制阶段",
       "task_type": "阶段任务",
-      "duration_days": 48
+      "duration_days": 48,
+      "bg_color": "rgba(245,158,11,0.12)"
     },
     {
       "name": "L12 批量测试",
@@ -285,7 +295,8 @@
     {
       "name": "M5 新品导入阶段",
       "task_type": "阶段任务",
-      "duration_days": 97
+      "duration_days": 97,
+      "bg_color": "rgba(100,116,139,0.12)"
     },
     {
       "name": "L13 NPI导入",

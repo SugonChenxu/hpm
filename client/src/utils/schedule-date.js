@@ -266,3 +266,36 @@ export function calcCompletionStatus(task, today = new Date()) {
   if (start.isAfter(now)) return "未开始";
   return "进行中";
 }
+
+/**
+ * 计算折叠后可显示的任务列表（纯函数，供 SchedulePage 与 ScheduleTable 共用）。
+ * 阶段任务（task_type='阶段任务'）被收起时，仅隐藏其子孙任务，阶段自身始终保留。
+ * @param {Array} tasks — 深度优先扁平数组，含 id / parent_id / task_type
+ * @param {Set} collapsedPhases — 被收起的阶段任务 id 集合（可为 null/undefined）
+ * @returns {Array} 可见任务数组（顺序不变）
+ */
+export function computeVisibleTasks(tasks, collapsedPhases) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  const hidden = new Set();
+
+  const collectDescendants = (parentId) => {
+    for (const t of list) {
+      if (t.parent_id === parentId) {
+        hidden.add(t.id);
+        collectDescendants(t.id); // 递归隐藏所有层级子孙
+      }
+    }
+  };
+
+  for (const task of list) {
+    if (
+      task.task_type === "阶段任务" &&
+      collapsedPhases &&
+      collapsedPhases.has(task.id)
+    ) {
+      collectDescendants(task.id);
+    }
+  }
+
+  return list.filter((t) => !hidden.has(t.id));
+}

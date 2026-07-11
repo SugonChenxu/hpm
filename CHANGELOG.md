@@ -2,6 +2,36 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-11 — 项目计划页三项增量（阶段折叠联动 + 甘特图时间轴单位切换 + 模板阶段背景色）
+
+- **新增功能**
+  - 【折叠联动】排期表与甘特图中 `task_type='阶段任务'` 可展开/收起其子孙；折叠状态上提至 `SchedulePage`（`collapsedPhases`/`toggleCollapse`），排期表与甘特图共用同一份 `visibleTasks`，阶段自身始终保留、仅隐藏子孙
+  - 【时间轴单位切换】甘特图时间刻度支持 **日 / 周 / 月 / 季度** 切换（`ToggleButtonGroup`），采用缩放模型 `PX_PER_DAY = { day:24, week:12, month:4, quarter:1.5 }`（px/天随单位递减），条形/箭头/今天线随缩放自动重算；表头改为通用 major/minor 双行（按 unit 生成标签）
+  - 【模板阶段背景色 + 存入模板】排期模板每个阶段任务带背景色；新增模板管理对话框（从当前项目克隆 / 编辑已有模板），仅阶段任务可设色（复用 `ContextMenu` 的 `PRESET_COLORS` 调色板 + 自定义取色器）；保存时持久化到 JSON 文件
+  - 模板 `generate` 时将 `bg_color` 透传写入 `schedule_tasks.bg_color`，排期表 `getBgColor` 继承 + 甘特图 `resolveColor` 优先 `bg_color` 着色
+
+- **修改模块**
+  - `client/src/utils/schedule-date.js`：新增纯函数 `computeVisibleTasks(tasks, collapsedPhases)`（提取自 `ScheduleTable` 递归隐藏子孙逻辑）
+  - `client/src/components/schedule/ScheduleTable.jsx`：移除内部 `collapsedPhases` state，改为受控 props（`collapsedPhases`/`onToggleCollapse`），`visibleTasks` 复用 `computeVisibleTasks`
+  - `client/src/components/schedule/GanttChart.jsx`：新增 `unit` prop（默认 `'day'`）；`DAY_WIDTH` 改为集中常量 `PX_PER_DAY[unit]`；`x/width/segment/todayX/links` 统一经 `daysFromStart(d)*PX` 换算；分段按 unit 生成 major/minor 并传给 `GanttTimeline`；启用 `dayjs` 的 `quarterOfYear` 插件
+  - `client/src/components/schedule/GanttTimeline.jsx`：props 由 `monthSegments`/`weekSegments` 改为通用 `majorSegments`/`minorSegments`（双行表头），标签已在上游预格式化
+  - `client/src/components/schedule/ContextMenu.jsx`：导出共享常量 `PRESET_COLORS`（含 `transparent` 清除约定），供模板编辑对话框复用
+  - `client/src/components/schedule/TemplateEditorDialog.jsx`（新增）：模板新建/编辑对话框，列阶段任务树 + 阶段调色板，保存调用新增接口
+  - `client/src/api/client.js`：`api.schedule` 新增 `saveTemplate(body)` 与 `getTemplate(file)`
+  - `client/src/pages/SchedulePage.jsx`：上提折叠 state + `unit` state + 时间轴单位控件 + 「模板管理」按钮与对话框接入；`ScheduleTable` 传 `collapsedPhases`/`onToggleCollapse`，`GanttChart` 传 `visibleTasks`/`unit`
+  - `server/src/routes/schedule.js`：新增 `POST /api/templates/schedule`（写回 JSON，含文件名安全校验、颜色格式校验、ref 越界/循环依赖防御，同名 upsert）；新增 `GET /api/templates/schedule/:file`（单模板读取，供编辑预填）；`generate` INSERT 末尾 `bg_color` 由字面 `''` 改为占位 `?` 并补 `tmpl.bg_color || ''` 参数
+  - `server/src/templates/custom-hardware.json`：M1–M5 及各嵌套阶段（共 11 个阶段任务）补充 `bg_color` 字段
+
+- **接口调整**
+  - `POST /api/templates/schedule`：保存/新建模板，body `{ name, description, tasks:[{name,task_type,duration_days,parent_ref,predecessor_refs,bg_color}] }`，返回 `{ ok, data:{ file, name, task_count } }`（同名覆盖，目录穿越/非法字符/循环依赖均 400）
+  - `GET /api/templates/schedule/:file`：返回单模板完整内容 `{ ok, data:{ name, description, tasks } }`（含 `bg_color`），文件不存在 404
+
+- **参数变动**
+  - 零新增依赖：复用既有 `react` / `@mui/material` / `dayjs`，仅 `dayjs.extend(quarterOfYear)`（dayjs 内置插件，无新包）；不改任何数据模型，仅新增接口与透传字段
+
+- **缺陷修复**
+  - 无（纯增量功能）
+
 ## 2026-07-11 — 项目计划页甘特图（只读，含 FS 依赖关系可视化）
 
 - **新增功能**

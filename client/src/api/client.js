@@ -122,6 +122,8 @@ export const api = {
         body: JSON.stringify({ predecessor_ids: predecessorIds }),
       }),
     templates: () => request("/templates/schedule"),
+    saveTemplate: (body) => request("/templates/schedule", { method: "POST", body: JSON.stringify(body) }),
+    getTemplate: (file) => request(`/templates/schedule/${encodeURIComponent(file)}`),
     versions: (projectId) => request(`/projects/${projectId}/schedule/versions`),
     saveVersion: (projectId) =>
       request(`/projects/${projectId}/schedule/save`, { method: "POST" }),

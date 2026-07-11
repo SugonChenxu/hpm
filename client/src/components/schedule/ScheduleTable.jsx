@@ -12,7 +12,7 @@ import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
-import { calcCompletionStatus, updateStartDate, updateEndDate, updateDuration, detectCycle } from "../../utils/schedule-date";
+import { calcCompletionStatus, updateStartDate, updateEndDate, updateDuration, detectCycle, computeVisibleTasks } from "../../utils/schedule-date";
 
 /**
  * 排期表 — 类 Excel 可编辑表格（支持树形层级展示）
@@ -61,11 +61,10 @@ const tdStyle = (align) => ({
   borderBottom: "1px solid #F3F4F6",
 });
 
-export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskUpdate, onPredecessorSave, onBgColorSave, predTriggerTaskId, onPredTriggerHandled }) {
+export default function ScheduleTable({ tasks, projectId, collapsedPhases = new Set(), onToggleCollapse = () => {}, onContextMenu, onTaskUpdate, onPredecessorSave, onBgColorSave, predTriggerTaskId, onPredTriggerHandled }) {
   // ===================== 状态 =====================
   const [editCell, setEditCell] = useState(null);
   const [editValue, setEditValue] = useState("");
-  const [collapsedPhases, setCollapsedPhases] = useState(new Set());
   const [colWidths, setColWidths] = useState({ ...DEFAULT_COL_WIDTHS });
 
   // 前置任务 Popover
@@ -98,37 +97,9 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
   const resizeStartX = useRef(0);
   const resizeStartWidth = useRef(0);
 
-  // ===================== 折叠状态 =====================
-  const toggleCollapse = useCallback((taskId) => {
-    setCollapsedPhases(prev => {
-      const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-      } else {
-        next.add(taskId);
-      }
-      return next;
-    });
-  }, []);
-
-  // 计算可见任务列表（折叠隐藏子任务）
+  // ===================== 折叠可见任务（由父组件控制）=====================
   const visibleTasks = useMemo(() => {
-    const hidden = new Set();
-    for (const task of tasks) {
-      if (task.task_type === "阶段任务" && collapsedPhases.has(task.id)) {
-        // 收集该阶段所有子孙任务
-        const collectDescendants = (parentId) => {
-          for (const t of tasks) {
-            if (t.parent_id === parentId) {
-              hidden.add(t.id);
-              collectDescendants(t.id);
-            }
-          }
-        };
-        collectDescendants(task.id);
-      }
-    }
-    return tasks.filter(t => !hidden.has(t.id));
+    return computeVisibleTasks(tasks, collapsedPhases);
   }, [tasks, collapsedPhases]);
 
   // 可见任务列表中的序号（数组 index + 1）
@@ -376,7 +347,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
         {isPhase && (
           <IconButton
             size="small"
-            onClick={(e) => { e.stopPropagation(); toggleCollapse(task.id); }}
+            onClick={(e) => { e.stopPropagation(); onToggleCollapse(task.id); }}
             sx={{ p: 0, mr: 0.5, minWidth: 18 }}
           >
             {isCollapsed ? <ChevronRight fontSize="small" /> : <ExpandMore fontSize="small" />}

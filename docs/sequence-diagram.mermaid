@@ -1,103 +1,38 @@
 sequenceDiagram
-    actor User
-    participant Page as IssueDashboardPage
-    participant Hook as useIssueDashboard
-    participant API as api client
-    participant Express as Express Server
-    participant Cache as CacheService
-    participant Adapter as MantisAdapter
-    participant Mantis as Mantis API
-    participant DB as SQLite
+  participant U as 用户
+  participant SP as SchedulePage
+  participant ST as ScheduleTable
+  participant GC as GanttChart
+  participant BE as 后端(schedule.js)
+  participant FS as 模板JSON文件
 
-    User->>Page: 进入 /issues?projectId=1
-    Page->>Hook: useIssueDashboard(projectId)
+  Note over U,GC: ① 折叠联动
+  U->>ST: 点击阶段任务折叠图标
+  ST->>SP: onToggleCollapse(taskId)
+  SP->>SP: toggleCollapse → 更新 collapsedPhases(state)
+  SP->>SP: visibleTasks = computeVisibleTasks(tasks, collapsedPhases)
+  SP-->>ST: 传 visibleTasks + collapsedPhases
+  SP-->>GC: 传同一份 visibleTasks(unit 无关)
+  Note right of GC: 排期表与甘特图同步隐藏子孙，阶段自身仍显示
 
-    Note over Hook: 并发请求并行加载
+  Note over U,GC: ② 时间轴单位切换
+  U->>SP: 点击 ToggleButton(周)
+  SP->>SP: setUnit('week')
+  SP-->>GC: 传 unit='week'
+  GC->>GC: buildGanttModel(tasks,'week') → PX=12
+  GC->>GC: 重算 x/width/segments/todayX/links
+  Note right of GC: 条形/箭头/今天线随 PX 自动缩放
 
-    par 并行请求
-        Hook->>API: GET /issues/summary?project_id=1
-        API->>Express: HTTP GET
-        Express->>Cache: getCache(1, "summary")
-        alt 缓存命中且未过期
-            Cache-->>Express: { total: 127, resolved: 89, rate: 70.1 }
-        else 缓存未命中
-            Express->>Adapter: fetchIssues(projectId)
-            Adapter->>Mantis: GET /api/rest/issues?project_id=xxx
-            Mantis-->>Adapter: issues[]
-            Adapter-->>Express: issues[]
-            Express->>DB: 更新 issues 表
-            Express->>Cache: setCache(1, "summary", result)
-            Express-->>API: { ok: true, data: {...} }
-        end
-        API-->>Hook: summary data
-
-        Hook->>API: GET /issues/di-trend?project_id=1
-        API->>Express: HTTP GET
-        Express->>Cache: getCache(1, "di_trend")
-        alt 缓存命中
-            Cache-->>Express: cached trend data
-        else 缓存未命中
-            Express->>DB: SELECT ... FROM issues WHERE DI>0 ORDER BY synced_at
-            DB-->>Express: rows[]
-            Express->>Cache: setCache(1, "di_trend", result)
-        end
-        Express-->>API: { ok: true, data: [...] }
-        API-->>Hook: di_trend data
-
-        Hook->>API: GET /issues/category-stats?project_id=1
-        API->>Express: HTTP GET
-        Express->>Cache: getCache(1, "category_stats")
-        alt 缓存命中
-            Cache-->>Express: cached stats
-        else 缓存未命中
-            Express->>DB: SELECT category, COUNT(*) FROM issues GROUP BY category
-            DB-->>Express: rows[]
-            Express->>Cache: setCache(1, "category_stats", result)
-        end
-        Express-->>API: { ok: true, data: [...] }
-        API-->>Hook: category_stats data
-    end
-
-    Hook-->>Page: { stats, diTrend, categoryStats, loading: false }
-
-    Page->>Page: 渲染 StatsCards + DITrendChart + CategoryBarChart
-
-    Note over Hook: 报告加载
-
-    Hook->>API: GET /issues/report?project_id=1
-    API->>Express: HTTP GET
-    Express->>DB: 查询 issues 聚合
-    DB-->>Express: rows
-    Express->>Express: 按模板渲染报告文本
-    Express-->>API: { ok: true, data: "BUG情况：\n..." }
-    API-->>Hook: report text
-    Hook-->>Page: reportText
-    Page->>Page: 渲染 ReportPanel
-
-    Note over User,Page: ── 手动刷新流程 ──
-
-    User->>Page: 点击「手动刷新」按钮
-    Page->>Hook: refresh()
-    Hook->>API: POST /cache/invalidate { project_id: 1 }
-    API->>Express: HTTP POST
-    Express->>Cache: invalidateCache(1)
-    Express-->>API: { ok: true }
-
-    Hook->>API: POST /mantis/sync { project_id: 1 }
-    API->>Express: HTTP POST
-    Express->>Adapter: fetchIssues(projectId)
-    Adapter->>Mantis: GET /api/rest/issues (force)
-    Mantis-->>Adapter: issues[]
-    Adapter-->>Express: issues[]
-    Express->>Cache: setCache -- 回填所有缓存键
-    Express-->>API: { ok: true, sync_summary: {...} }
-    API-->>Hook: sync done
-
-    Hook->>Hook: 重新 load()
-    Hook-->>Page: 更新全部数据
-
-    Note over User,Page: ── 一键复制报告 ──
-
-    User->>Page: 点击「一键复制」
-    Page->>Page: navigator.clipboard.writeText(reportText)
-    Page->>Page: toast.success("已复制到剪贴板")
+  Note over U,FS: ③ 模板存色 + 生成透传
+  U->>SP: 打开"模板管理" → 编辑 M 阶段颜色
+  SP->>SP: 构造 templateTasks(含 bg_color)
+  SP->>BE: POST /api/templates/schedule {name,description,tasks[]}
+  BE->>FS: writeFileSync( sanitize(name).json )
+  BE-->>SP: {ok:true, file}
+  Note over SP,FS: 后续"从模板生成"
+  SP->>BE: POST /projects/:id/schedule/generate {template_name}
+  BE->>FS: 读模板 JSON
+  BE->>BE: INSERT ... bg_color = tmpl.bg_color || ''
+  BE-->>SP: 返回带 bg_color 的 tasks
+  SP-->>ST: 排期表 getBgColor 着色(含继承)
+  SP-->>GC: 甘特图 resolveColor 着色阶段

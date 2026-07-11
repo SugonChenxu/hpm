@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Box,
@@ -14,6 +14,8 @@ import {
   ListItemButton,
   ListItemText,
   Card,
+  ToggleButtonGroup,
+  ToggleButton,
 } from "@mui/material";
 import {
   Save,
@@ -28,11 +30,12 @@ import ProjectSelector from "../components/common/ProjectSelector";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
 import ScheduleTable from "../components/schedule/ScheduleTable";
+import TemplateEditorDialog from "../components/schedule/TemplateEditorDialog";
 import GanttChart from "../components/schedule/GanttChart";
 import ContextMenu from "../components/schedule/ContextMenu";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
 import PlmConnectionDialog from "../components/plm/PlmConnectionDialog";
-import { calcCompletionStatus } from "../utils/schedule-date";
+import { calcCompletionStatus, computeVisibleTasks } from "../utils/schedule-date";
 
 export default function SchedulePage() {
   const [searchParams] = useSearchParams();
@@ -63,6 +66,15 @@ export default function SchedulePage() {
 
   // PLM 连接/探针对话框
   const [plmDialogOpen, setPlmDialogOpen] = useState(false);
+
+  // 折叠状态（上提：排期表与甘特图联动同步）
+  const [collapsedPhases, setCollapsedPhases] = useState(() => new Set());
+
+  // 时间轴单位（日/周/月/季度）
+  const [unit, setUnit] = useState("day");
+
+  // 模板编辑/管理对话框
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState({
@@ -268,6 +280,27 @@ export default function SchedulePage() {
     }
   };
 
+  // 折叠切换（联动排期表与甘特图）
+  const toggleCollapse = useCallback((taskId) => {
+    setCollapsedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }, []);
+
+  // 折叠后的可见任务（排期表与甘特图共用同一份，实现联动）
+  const visibleTasks = useMemo(
+    () => computeVisibleTasks(tasks, collapsedPhases),
+    [tasks, collapsedPhases]
+  );
+
+  // 模板保存成功后的提示
+  const handleTemplateSaved = useCallback(() => {
+    setSnackbar({ open: true, message: "模板已保存", severity: "success" });
+  }, []);
+
   // Generate from template
   const handleGenerateClick = async () => {
     try {
@@ -445,12 +478,21 @@ export default function SchedulePage() {
         >
           PLM 连接/探针
         </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => setTemplateEditorOpen(true)}
+        >
+          模板管理
+        </Button>
       </PageHeader>
 
       {/* Schedule table */}
       <ScheduleTable
         tasks={tasks}
         projectId={Number(projectId)}
+        collapsedPhases={collapsedPhases}
+        onToggleCollapse={toggleCollapse}
         onContextMenu={handleContextMenu}
         onTaskUpdate={handleTaskUpdate}
         onPredecessorSave={handlePredecessorSave}
@@ -459,9 +501,25 @@ export default function SchedulePage() {
         onPredTriggerHandled={() => setPredTriggerTaskId(null)}
       />
 
+      {/* 时间轴单位切换 */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 2 }}>
+        <Typography variant="body2" color="text.secondary">时间轴单位</Typography>
+        <ToggleButtonGroup
+          size="small"
+          value={unit}
+          exclusive
+          onChange={(e, v) => { if (v) setUnit(v); }}
+        >
+          <ToggleButton value="day">日</ToggleButton>
+          <ToggleButton value="week">周</ToggleButton>
+          <ToggleButton value="month">月</ToggleButton>
+          <ToggleButton value="quarter">季度</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
       {/* Gantt chart (read-only) */}
-      <Box sx={{ overflowX: "auto", mt: 2 }}>
-        <GanttChart tasks={tasks} />
+      <Box sx={{ overflowX: "auto", mt: 1 }}>
+        <GanttChart tasks={visibleTasks} unit={unit} />
       </Box>
 
       {/* Context menu */}
@@ -528,6 +586,15 @@ export default function SchedulePage() {
           <Button onClick={() => setTemplateOpen(false)}>取消</Button>
         </DialogActions>
       </Dialog>
+
+      {/* 模板编辑/管理对话框 */}
+      <TemplateEditorDialog
+        open={templateEditorOpen}
+        onClose={() => setTemplateEditorOpen(false)}
+        projectId={Number(projectId)}
+        sourceTasks={tasks}
+        onSaved={handleTemplateSaved}
+      />
 
       {/* PLM 连接/探针对话框 */}
       <PlmConnectionDialog

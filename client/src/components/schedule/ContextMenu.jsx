@@ -8,6 +8,13 @@ import {
   AccountTree, Add, Delete, Palette,
 } from "@mui/icons-material";
 
+/** 背景色预设调色板（第一个 transparent 表示清除） */
+export const PRESET_COLORS = [
+  "transparent", "rgba(124,58,237,0.12)", "rgba(245,158,11,0.12)", "rgba(59,130,246,0.12)", "rgba(16,185,129,0.12)",
+  "rgba(236,72,153,0.12)", "rgba(168,85,247,0.12)", "rgba(14,165,233,0.12)", "rgba(249,115,22,0.12)",
+  "rgba(120,113,108,0.12)", "rgba(100,116,139,0.12)",
+];
+
 /**
  * 右键菜单组件
  * 8 项主菜单 + 1 个子菜单（修改任务类型）+ 背景色选项
@@ -41,11 +48,7 @@ export default function ContextMenu({
 
   const taskTypes = ["普通任务", "阶段任务", "节点任务"];
 
-  const presetColors = [
-    "transparent", "rgba(124,58,237,0.12)", "rgba(245,158,11,0.12)", "rgba(59,130,246,0.12)", "rgba(16,185,129,0.12)",
-    "rgba(236,72,153,0.12)", "rgba(168,85,247,0.12)", "rgba(14,165,233,0.12)", "rgba(249,115,22,0.12)",
-    "rgba(120,113,108,0.12)", "rgba(100,116,139,0.12)",
-  ];
+  const presetColors = PRESET_COLORS;
 
   /** The first preset ("transparent") clears the background color. */
   const CLEAR_COLOR = "transparent";

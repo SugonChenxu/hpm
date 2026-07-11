@@ -1,24 +1,29 @@
 import { Box } from "@mui/material";
 
 /**
- * 甘特图双行表头：月行（上行）+ 周行（下行）刻度，含竖向网格线。
+ * 甘特图双行表头：major（上行粗刻度）+ minor（下行细刻度），含竖向网格线。
  * 表头 sticky 固定（top:0），左侧任务名列占位 sticky（left:0）。
+ * 标签已在上游（GanttChart）按 unit 预格式化，本组件仅负责布局渲染。
  *
  * Props:
- *   monthSegments — { label, x, width }[]（按月分段，粗竖线）
- *   weekSegments — { label, x, width }[]（按周一分段，细竖线）
+ *   majorSegments — { label, x, width }[]（粗刻度，上行）
+ *   minorSegments — { label, x, width }[]（细刻度，下行）
+ *   unit — 时间轴单位（'day'|'week'|'month'|'quarter'，仅用于细微样式）
  *   chartWidth — 时间轴区域总宽（px）
  *   nameColWidth — 左侧任务名列宽（px）
  *   headerHeight — 表头总高（px）
  */
 export default function GanttTimeline({
-  monthSegments = [],
-  weekSegments = [],
+  majorSegments = [],
+  minorSegments = [],
+  unit = "day",
   chartWidth = 0,
   nameColWidth = 220,
   headerHeight = 48,
 }) {
   const half = headerHeight / 2;
+  // 日模式下次刻度标签较短（DD），其余（MM/DD、年月、Qn）居中即可
+  const minorJustify = unit === "day" ? "flex-start" : "center";
 
   return (
     <Box
@@ -54,7 +59,7 @@ export default function GanttTimeline({
 
       {/* 时间轴刻度区域 */}
       <Box sx={{ position: "relative", width: chartWidth, flexShrink: 0 }}>
-        {/* 月行（上行） */}
+        {/* 上行：major 粗刻度 */}
         <Box
           sx={{
             position: "relative",
@@ -62,9 +67,9 @@ export default function GanttTimeline({
             borderBottom: "1px solid #E5E7EB",
           }}
         >
-          {monthSegments.map((s, i) => (
+          {majorSegments.map((s, i) => (
             <Box
-              key={`m-${i}`}
+              key={`major-${i}`}
               sx={{
                 position: "absolute",
                 left: s.x,
@@ -87,11 +92,11 @@ export default function GanttTimeline({
           ))}
         </Box>
 
-        {/* 周行（下行） */}
+        {/* 下行：minor 细刻度 */}
         <Box sx={{ position: "relative", height: half }}>
-          {weekSegments.map((s, i) => (
+          {minorSegments.map((s, i) => (
             <Box
-              key={`w-${i}`}
+              key={`minor-${i}`}
               sx={{
                 position: "absolute",
                 left: s.x,
@@ -101,7 +106,8 @@ export default function GanttTimeline({
                 borderLeft: "1px solid #E5E7EB",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "center",
+                justifyContent: minorJustify,
+                pl: minorJustify === "flex-start" ? 0.5 : 0,
                 fontSize: "0.7rem",
                 color: "#9CA3AF",
                 whiteSpace: "nowrap",

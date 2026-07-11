@@ -1,189 +1,70 @@
 classDiagram
-    direction TB
+  class SchedulePage {
+    +Set~int~ collapsedPhases
+    +string unit
+    +boolean templateEditorOpen
+    +toggleCollapse(taskId)
+    +computeVisibleTasks(tasks, collapsedPhases)
+    +setUnit(u)
+  }
+  class ScheduleTable {
+    +tasks: TaskDTO[]
+    +Set~int~ collapsedPhases
+    +onToggleCollapse(taskId)
+    +visibleTasks = computeVisibleTasks()
+  }
+  class GanttChart {
+    +tasks: TaskDTO[]
+    +unit: 'day'|'week'|'month'|'quarter'
+    +PX_PER_DAY: map
+    +buildGanttModel(tasks, unit)
+  }
+  class GanttTimeline {
+    +majorSegments: Segment[]
+    +minorSegments: Segment[]
+    +unit: string
+  }
+  class TemplateEditorDialog {
+    +open: boolean
+    +sourceTasks: TaskDTO[]
+    +phaseColors: Map
+    +onSave(templateJSON)
+  }
+  class ScheduleTaskDTO {
+    +int id
+    +string name
+    +string task_type
+    +string planned_start
+    +string planned_end
+    +int duration_days
+    +string predecessor_ids
+    +int parent_id
+    +string bg_color
+  }
+  class TemplateJSON {
+    +string name
+    +string description
+    +TemplateTask[] tasks
+  }
+  class TemplateTask {
+    +string name
+    +string task_type
+    +int duration_days
+    +int parent_ref
+    +int[] predecessor_refs
+    +string bg_color
+  }
+  class SaveTemplateReq {
+    +string name
+    +string description
+    +TemplateTask[] tasks
+  }
 
-    %% ── 数据库模型 ──
-    class Issue {
-        +Integer id PK
-        +Integer project_id FK
-        +Integer phase_id FK
-        +String code UK
-        +Integer mantis_id
-        +String source
-        +String title
-        +String description
-        +String severity
-        +String status
-        +String assignee
-        +Float di_weight
-        +String category
-        +String resolution
-        +String mantis_updated_at
-        +String synced_at
-        +String created_at
-        +String updated_at
-    }
-
-    class SyncCache {
-        +Integer id PK
-        +Integer project_id FK
-        +String cache_key
-        +String cache_data
-        +String cached_at
-        +Integer ttl_seconds
-    }
-
-    class MantisConnection {
-        +Integer id PK
-        +String server_url
-        +String api_token
-        +String project_mapping
-        +Integer sync_interval_min
-        +Integer is_active
-        +String last_sync_at
-        +String last_sync_status
-    }
-
-    Issue --> SyncCache : "project_id 关联缓存"
-
-    %% ── 后端适配器与服务 ──
-    class MantisAdapter {
-        -String baseUrl
-        -String apiToken
-        +fetchProjects() MantisProject[]
-        +fetchIssues(projectId) MantisIssue[]
-        +testConnection() Boolean
-        -request(endpoint, params) Response
-        -handleError(error) MantisError
-    }
-
-    class CacheService {
-        +get(projectId, cacheKey) Object|null
-        +set(projectId, cacheKey, data, ttl) void
-        +invalidate(projectId, cacheKey) void
-        +isValid(cachedAt, ttl) Boolean
-    }
-
-    class IssueReportService {
-        +generateReport(projectId) ReportData
-        +calcDI(issues) Float
-        +calcCategoryStats(issues) CategoryStats
-        +calcSummary(issues) Summary
-    }
-
-    MantisAdapter ..> MantisConnection : 读取配置
-    MantisAdapter ..> Issue : 同步写入
-    CacheService ..> SyncCache : 读写缓存
-    IssueReportService ..> Issue : 查询聚合
-
-    %% ── 前端页面与组件 ──
-    class IssueDashboardPage {
-        -String projectId
-        -StatsData stats
-        -TrendDataPoint[] diTrend
-        -CategoryStat[] categoryStats
-        -String reportText
-        -String errorType
-        -Boolean loading
-        +loadAll() void
-        +handleRefresh() void
-        +handleCopy() void
-        +render() JSX
-    }
-
-    class StatsCards {
-        +Integer totalIssues
-        +Integer resolvedCount
-        +Float resolutionRate
-        +Boolean loading
-        +render() JSX
-    }
-
-    class DITrendChart {
-        +TrendDataPoint[] data
-        +Boolean loading
-        +render() JSX
-    }
-
-    class CategoryBarChart {
-        +CategoryStat[] data
-        +Boolean loading
-        +render() JSX
-    }
-
-    class ReportPanel {
-        +String reportText
-        +Boolean loading
-        +onCopy() void
-        +render() JSX
-    }
-
-    class ErrorState {
-        +String type
-        +Function onRetry
-        +Function onGoToConfig
-        +render() JSX
-    }
-
-    class RefreshBar {
-        +String projectId
-        +String lastUpdated
-        +Function onRefresh
-        +Function onProjectChange
-        +Boolean loading
-        +render() JSX
-    }
-
-    IssueDashboardPage *-- StatsCards : 组合
-    IssueDashboardPage *-- DITrendChart : 组合
-    IssueDashboardPage *-- CategoryBarChart : 组合
-    IssueDashboardPage *-- ReportPanel : 组合
-    IssueDashboardPage *-- ErrorState : 条件渲染
-    IssueDashboardPage *-- RefreshBar : 组合
-
-    %% ── 数据流类型 ──
-    class TrendDataPoint {
-        +String date
-        +Float di
-    }
-
-    class CategoryStat {
-        +String category
-        +Integer count
-    }
-
-    class StatsData {
-        +Integer total
-        +Integer resolved
-        +Float rate
-    }
-
-    class MantisProject {
-        +Integer id
-        +String name
-        +String description
-    }
-
-    DITrendChart ..> TrendDataPoint : 使用
-    CategoryBarChart ..> CategoryStat : 使用
-    StatsCards ..> StatsData : 使用
-
-    %% ── 自定义 hooks ──
-    class useIssueDashboard {
-        +StatsData stats
-        +TrendDataPoint[] diTrend
-        +CategoryStat[] categoryStats
-        +String reportText
-        +Boolean loading
-        +String error
-        +String errorType
-        +String lastUpdated
-        +Function refresh()
-    }
-
-    class useDedupRequest {
-        +Map~String,Promise~ pending
-        +Function dedup(key, fn)
-    }
-
-    IssueDashboardPage ..> useIssueDashboard : 使用
-    useIssueDashboard ..> useDedupRequest : 使用
+  SchedulePage --> ScheduleTable : props(collapsedPhases,onToggleCollapse,visibleTasks)
+  SchedulePage --> GanttChart : props(visibleTasks,unit)
+  SchedulePage --> TemplateEditorDialog : open/sourceTasks/onSave
+  GanttChart --> GanttTimeline : major/minor segments
+  ScheduleTable ..> ScheduleTaskDTO : renders
+  GanttChart ..> ScheduleTaskDTO : builds model
+  TemplateEditorDialog ..> TemplateTask : edits
+  SaveTemplateReq --> TemplateJSON : serialized to

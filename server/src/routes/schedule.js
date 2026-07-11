@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { readdirSync, readFileSync, existsSync, unlinkSync } from "fs";
+import { readdirSync, readFileSync, existsSync, unlinkSync, writeFileSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import db from "../db.js";
@@ -373,7 +373,7 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
 
       const insertStmt = db.prepare(`
         INSERT INTO schedule_tasks (project_id, name, task_order, task_type, planned_start, planned_end, duration_days, predecessor_ids, parent_id, is_locked, notes, bg_color)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, '', '')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
       `);
 
       // 第一遍：插入所有任务（不含 parent_id 和 predecessor_ids）
@@ -391,7 +391,8 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
         const result = insertStmt.run(
           id, tmpl.name, i + 1, taskType,
           plannedStart, plannedEnd, effectiveDuration,
-          "[]", isLocked
+          "[]", isLocked,
+          "", tmpl.bg_color || ""
         );
 
         indexToId.set(i, result.lastInsertRowid);
@@ -976,6 +977,189 @@ router.get("/templates/schedule", (req, res) => {
     res.json({ ok: true, data: templates });
   } catch (err) {
     console.error("GET templates:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
+// 工具：模板名/颜色 安全校验 + 循环依赖检测（保存模板用）
+// ============================================================
+
+/** 仅保留中文/字母/数字/_/-，拒绝目录穿越字符，最长 80 */
+function sanitizeTemplateName(name) {
+  const s = String(name || "").trim();
+  if (!s) return "";
+  const safe = s.replace(/[^\u4e00-\u9fa5A-Za-z0-9_\-]/g, "").slice(0, 80);
+  return safe.length > 0 ? safe : "";
+}
+
+/** 仅允许 transparent / rgba(r,g,b,a)(a∈0–1) / #rgb / #rrggbb，其余置 '' */
+function sanitizeColor(c) {
+  if (c == null) return "";
+  const s = String(c).trim();
+  if (s === "" || s === "transparent") return "";
+  const rgba = s.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)$/i);
+  if (rgba) {
+    const r = Number(rgba[1]);
+    const g = Number(rgba[2]);
+    const b = Number(rgba[3]);
+    const a = rgba[4] != null ? Number(rgba[4]) : 1;
+    if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255 && a >= 0 && a <= 1) {
+      return `rgba(${r},${g},${b},${a})`;
+    }
+    return "";
+  }
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s.toLowerCase();
+  return "";
+}
+
+/** 基于 parent_ref / predecessor_refs 重建有向依赖图，检测环（DFS 三色标记） */
+function hasCycle(taskList) {
+  const n = taskList.length;
+  const predsOf = [];
+  for (let i = 0; i < n; i++) {
+    const deps = [];
+    if (taskList[i].parent_ref != null && taskList[i].parent_ref !== undefined) {
+      deps.push(Number(taskList[i].parent_ref));
+    }
+    if (Array.isArray(taskList[i].predecessor_refs)) {
+      for (const p of taskList[i].predecessor_refs) {
+        const v = Number(p);
+        if (Number.isInteger(v)) deps.push(v);
+      }
+    }
+    predsOf.push(deps);
+  }
+  const state = new Array(n).fill(0); // 0 未访问 1 访问中 2 已完成
+  const dfs = (u) => {
+    state[u] = 1;
+    for (const v of predsOf[u]) {
+      if (v === u) return true; // 自环
+      if (v < 0 || v >= n) continue; // 越界跳过（已在过滤阶段丢弃）
+      if (state[v] === 1) return true; // 回边 → 有环
+      if (state[v] === 0 && dfs(v)) return true;
+    }
+    state[u] = 2;
+    return false;
+  };
+  for (let i = 0; i < n; i++) {
+    if (state[i] === 0 && dfs(i)) return true;
+  }
+  return false;
+}
+
+// ============================================================
+// 端点 9.1：GET /api/templates/schedule/:file — 读取单模板（编辑预填）
+// ============================================================
+router.get("/templates/schedule/:file", (req, res) => {
+  try {
+    const fileName = req.params.file;
+    // 文件名白名单校验（防目录穿越）
+    if (!/^[A-Za-z0-9_\-]+\.json$/.test(fileName || "")) {
+      return res.status(400).json({ ok: false, error: "非法文件名" });
+    }
+    const filePath = join(TEMPLATES_DIR, fileName);
+    // 断言最终路径仍在模板目录内
+    if (dirname(filePath) !== TEMPLATES_DIR || !existsSync(filePath)) {
+      return res.status(404).json({ ok: false, error: "模板不存在" });
+    }
+    let content;
+    try {
+      content = JSON.parse(readFileSync(filePath, "utf-8"));
+    } catch {
+      return res.status(404).json({ ok: false, error: "模板解析失败" });
+    }
+    res.json({ ok: true, data: content });
+  } catch (err) {
+    console.error("GET template file:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
+// 端点 9.2：POST /api/templates/schedule — 保存/新建模板（upsert）
+// ============================================================
+router.post("/templates/schedule", (req, res) => {
+  try {
+    const { name, description, tasks } = req.body || {};
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ ok: false, error: "模板名称不能为空" });
+    }
+    if (!Array.isArray(tasks)) {
+      return res.status(400).json({ ok: false, error: "tasks 必须为数组" });
+    }
+
+    const safeName = sanitizeTemplateName(name);
+    if (!safeName) {
+      return res.status(400).json({ ok: false, error: "模板名称含非法字符" });
+    }
+    const fileName = `${safeName}.json`;
+    const filePath = join(TEMPLATES_DIR, fileName);
+    // 防目录穿越：断言最终路径仍在模板目录内
+    if (dirname(filePath) !== TEMPLATES_DIR) {
+      return res.status(400).json({ ok: false, error: "非法文件名" });
+    }
+
+    const VALID_TYPES = ["普通任务", "阶段任务", "节点任务"];
+    const n = tasks.length;
+    const cleanTasks = [];
+    for (let i = 0; i < n; i++) {
+      const t = tasks[i] || {};
+      if (typeof t.name !== "string" || !t.name.trim()) continue; // 丢弃无名任务
+
+      const taskType = VALID_TYPES.includes(t.task_type) ? t.task_type : "普通任务";
+
+      let duration = Number(t.duration_days);
+      if (!Number.isFinite(duration) || duration < 0) duration = 0;
+      else duration = Math.floor(duration);
+
+      // parent_ref：null/undefined 合法；否则必须是合法数组下标
+      let parentRef = undefined;
+      if (t.parent_ref != null && t.parent_ref !== undefined) {
+        const pr = Number(t.parent_ref);
+        if (Number.isInteger(pr) && pr >= 0 && pr < n) parentRef = pr;
+      }
+
+      // predecessor_refs：过滤为合法下标
+      let predRefs = [];
+      if (Array.isArray(t.predecessor_refs)) {
+        predRefs = t.predecessor_refs
+          .map((x) => Number(x))
+          .filter((x) => Number.isInteger(x) && x >= 0 && x < n);
+      }
+
+      // bg_color：安全校验
+      const bgColor = sanitizeColor(t.bg_color);
+
+      const item = {
+        name: t.name.trim(),
+        task_type: taskType,
+        duration_days: duration,
+      };
+      if (parentRef != null) item.parent_ref = parentRef;
+      if (predRefs.length > 0) item.predecessor_refs = predRefs;
+      if (bgColor) item.bg_color = bgColor;
+      cleanTasks.push(item);
+    }
+
+    // 循环依赖防御
+    if (hasCycle(cleanTasks)) {
+      return res.status(400).json({ ok: false, error: "模板存在循环依赖" });
+    }
+
+    const payload = {
+      name: name.trim(),
+      description: typeof description === "string" ? description : "",
+      tasks: cleanTasks,
+    };
+    writeFileSync(filePath, JSON.stringify(payload, null, 2), "utf-8");
+
+    res.json({
+      ok: true,
+      data: { file: fileName, name: name.trim(), task_count: cleanTasks.length },
+    });
+  } catch (err) {
+    console.error("POST templates/schedule:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
