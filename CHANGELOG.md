@@ -2,6 +2,21 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-15 — 项目计划「节点任务」逻辑重构（可改日期 + 甘特图红色菱形 + 可被依赖）
+
+- **新增功能**
+  - 甘特图节点任务渲染为**红色菱形里程碑**（`#EF4444` 填充 + `#B91C1C` 描边 + 外发光），着重显示，与其它任务长条区分
+  - 前置依赖对话框中节点任务候选显示 `◆` 标记，明确其可作为前置依赖被其它任务依赖
+  - 节点任务日期现在可在表格/甘特图中**手动编辑**（解除原「先普通后转节点才能定日期」的限制）
+
+- **修改模块**
+  - `server/src/routes/schedule.js`：`PUT /schedule-tasks/:id` 移除节点任务 400 拦截；类型切换为节点时折叠为单日里程碑（结束日=开始日），工期强制为 1 天且不可改；新增节点日期可改分支（忽略 duration_days 修改）；`generate` 不再强制节点 `is_locked=1`（解耦锁定与节点类型）
+  - `client/src/components/schedule/ScheduleTable.jsx`：编辑守卫改为允许节点改 `planned_start/planned_end`，但禁止改 `duration_days`
+  - `client/src/components/schedule/GanttRow.jsx`：节点任务分支渲染红色菱形
+  - `client/src/components/schedule/PredecessorDialog.jsx`：节点候选 secondary 前加 `◆`
+
+- **行为说明**：节点任务 = 单日里程碑，日期可手动设定；其它普通任务可将其设为前置，节点日期变动时下游任务按「节点结束日 +1」级联重算（沿用既有 `cascadePropagation` 逻辑，无需改动）。节点自身不随其前置任务变动而移动。
+
 ## 2026-07-15 — 会议纪要模块支持「全时会议」
 
 - **新增功能**

@@ -24,6 +24,7 @@ export default function GanttRow({
   const barTop = (rowHeight - barHeight) / 2;
   const bg = model.rowIndex % 2 === 1 ? "#FAFAFA" : "#FFFFFF";
   const isPhase = model.taskType === "阶段任务";
+  const isNode = model.taskType === "节点任务";
   const isCollapsed = collapsedPhases && collapsedPhases.has(model.id);
 
   const tooltip = (
@@ -96,40 +97,61 @@ export default function GanttRow({
 
       {/* 右侧时间轴条形区域 */}
       <Box sx={{ position: "relative", width: chartWidth, flexShrink: 0 }}>
-        <Tooltip title={tooltip} arrow placement="top">
-          <Box
-            sx={{
-              position: "absolute",
-              left: model.x,
-              top: barTop,
-              width: model.width,
-              height: barHeight,
-              bgcolor: model.color,
-              borderRadius: "4px",
-              border: isPhase ? "1.5px solid rgba(0,0,0,0.25)" : "none",
-              cursor: "default",
-              display: "flex",
-              alignItems: "center",
-              px: 0.5,
-              overflow: "hidden",
-            }}
-          >
-            <Typography
+        {isNode ? (
+          // 节点任务：红色菱形里程碑，着重显示
+          <Tooltip title={tooltip} arrow placement="top">
+            <Box
               sx={{
-                fontSize: "0.62rem",
-                fontWeight: isPhase ? 700 : 400,
-                color: "#1F2937",
-                whiteSpace: "nowrap",
+                position: "absolute",
+                left: model.x + model.width / 2 - (barHeight + 10) / 2,
+                top: (rowHeight - (barHeight + 10)) / 2,
+                width: barHeight + 10,
+                height: barHeight + 10,
+                bgcolor: "#EF4444",
+                border: "2px solid #B91C1C",
+                borderRadius: "4px",
+                transform: "rotate(45deg)",
+                boxShadow: "0 0 0 3px rgba(239,68,68,0.25)",
+                cursor: "default",
+              }}
+            />
+          </Tooltip>
+        ) : (
+          <Tooltip title={tooltip} arrow placement="top">
+            <Box
+              sx={{
+                position: "absolute",
+                left: model.x,
+                top: barTop,
+                width: model.width,
+                height: barHeight,
+                bgcolor: model.color,
+                borderRadius: "4px",
+                border: isPhase ? "1.5px solid rgba(0,0,0,0.25)" : "none",
+                cursor: "default",
+                display: "flex",
+                alignItems: "center",
+                px: 0.5,
                 overflow: "hidden",
-                textOverflow: "ellipsis",
-                lineHeight: 1,
-                userSelect: "none",
               }}
             >
-              {model.name}
-            </Typography>
-          </Box>
-        </Tooltip>
+              <Typography
+                sx={{
+                  fontSize: "0.62rem",
+                  fontWeight: isPhase ? 700 : 400,
+                  color: "#1F2937",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  lineHeight: 1,
+                  userSelect: "none",
+                }}
+              >
+                {model.name}
+              </Typography>
+            </Box>
+          </Tooltip>
+        )}
       </Box>
     </Box>
   );

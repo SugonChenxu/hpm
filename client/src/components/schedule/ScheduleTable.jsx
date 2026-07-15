@@ -133,9 +133,11 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
   const handleStartEdit = useCallback((taskId, field, currentValue) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
-    if (task.is_locked === 1 || task.task_type === "节点任务") {
+    if (task.is_locked === 1 && task.task_type !== "节点任务") {
       if (field === "planned_start" || field === "planned_end" || field === "duration_days") return;
     }
+    // 节点任务：仅允许改日期，工期恒为 1 天，不可改
+    if (task.task_type === "节点任务" && field === "duration_days") return;
     if (task.task_type === "阶段任务") {
       if (field === "planned_start" || field === "planned_end" || field === "duration_days") return;
     }

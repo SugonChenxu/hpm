@@ -94,7 +94,7 @@ export default function PredecessorDialog({
                   />
                 </ListItemIcon>
                 <ListItemText
-                  primary={c.name || "（未命名）"}
+                  primary={`${c.task_type === "节点任务" ? "◆ " : ""}${c.name || "（未命名）"}`}
                   secondary={`${c.task_type} · 结束: ${c.planned_end || "-"} · 工期: ${c.duration_days}天`}
                 />
               </ListItemButton>

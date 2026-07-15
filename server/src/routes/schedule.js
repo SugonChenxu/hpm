@@ -381,7 +381,7 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
         const tmpl = template.tasks[i];
         const taskType = tmpl.task_type || "普通任务";
         const durationDays = taskType === "节点任务" ? 1 : (tmpl.duration_days || 0);
-        const isLocked = taskType === "节点任务" ? 1 : 0;
+        const isLocked = tmpl.is_locked ? 1 : 0;
 
         // 对于阶段任务，duration_days 暂时设为 0，后续聚合计算
         const effectiveDuration = taskType === "阶段任务" ? 0 : Math.max(1, durationDays);
@@ -523,19 +523,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
 
     const body = req.body;
 
-    // 节点任务保护
-    if (task.is_locked === 1 || task.task_type === "节点任务") {
-      if (body.planned_start !== undefined && body.planned_start !== task.planned_start) {
-        return res.status(400).json({ ok: false, error: "节点任务不允许修改开始日期" });
-      }
-      if (body.duration_days !== undefined && body.duration_days !== task.duration_days) {
-        return res.status(400).json({ ok: false, error: "节点任务不允许修改工期" });
-      }
-      if (body.planned_end !== undefined && body.planned_end !== task.planned_end) {
-        return res.status(400).json({ ok: false, error: "节点任务不允许修改结束日期" });
-      }
-    }
-
+    // 节点任务：日期可改（不再 400 拦截），工期始终由下方逻辑强制为 1 天
     // 阶段任务保护
     if (task.task_type === "阶段任务") {
       if (body.planned_start !== undefined || body.planned_end !== undefined || body.duration_days !== undefined) {
@@ -555,15 +543,14 @@ router.put("/schedule-tasks/:id", (req, res) => {
         updates.task_type = body.task_type;
         fields.push("task_type = ?");
 
+        // 节点任务：折叠为单日里程碑（结束日=开始日），工期恒为 1 天；
+        // 不再强制锁定，切换后日期仍可由用户手动修改
         if (body.task_type === "节点任务") {
-          updates.is_locked = 1;
+          updates.planned_end = task.planned_start;
           updates.duration_days = 1;
-          fields.push("is_locked = ?", "duration_days = ?");
+          fields.push("planned_end = ?", "duration_days = ?");
         }
-        if (body.task_type === "普通任务" && task.is_locked === 1) {
-          updates.is_locked = 0;
-          fields.push("is_locked = ?");
-        }
+        // 转回普通任务时不再强制解锁（锁定状态由 is_locked 独立控制）
       }
       if (body.notes !== undefined) {
         updates.notes = body.notes;
@@ -574,8 +561,24 @@ router.put("/schedule-tasks/:id", (req, res) => {
         fields.push("bg_color = ?");
       }
 
+      // 节点任务：日期可改，但工期始终为 1 天（单日里程碑）
+      const effectiveType = body.task_type !== undefined ? body.task_type : task.task_type;
+      if (effectiveType === "节点任务") {
+        if (body.planned_start !== undefined || body.planned_end !== undefined) {
+          const d = body.planned_start !== undefined
+            ? body.planned_start
+            : (body.planned_end !== undefined ? body.planned_end : task.planned_start);
+          updates.planned_start = d;
+          updates.planned_end = d;
+          updates.duration_days = 1;
+          if (!fields.includes("planned_start = ?")) fields.push("planned_start = ?");
+          if (!fields.includes("planned_end = ?")) fields.push("planned_end = ?");
+          if (!fields.includes("duration_days = ?")) fields.push("duration_days = ?");
+        }
+        // duration_days 的修改被忽略（节点恒为 1 天）
+      }
       // 日期/工期修改（普通任务）
-      if (task.task_type === "普通任务" && task.is_locked !== 1) {
+      else if (effectiveType === "普通任务" && task.is_locked !== 1) {
         if (body.planned_start !== undefined) {
           updates.planned_start = body.planned_start;
           fields.push("planned_start = ?");
