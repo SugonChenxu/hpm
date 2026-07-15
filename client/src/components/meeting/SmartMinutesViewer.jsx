@@ -1,5 +1,5 @@
-import { Box, Typography, Skeleton, Alert } from "@mui/material";
-import { InfoOutlined } from "@mui/icons-material";
+import { Box, Typography, Skeleton, Alert, Button } from "@mui/material";
+import { InfoOutlined, OpenInNew } from "@mui/icons-material";
 
 /**
  * SmartMinutesViewer — AI 智能纪要内容展示组件
@@ -31,6 +31,39 @@ export default function SmartMinutesViewer({ loading, error, data }) {
       <Alert severity="error" sx={{ mt: 1 }} data-testid="minutes-error">
         加载纪要失败: {error}
       </Alert>
+    );
+  }
+
+  // ---- Link state (全时会议分享链接) ----
+  if (data && data.source === "link" && data.url) {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          gap: 1.5,
+          mt: 1,
+          py: 3,
+        }}
+      >
+        <Alert severity="info" sx={{ width: "100%" }}>
+          该会议纪要通过全时分享链接查看
+        </Alert>
+        <Button
+          variant="contained"
+          color="secondary"
+          startIcon={<OpenInNew />}
+          href={data.url}
+          target="_blank"
+          rel="noopener"
+        >
+          打开全时会议纪要
+        </Button>
+        <Typography variant="body2" color="text.secondary">
+          链接将在新标签页打开，需登录全时账号查看完整内容
+        </Typography>
+      </Box>
     );
   }
 

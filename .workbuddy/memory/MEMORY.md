@@ -1,7 +1,7 @@
-# HPM 项目 — 常驻记忆
+# Forge 项目 — 常驻记忆
 
 ## 项目概览
-- **项目代号**: HPM (Hardware Project Management)
+- **项目名称**: Forge（代号 HPM，Hardware Project Management）
 - **目标**: 构建一个面向硬件产品研发全生命周期的 Web 项目管理工具
 - **用户**: 个人使用（X, 天津, 硬件项目管理）
 - **领域知识库**: `D:\HPM\.workbuddy\memory\hardware-pm-knowledge-base.md`
@@ -28,9 +28,15 @@
 - **已抽取 PPTX 文本**: `D:\HPM\__pptx_extracted_xml\` (10 txt)
 - **团队**: `software-hwpm` (TeamCreate 已建)
 - **GitHub 连接**: connected
-- **PM2 进程守护**: hpm-server(3001) + hpm-client(5173)，autorestart=true
+- **PM2 进程守护**: forge(3000) 单进程生产模式，Express 托管前端静态文件，autorestart=true
 - **PM2 开机自启**: 注册表 HKCU\Run → `D:\HPM\scripts\pm2-resurrect.bat` → pm2 resurrect
-- **PM2 管理**: `bash start.sh [start|stop|restart|status|logs]`
+- **PM2 管理**: `bash start.sh [dev|start|stop|restart|status|logs|build]`
+  - `dev` — 启动开发模式（Vite:5173 + API:3001，HMR 热更新）
+  - `start` — 启动生产模式（单进程 3000，后台运行）
+  - `build` — 编译前端 + 自动切到生产模式
+- **桌面快捷**: `scripts/create-shortcut.vbs`（双击生成桌面 Forge 图标）
+- **PWA 安装**: 打开 http://localhost:3000 → Chrome 地址栏「安装」→ 独立应用窗口
+- **数据库备份**: `scripts/backup-db.bat`（保留最近 10 份）
 
 ## 项目阶段追踪
 | 阶段 | 状态 | 完成日期 | 交付物 |
@@ -158,7 +164,7 @@ npx pm2 save
 | `npx pm2 logs` | 实时查看所有日志 |
 | `npx pm2 logs hpm-server --err` | 查看服务端错误日志 |
 | `npx pm2 restart ecosystem.config.js` | 重启所有进程 |
-| `npx pm2 restart hpm-server` | 重启单个进程 |
+| `npx pm2 restart forge` | 重启 Forge 服务 |
 | `npx pm2 delete all` | 删除所有进程（核武器） |
 | `npx pm2 start ecosystem.config.js` | 从配置启动 |
 | `npx pm2 save` | 保存当前进程列表到 dump.pm2 |

@@ -1,4 +1,5 @@
-import { Box, Tooltip } from "@mui/material";
+import { Box, Tooltip, IconButton, Typography } from "@mui/material";
+import { ExpandMore, ChevronRight } from "@mui/icons-material";
 
 /**
  * 甘特图单行：左侧任务名列（depth 缩进、sticky）+ 右侧时间轴条形。
@@ -8,6 +9,8 @@ import { Box, Tooltip } from "@mui/material";
  * Props:
  *   model — GanttRowModel（来自 GanttChart）
  *   rowHeight / barHeight / nameColWidth / chartWidth — 绘图常量
+ *   collapsedPhases — Set<phaseId>，已折叠的阶段任务 ID
+ *   onToggleCollapse — (phaseId) => void，切换折叠状态
  */
 export default function GanttRow({
   model,
@@ -15,10 +18,13 @@ export default function GanttRow({
   barHeight = 22,
   nameColWidth = 220,
   chartWidth = 0,
+  collapsedPhases,
+  onToggleCollapse,
 }) {
   const barTop = (rowHeight - barHeight) / 2;
   const bg = model.rowIndex % 2 === 1 ? "#FAFAFA" : "#FFFFFF";
   const isPhase = model.taskType === "阶段任务";
+  const isCollapsed = collapsedPhases && collapsedPhases.has(model.id);
 
   const tooltip = (
     <Box sx={{ fontSize: "0.75rem", lineHeight: 1.6 }}>
@@ -51,7 +57,7 @@ export default function GanttRow({
           bgcolor: bg,
           display: "flex",
           alignItems: "center",
-          pl: 1 + model.depth * 16,
+          paddingLeft: `${8 + model.depth * 16}px`,
           pr: 1,
           borderRight: "1px solid #E5E7EB",
           fontSize: "0.8rem",
@@ -62,6 +68,29 @@ export default function GanttRow({
           textOverflow: "ellipsis",
         }}
       >
+        {/* 阶段任务折叠/展开箭头 */}
+        {isPhase && onToggleCollapse && (
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCollapse(model.id);
+            }}
+            sx={{
+              p: 0,
+              mr: 0.25,
+              minWidth: 18,
+              width: 18,
+              height: 18,
+            }}
+          >
+            {isCollapsed ? (
+              <ChevronRight sx={{ fontSize: 16 }} />
+            ) : (
+              <ExpandMore sx={{ fontSize: 16 }} />
+            )}
+          </IconButton>
+        )}
         {model.name}
       </Box>
 
@@ -79,8 +108,27 @@ export default function GanttRow({
               borderRadius: "4px",
               border: isPhase ? "1.5px solid rgba(0,0,0,0.25)" : "none",
               cursor: "default",
+              display: "flex",
+              alignItems: "center",
+              px: 0.5,
+              overflow: "hidden",
             }}
-          />
+          >
+            <Typography
+              sx={{
+                fontSize: "0.62rem",
+                fontWeight: isPhase ? 700 : 400,
+                color: "#1F2937",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                lineHeight: 1,
+                userSelect: "none",
+              }}
+            >
+              {model.name}
+            </Typography>
+          </Box>
         </Tooltip>
       </Box>
     </Box>

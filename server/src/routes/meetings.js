@@ -146,6 +146,19 @@ router.get("/meetings/:id/minutes", async (req, res) => {
       return res.json({ ok: true, data: cached, source: "cache" });
     }
 
+    // 全时会议：纪要通过分享链接查看
+    if (meeting.platform === "quanshi" && meeting.minutes_url) {
+      return res.json({
+        ok: true,
+        data: {
+          source: "link",
+          platform: "quanshi",
+          url: meeting.minutes_url,
+        },
+        message: "全时会议纪要通过分享链接查看",
+      });
+    }
+
     // 非腾讯会议或无 external_id → 无纪要
     if (meeting.platform !== "tencent" || !meeting.external_id) {
       return res.json({
@@ -249,6 +262,9 @@ router.post("/meetings", (req, res) => {
     attendee_count,
     attendees_json,
     platform,
+    external_id,
+    meeting_code,
+    minutes_url,
   } = req.body;
   if (!title) return res.status(400).json({ ok: false, error: "title 必填" });
   const duration =
@@ -257,18 +273,21 @@ router.post("/meetings", (req, res) => {
       : null;
   const result = db
     .prepare(
-      "INSERT INTO meetings (project_id, phase_id, platform, title, start_time, end_time, duration_minutes, attendee_count, attendees_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO meetings (project_id, phase_id, platform, external_id, meeting_code, title, start_time, end_time, duration_minutes, attendee_count, attendees_json, minutes_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       project_id || null,
       phase_id || null,
       platform || "manual",
+      external_id || null,
+      meeting_code || null,
       title,
       start_time || null,
       end_time || null,
       duration,
       attendee_count || null,
-      attendees_json ? JSON.stringify(attendees_json) : null
+      attendees_json ? JSON.stringify(attendees_json) : null,
+      minutes_url || null
     );
   res.status(201).json({
     ok: true,
@@ -292,12 +311,12 @@ router.get("/meetings/:id", (req, res) => {
 // PUT /api/meetings/:id — 更新会议（保留原有功能）
 // =====================================================
 router.put("/meetings/:id", (req, res) => {
-  const { title, minutes_text, minutes_status, start_time, end_time } = req.body;
+  const { title, minutes_text, minutes_status, start_time, end_time, minutes_url } = req.body;
   const m = db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id);
   if (!m) return res.status(404).json({ ok: false, error: "会议不存在" });
   db.prepare(
-    "UPDATE meetings SET title=COALESCE(?,title), minutes_text=COALESCE(?,minutes_text), minutes_status=COALESCE(?,minutes_status), start_time=COALESCE(?,start_time), end_time=COALESCE(?,end_time), updated_at=datetime('now','localtime') WHERE id=?"
-  ).run(title, minutes_text, minutes_status, start_time, end_time, req.params.id);
+    "UPDATE meetings SET title=COALESCE(?,title), minutes_text=COALESCE(?,minutes_text), minutes_status=COALESCE(?,minutes_status), start_time=COALESCE(?,start_time), end_time=COALESCE(?,end_time), minutes_url=COALESCE(?,minutes_url), updated_at=datetime('now','localtime') WHERE id=?"
+  ).run(title, minutes_text, minutes_status, start_time, end_time, minutes_url, req.params.id);
   res.json({
     ok: true,
     data: db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id),

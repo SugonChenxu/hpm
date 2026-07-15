@@ -61,11 +61,10 @@ const tdStyle = (align) => ({
   borderBottom: "1px solid #F3F4F6",
 });
 
-export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskUpdate, onPredecessorSave, onBgColorSave, predTriggerTaskId, onPredTriggerHandled }) {
+export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskUpdate, onPredecessorSave, onBgColorSave, predTriggerTaskId, onPredTriggerHandled, collapsedPhases, onToggleCollapse }) {
   // ===================== 状态 =====================
   const [editCell, setEditCell] = useState(null);
   const [editValue, setEditValue] = useState("");
-  const [collapsedPhases, setCollapsedPhases] = useState(new Set());
   const [colWidths, setColWidths] = useState({ ...DEFAULT_COL_WIDTHS });
 
   // 前置任务 Popover
@@ -99,17 +98,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
   const resizeStartWidth = useRef(0);
 
   // ===================== 折叠状态 =====================
-  const toggleCollapse = useCallback((taskId) => {
-    setCollapsedPhases(prev => {
-      const next = new Set(prev);
-      if (next.has(taskId)) {
-        next.delete(taskId);
-      } else {
-        next.add(taskId);
-      }
-      return next;
-    });
-  }, []);
+  // collapsedPhases 与 onToggleCollapse 由父组件管理，实现排期表与甘特图联动折叠
 
   // 计算可见任务列表（折叠隐藏子任务）
   const visibleTasks = useMemo(() => {
@@ -376,7 +365,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
         {isPhase && (
           <IconButton
             size="small"
-            onClick={(e) => { e.stopPropagation(); toggleCollapse(task.id); }}
+            onClick={(e) => { e.stopPropagation(); onToggleCollapse(task.id); }}
             sx={{ p: 0, mr: 0.5, minWidth: 18 }}
           >
             {isCollapsed ? <ChevronRight fontSize="small" /> : <ExpandMore fontSize="small" />}

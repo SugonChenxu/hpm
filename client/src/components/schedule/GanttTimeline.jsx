@@ -1,25 +1,20 @@
 import { Box } from "@mui/material";
 
 /**
- * 甘特图双行表头：月行（上行）+ 周行（下行）刻度，含竖向网格线。
- * 表头 sticky 固定（top:0），左侧任务名列占位 sticky（left:0）。
+ * 甘特图表头 — 全部单行，格式简洁。
  *
  * Props:
- *   monthSegments — { label, x, width }[]（按月分段，粗竖线）
- *   weekSegments — { label, x, width }[]（按周一分段，细竖线）
+ *   majorSegments — { label, x, width }[]（时间刻度）
  *   chartWidth — 时间轴区域总宽（px）
- *   nameColWidth — 左侧任务名列宽（px）
- *   headerHeight — 表头总高（px）
+ *   nameColWidth — 左侧任务名列宽（px），默认 220
+ *   headerHeight — 表头高度（px），默认 28
  */
 export default function GanttTimeline({
-  monthSegments = [],
-  weekSegments = [],
+  majorSegments = [],
   chartWidth = 0,
   nameColWidth = 220,
-  headerHeight = 48,
+  headerHeight = 28,
 }) {
-  const half = headerHeight / 2;
-
   return (
     <Box
       sx={{
@@ -29,9 +24,10 @@ export default function GanttTimeline({
         display: "flex",
         height: headerHeight,
         borderBottom: "2px solid #D1D5DB",
+        bgcolor: "#F9FAFB",
       }}
     >
-      {/* 左侧任务名列占位（sticky left，覆盖交叉角） */}
+      {/* 左侧任务名列占位（sticky left） */}
       <Box
         sx={{
           position: "sticky",
@@ -45,7 +41,7 @@ export default function GanttTimeline({
           alignItems: "center",
           pl: 1,
           fontWeight: 600,
-          fontSize: "0.8rem",
+          fontSize: "0.78rem",
           color: "#1E1B2E",
         }}
       >
@@ -54,64 +50,30 @@ export default function GanttTimeline({
 
       {/* 时间轴刻度区域 */}
       <Box sx={{ position: "relative", width: chartWidth, flexShrink: 0 }}>
-        {/* 月行（上行） */}
-        <Box
-          sx={{
-            position: "relative",
-            height: half,
-            borderBottom: "1px solid #E5E7EB",
-          }}
-        >
-          {monthSegments.map((s, i) => (
-            <Box
-              key={`m-${i}`}
-              sx={{
-                position: "absolute",
-                left: s.x,
-                top: 0,
-                width: s.width,
-                height: "100%",
-                borderLeft: "1px solid #D1D5DB",
-                display: "flex",
-                alignItems: "center",
-                pl: 0.5,
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                color: "#374151",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-              }}
-            >
-              {s.label}
-            </Box>
-          ))}
-        </Box>
-
-        {/* 周行（下行） */}
-        <Box sx={{ position: "relative", height: half }}>
-          {weekSegments.map((s, i) => (
-            <Box
-              key={`w-${i}`}
-              sx={{
-                position: "absolute",
-                left: s.x,
-                top: 0,
-                width: s.width,
-                height: "100%",
-                borderLeft: "1px solid #E5E7EB",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "0.7rem",
-                color: "#9CA3AF",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-              }}
-            >
-              {s.label}
-            </Box>
-          ))}
-        </Box>
+        {majorSegments.map((s, i) => (
+          <Box
+            key={`seg-${i}`}
+            sx={{
+              position: "absolute",
+              left: s.x,
+              top: 0,
+              width: s.width,
+              height: "100%",
+              borderLeft: "1px solid #D1D5DB",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "0.68rem",
+              fontWeight: 600,
+              color: "#374151",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              letterSpacing: "0.02em",
+            }}
+          >
+            {s.label}
+          </Box>
+        ))}
       </Box>
     </Box>
   );

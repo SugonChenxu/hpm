@@ -15,12 +15,22 @@ import {
   Snackbar,
   Alert,
   Card,
+  Chip,
+  Stack,
 } from "@mui/material";
-import { Refresh } from "@mui/icons-material";
+import { Refresh, Add } from "@mui/icons-material";
 import api from "../api/client";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
 import MeetingDrawer from "../components/meeting/MeetingDrawer";
+import CreateMeetingDialog from "../components/meeting/CreateMeetingDialog";
+
+// 平台标识样式
+const PLATFORM_META = {
+  tencent: { label: "腾讯会议", color: "primary" },
+  quanshi: { label: "全时会议", color: "secondary" },
+  manual: { label: "手动", color: "default" },
+};
 
 /**
  * MeetingListPage — 会议纪要列表页
@@ -37,6 +47,8 @@ export default function MeetingListPage() {
   const [search, setSearch] = useState("");
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState("");
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -49,6 +61,7 @@ export default function MeetingListPage() {
     try {
       const params = {};
       if (search.trim()) params.search = search.trim();
+      if (platformFilter) params.platform = platformFilter;
       const res = await api.meetings.list(params);
       setMeetings(res.data);
     } catch (e) {
@@ -60,7 +73,7 @@ export default function MeetingListPage() {
     } finally {
       setLoading(false);
     }
-  }, [search]);
+  }, [search, platformFilter]);
 
   useEffect(() => {
     loadMeetings();
@@ -116,8 +129,16 @@ export default function MeetingListPage() {
   // ===== 渲染 =====
   return (
     <Box>
-      {/* ---- 头部：标题 + 拉取按钮 ---- */}
-      <PageHeader title="会议纪要" subtitle="腾讯会议同步与 AI 纪要">
+      {/* ---- 头部：标题 + 按钮 ---- */}
+      <PageHeader title="会议纪要" subtitle="会议同步、全时链接与 AI 纪要">
+        <Button
+          variant="outlined"
+          startIcon={<Add />}
+          onClick={() => setCreateOpen(true)}
+          sx={{ mr: 1 }}
+        >
+          新建会议
+        </Button>
         <Button
           variant="contained"
           startIcon={
@@ -134,14 +155,34 @@ export default function MeetingListPage() {
         </Button>
       </PageHeader>
 
-      {/* ---- 搜索框 ---- */}
-      <TextField
-        placeholder="搜索会议标题..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        size="small"
-        sx={{ mb: 2, width: { xs: "100%", sm: 320 } }}
-      />
+      {/* ---- 搜索框 + 平台筛选 ---- */}
+      <Box sx={{ display: "flex", gap: 2, mb: 2, flexWrap: "wrap", alignItems: "center" }}>
+        <TextField
+          placeholder="搜索会议标题..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          size="small"
+          sx={{ width: { xs: "100%", sm: 320 } }}
+        />
+        <Stack direction="row" spacing={1}>
+          {[
+            { value: "", label: "全部" },
+            { value: "tencent", label: "腾讯" },
+            { value: "quanshi", label: "全时" },
+            { value: "manual", label: "手动" },
+          ].map((f) => (
+            <Chip
+              key={f.value}
+              label={f.label}
+              clickable
+              color={platformFilter === f.value ? "primary" : "default"}
+              variant={platformFilter === f.value ? "filled" : "outlined"}
+              onClick={() => setPlatformFilter(f.value)}
+              size="small"
+            />
+          ))}
+        </Stack>
+      </Box>
 
       {/* ---- 会议表格 ---- */}
       {loading ? (
@@ -152,7 +193,7 @@ export default function MeetingListPage() {
             暂无会议记录
           </Typography>
           <Typography color="text.secondary" variant="body2" sx={{ mt: 1 }}>
-            点击右上角「🔄 拉取腾讯会议」同步最新数据
+            点击右上角「新建会议」登记，或「🔄 拉取腾讯会议」同步
           </Typography>
         </Card>
       ) : (
@@ -161,6 +202,7 @@ export default function MeetingListPage() {
             <TableHead>
               <TableRow>
                 <TableCell>会议标题</TableCell>
+                <TableCell sx={{ width: 90 }}>平台</TableCell>
                 <TableCell sx={{ width: 140 }}>开始时间</TableCell>
                 <TableCell sx={{ width: 80 }}>时长</TableCell>
                 <TableCell sx={{ width: 80 }}>参会人数</TableCell>
@@ -168,32 +210,45 @@ export default function MeetingListPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {meetings.map((m) => (
-                <TableRow
-                  key={m.id}
-                  hover
-                  sx={{ cursor: "pointer" }}
-                  onClick={() => handleRowClick(m)}
-                >
-                  <TableCell>
-                    <Typography variant="body2" fontWeight={500}>
-                      {m.title}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{formatTime(m.start_time)}</TableCell>
-                  <TableCell>{formatDuration(m.duration_minutes)}</TableCell>
-                  <TableCell>{m.attendee_count || "-"}</TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {m.meeting_code || "-"}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {meetings.map((m) => {
+                const meta = PLATFORM_META[m.platform] || PLATFORM_META.manual;
+                return (
+                  <TableRow
+                    key={m.id}
+                    hover
+                    sx={{ cursor: "pointer" }}
+                    onClick={() => handleRowClick(m)}
+                  >
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={500}>
+                        {m.title}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Chip label={meta.label} size="small" color={meta.color} variant="outlined" />
+                    </TableCell>
+                    <TableCell>{formatTime(m.start_time)}</TableCell>
+                    <TableCell>{formatDuration(m.duration_minutes)}</TableCell>
+                    <TableCell>{m.attendee_count || "-"}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {m.meeting_code || "-"}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
       )}
+
+      {/* ---- 新建会议对话框 ---- */}
+      <CreateMeetingDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={loadMeetings}
+      />
 
       {/* ---- 右侧纪要面板 ---- */}
       <MeetingDrawer

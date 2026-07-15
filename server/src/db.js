@@ -289,6 +289,15 @@ try {
   }
 }
 
+// 迁移：meetings.minutes_url（全时会议分享链接）
+try {
+  db.exec(`ALTER TABLE meetings ADD COLUMN minutes_url TEXT`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration meetings.minutes_url:", e.message);
+  }
+}
+
 // =====================================================
 // 看板模块迁移：tasks 表新增字段
 // =====================================================

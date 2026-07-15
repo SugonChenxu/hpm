@@ -7,8 +7,16 @@ import api from "../../api/client";
 import { useProjectContext } from "../../context/ProjectContext";
 
 const PALETTE = [
-  "#8B5CF6", "#10B981", "#F59E0B", "#7C3AED", "#EF4444",
-  "#3B82F6", "#6D28D9", "#EA580C", "#3730A3", "#0D9488",
+  "#DA182C", // 大红
+  "#F88711", // 橘橙
+  "#D7C300", // 暗金
+  "#02944B", // 翠绿
+  "#00A29C", // 蓝绿
+  "#0C46A4", // 深蓝
+  "#6414B4", // 紫罗兰
+  "#AA195A", // 玫红
+  "#6E4614", // 暗棕
+  "#1E4648", // 深墨绿
 ];
 
 const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
@@ -35,6 +43,7 @@ function formatMeetingTime(weekday, start, end) {
 
 export default function CreateProjectDialog({ open, onClose, onCreated, project, hideTemplate, existingCount = 0 }) {
   const isEdit = !!project;
+  const { projects } = useProjectContext();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({
     code: "", name: "", department: "",
@@ -80,11 +89,13 @@ export default function CreateProjectDialog({ open, onClose, onCreated, project,
         if (onCreated) onCreated();
         onClose();
       } else {
+        // 按项目总数在调色板中轮换取色，保证每次新建颜色不同
+        const nextColor = PALETTE[projects.length % PALETTE.length];
         const payload = {
           code: form.code, name: form.name, department: form.department,
           order_number: form.order_number, storage_location: form.storage_location,
           meeting_time,
-          theme_color: PALETTE[existingCount % PALETTE.length],
+          theme_color: nextColor,
         };
         await api.projects.create(payload);
         await refreshProjects();

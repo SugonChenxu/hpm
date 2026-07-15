@@ -14,6 +14,8 @@ import {
   ListItemButton,
   ListItemText,
   Card,
+  ToggleButtonGroup,
+  ToggleButton,
 } from "@mui/material";
 import {
   Save,
@@ -63,6 +65,24 @@ export default function SchedulePage() {
 
   // PLM 连接/探针对话框
   const [plmDialogOpen, setPlmDialogOpen] = useState(false);
+
+  // 甘特图时间轴单位
+  const [ganttUnit, setGanttUnit] = useState("day");
+
+  // 阶段折叠状态（排期表与甘特图共享）
+  const [collapsedPhases, setCollapsedPhases] = useState(new Set());
+
+  const toggleCollapse = useCallback((taskId) => {
+    setCollapsedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  }, []);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState({
@@ -457,11 +477,36 @@ export default function SchedulePage() {
         onBgColorSave={handleBgColorSave}
         predTriggerTaskId={predTriggerTaskId}
         onPredTriggerHandled={() => setPredTriggerTaskId(null)}
+        collapsedPhases={collapsedPhases}
+        onToggleCollapse={toggleCollapse}
       />
+
+      {/* 甘特图时间轴单位切换 */}
+      <Box sx={{ mt: 2, display: "flex", alignItems: "center", gap: 2 }}>
+        <Typography variant="subtitle2" sx={{ color: "#1E1B2E" }}>
+          时间轴单位：
+        </Typography>
+        <ToggleButtonGroup
+          value={ganttUnit}
+          exclusive
+          onChange={(_, val) => val && setGanttUnit(val)}
+          size="small"
+        >
+          <ToggleButton value="day">日</ToggleButton>
+          <ToggleButton value="week">周</ToggleButton>
+          <ToggleButton value="month">月</ToggleButton>
+          <ToggleButton value="quarter">季度</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
       {/* Gantt chart (read-only) */}
       <Box sx={{ overflowX: "auto", mt: 2 }}>
-        <GanttChart tasks={tasks} />
+        <GanttChart
+          tasks={tasks}
+          unit={ganttUnit}
+          collapsedPhases={collapsedPhases}
+          onToggleCollapse={toggleCollapse}
+        />
       </Box>
 
       {/* Context menu */}

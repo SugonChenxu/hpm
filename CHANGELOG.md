@@ -2,6 +2,107 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-15 — 会议纪要模块支持「全时会议」
+
+- **新增功能**
+  - 会议纪要模块引入全时会议（Quanshi）记录：新建会议时可选平台「全时会议」，粘贴 App 内分享链接（`aiminutes.quanshimeet.cn/summary/m/...`）自动解析会议 ID
+  - 列表页新增「平台」筛选（全部/腾讯/全时/手动）与平台徽标列
+  - 会议详情抽屉：全时会议显示「打开全时纪要」按钮（新标签页打开分享链接），并展示平台徽标
+  - 纪要查看器支持 link 类型：全时会议显示「打开全时会议纪要」按钮
+  - 新增「新建会议」对话框（CreateMeetingDialog），支持腾讯/全时/手动三种平台；之前仅有「拉取腾讯会议」入口，无手动创建 UI
+
+- **修改模块**
+  - `client/src/components/meeting/CreateMeetingDialog.jsx`（新增）：平台选择 + 全时链接自动解析
+  - `client/src/pages/MeetingListPage.jsx`：新建按钮、平台筛选、平台徽标列、接入对话框
+  - `client/src/components/meeting/MeetingDrawer.jsx`：平台徽标 + 打开全时纪要按钮
+  - `client/src/components/meeting/SmartMinutesViewer.jsx`：link 类型渲染（全时分享链接按钮）
+  - `server/src/routes/meetings.js`：POST/PUT 接受 minutes_url、external_id、meeting_code；GET /:id/minutes 对全时返回 `{source:"link",url}` 结构
+  - `server/src/db.js`：meetings 表迁移新增 `minutes_url TEXT` 列
+
+- **接口调整**：`POST /api/meetings` 新增可选字段 `minutes_url`/`external_id`/`meeting_code`；`GET /api/meetings/:id/minutes` 全时会议返回 link 类型数据
+
+- **说明**：全时会议无开放 API，纪要页为登录态动态加载，无法自动抓取正文，故采用「存链接 + 跳转」方案，与用户在 App 内获取链接再打开的流程一致
+
+## 2026-07-13 — 新建项目颜色自动轮换（不再固定紫色）
+
+- **缺陷修复**
+  - `CreateProjectDialog.jsx`：`existingCount` 无人传递默认为 0，导致每次新建项目固定取 `PALETTE[0]`（紫色 #8B5CF6）
+  - 改为 `PALETTE[projects.length % PALETTE.length]`，从 `useProjectContext` 获取项目总数，按 10 色调色板轮换取色
+  - 每个新项目颜色与上一个不同，循环 10 色后回到起点
+
+- **修改模块**
+  - `client/src/components/common/CreateProjectDialog.jsx`：第 37 行增加 `const { projects } = useProjectContext()`，第 87 行替换取色逻辑
+
+## 2026-07-11 (17:50) — 品牌升级：HPM → Forge
+
+- **品牌升级**
+  - 应用名称 HPM → **Forge**（锻造），全量替换
+  - AI 生成高级图标：深炭背景 + 金色锻造金属 "F" 字样（forge-icon-192/512.png）
+  - 配色：background_color/theme_color → #1a1a2e（深炭黑）
+
+- **修改文件**
+  - `client/index.html`：title → Forge，icon/meta 更新
+  - `client/public/manifest.json`：name → Forge, icons → forge-icon-*.png
+  - `client/public/forge-icon-192.png / 512.png`（新增，替换旧 hpm-icon-*.png）
+  - `ecosystem.config.js`：进程名 hpm → forge
+  - `scripts/forge-launcher.vbs`（新增，替换 hpm-launcher.vbs）
+  - `scripts/create-shortcut.bat`：快捷方式名 HPM.lnk → Forge.lnk
+  - `scripts/build-and-start.bat` / `backup-db.bat` / `start.sh`：品牌文字替换
+  - `.workbuddy/memory/MEMORY.md`：项目名称、PM2 进程名同步
+
+## 2026-07-11 (17:36) — HPM 桌面封装：快捷方式 + PWA 可安装
+
+- **新增功能**
+  - 桌面快捷方式：双击 `scripts/create-shortcut.bat` 一键创建，指向静默启动器 VBS
+  - PWA 安装：支持 Chrome「安装」为独立应用窗口（standalone 模式，无浏览器外壳）
+  - Service Worker 基础离线缓存
+  - AI 生成 HPM 应用图标（紫渐变 + 白色 HPM 字样，192/512px）
+
+- **新增文件**
+  - `scripts/hpm-launcher.vbs` — 静默启动器（无命令行窗口）
+  - `scripts/create-shortcut.bat` — 桌面快捷方式生成
+  - `client/public/manifest.json` / `sw.js` / `hpm-icon-192.png` / `hpm-icon-512.png` — PWA 资产
+
+- **修改模块**
+  - `client/index.html` — 添加 PWA meta 标签 + manifest 链接 + SW 注册
+
+## 2026-07-11 (17:30) — 本地封装部署：单进程生产模式
+
+- **架构变更**
+  - 从双进程（Vite dev 5173 + Express API 3001）改为**单进程生产模式**（Express 3000 同时托管 API + 前端静态文件）
+  - 生产模式下 Express 自动检测 `client/dist/` 目录并启用 `express.static` + SPA fallback
+  - 前端 `vite.config.js` 无需改动（proxy 仅 dev 模式生效；production 下 API 同域请求）
+
+- **修改模块**
+  - `server/src/index.js`：新增 `path/fs` 导入；生产模式下托管 `../../client/dist` 静态文件；非 API 路由返回 `index.html`（SPA fallback）；PORT 从 3001 改为 process.env.PORT || 3000
+  - `ecosystem.config.js`：精简为单进程 `hpm`（移除 `hpm-client`）；cwd 指向 `server/`；NODE_ENV=production, PORT=3000
+  - `start.sh`：访问地址从 5173 改为 3000
+
+- **新增脚本**
+  - `scripts/build-and-start.bat`：Windows 一键编译启动（npm run build → pm2 start → 浏览器打开 localhost:3000）
+  - `scripts/backup-db.bat`：数据库备份（复制 `server/data/hpm.db` → `backups/hpm-YYYYMMDD-HHMMSS.db`，保留最近 10 份）
+
+- **验证**
+  - `/api/health` 200、`/` 200、`/plans` 200（SPA fallback）、`/api/projects` 200
+  - 单进程 PM2 PID 18128，内存 66MB，开机自启不变（`pm2 resurrect` 自动恢复）
+
+- **重构**
+  - 四种单位统一单行显示，彻底移除双行表头逻辑：
+    - 日：`7/11` 格式（M/D）
+    - 周：`26W28` 格式（YY + ISO周号）
+    - 月：`26/7` 格式（YY/M）
+    - 季度：`26Q3` 格式（YYQx）
+  - 周号使用 `isoWeekYear()` 纠正跨年边界（如12月底已属下年ISO周）
+  - 像素紧凑化：HEADER_HEIGHT 52→28px；单位像素 day=24 / week=32 / month=48 / quarter=64
+
+- **修改模块**
+  - `client/src/components/schedule/GanttChart.jsx`：段构建完全重写为单行 label；移除 `singleRow`/`displayHeaderHeight` 双行分支；网格线只保留粗线
+  - `client/src/components/schedule/GanttTimeline.jsx`：精简为纯单行渲染（40行），移除双行/哑点/muted 等逻辑
+
+- **参数变动**：无
+
+## 2026-07-11 (17:00) — 甘特图增强：时间轴单位切换 + 阶段折叠 + 缩进 bug 修复
+
 ## 2026-07-11 — 项目计划页甘特图（只读，含 FS 依赖关系可视化）
 
 - **新增功能**

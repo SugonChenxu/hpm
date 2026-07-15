@@ -9,10 +9,17 @@ import {
   Chip,
   Snackbar,
   Alert,
+  Stack,
 } from "@mui/material";
-import { Close, ContentCopy } from "@mui/icons-material";
+import { Close, ContentCopy, OpenInNew } from "@mui/icons-material";
 import api from "../../api/client";
 import SmartMinutesViewer from "./SmartMinutesViewer";
+
+const PLATFORM_META = {
+  tencent: { label: "腾讯会议", color: "primary" },
+  quanshi: { label: "全时会议", color: "secondary" },
+  manual: { label: "手动登记", color: "default" },
+};
 
 /**
  * MeetingDrawer — 右侧滑出面板，展示会议详情与 AI 智能纪要
@@ -124,11 +131,30 @@ export default function MeetingDrawer({ open, onClose, meeting }) {
                     variant="outlined"
                   />
                 )}
+                {(() => {
+                  const meta = PLATFORM_META[meeting?.platform] || PLATFORM_META.manual;
+                  return (
+                    <Chip label={meta.label} size="small" color={meta.color} variant="outlined" />
+                  );
+                })()}
               </Box>
             </Box>
 
             {/* 操作按钮组 */}
             <Box sx={{ display: "flex", gap: 0.5, flexShrink: 0 }}>
+              {meeting?.platform === "quanshi" && meeting?.minutes_url && (
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="secondary"
+                  startIcon={<OpenInNew />}
+                  href={meeting.minutes_url}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  打开全时纪要
+                </Button>
+              )}
               {minutes && minutes.content && (
                 <Button
                   size="small"
