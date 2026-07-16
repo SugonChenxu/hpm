@@ -26,6 +26,8 @@ export default function GanttRow({
   const isPhase = model.taskType === "阶段任务";
   const isNode = model.taskType === "节点任务";
   const isCollapsed = collapsedPhases && collapsedPhases.has(model.id);
+  // 节点菱形小巧化：边长约为条形高度减 6，旋转 45° 后对角线≈条形高度，与甘特图协调
+  const nodeSize = Math.max(12, barHeight - 6);
 
   const tooltip = (
     <Box sx={{ fontSize: "0.75rem", lineHeight: 1.6 }}>
@@ -98,20 +100,20 @@ export default function GanttRow({
       {/* 右侧时间轴条形区域 */}
       <Box sx={{ position: "relative", width: chartWidth, flexShrink: 0 }}>
         {isNode ? (
-          // 节点任务：红色菱形里程碑，着重显示
+          // 节点任务：红色菱形里程碑（小巧，与条形高度匹配）
           <Tooltip title={tooltip} arrow placement="top">
             <Box
               sx={{
                 position: "absolute",
-                left: model.x + model.width / 2 - (barHeight + 10) / 2,
-                top: (rowHeight - (barHeight + 10)) / 2,
-                width: barHeight + 10,
-                height: barHeight + 10,
+                left: model.x + model.width / 2 - nodeSize / 2,
+                top: (rowHeight - nodeSize) / 2,
+                width: nodeSize,
+                height: nodeSize,
                 bgcolor: "#EF4444",
-                border: "2px solid #B91C1C",
-                borderRadius: "4px",
+                border: "1.5px solid #B91C1C",
+                borderRadius: "3px",
                 transform: "rotate(45deg)",
-                boxShadow: "0 0 0 3px rgba(239,68,68,0.25)",
+                boxShadow: "0 0 0 2px rgba(239,68,68,0.22)",
                 cursor: "default",
               }}
             />

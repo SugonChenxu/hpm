@@ -153,6 +153,11 @@ function buildGanttModel(tasksInput, unit, collapsedPhases) {
   });
   const idToRow = new Map(rowModels.map((m) => [m.id, m.rowIndex]));
 
+  // 5.1) 节点任务中心线 x（用于甘特图贯穿虚线标尺）
+  const nodeLines = rowModels
+    .filter((m) => m.taskType === "节点任务")
+    .map((m) => ({ x: m.x + m.width / 2, name: m.name }));
+
   // 6) FS 依赖连线
   const links = [];
   for (const t of validTasks) {
@@ -243,6 +248,7 @@ function buildGanttModel(tasksInput, unit, collapsedPhases) {
     chartWidth,
     chartHeight,
     todayX,
+    nodeLines,
   };
 }
 
@@ -290,6 +296,7 @@ export default function GanttChart({
     chartWidth,
     chartHeight,
     todayX,
+    nodeLines,
   } = model;
 
   return (
@@ -347,13 +354,14 @@ export default function GanttChart({
             />
           ))}
 
-          {/* 依赖连线 + 今天线 SVG 叠加层 */}
+          {/* 依赖连线 + 今天线 + 节点标尺 SVG 叠加层 */}
           <GanttLinks
             links={links}
             chartWidth={chartWidth}
             chartHeight={chartHeight}
             nameColWidth={NAME_COL_WIDTH}
             todayX={todayX}
+            nodeLines={nodeLines}
             arrowGap={ARROW_GAP}
             todayColor={TODAY_COLOR}
           />

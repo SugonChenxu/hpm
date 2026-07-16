@@ -1,15 +1,17 @@
 import { Box } from "@mui/material";
 
 /**
- * 甘特图依赖连线层：绝对定位 SVG，绘制 FS（完成→开始）依赖箭头折线 + 今天线。
+ * 甘特图依赖连线层：绝对定位 SVG，绘制 FS（完成→开始）依赖箭头折线 + 今天线 + 节点标尺线。
  *
  * Props:
  *   links — GanttLinkModel[]（from=前置右端，to=后继左端）
  *   chartWidth / chartHeight — 时间轴区域尺寸（px）
  *   nameColWidth — 左侧任务名列宽（px），SVG left 偏移至此
  *   todayX — 今天线 x 坐标（px），为 null 则不画
+ *   nodeLines — 节点任务中心线 [{ x, name }]，绘制贯穿全图的红色虚线标尺
  *   arrowGap — 连线外扩距离（px），默认 12
  *   todayColor — 今天线颜色，默认 #ef4444
+ *   nodeColor — 节点标尺颜色，默认淡红 #f87171
  */
 export default function GanttLinks({
   links = [],
@@ -17,10 +19,15 @@ export default function GanttLinks({
   chartHeight = 0,
   nameColWidth = 220,
   todayX = null,
+  nodeLines = [],
   arrowGap = 12,
   todayColor = "#ef4444",
+  nodeColor = "#f87171",
 }) {
-  const hasContent = (links && links.length > 0) || todayX != null;
+  const hasContent =
+    (links && links.length > 0) ||
+    todayX != null ||
+    (nodeLines && nodeLines.length > 0);
   if (!hasContent) return null;
 
   /**
@@ -101,6 +108,30 @@ export default function GanttLinks({
           </text>
         </g>
       )}
+
+      {/* 节点任务标尺线：贯穿全图的红色虚线，顶部小菱形标记 */}
+      {(nodeLines || []).map((n, i) => (
+        <g key={`node-${i}`}>
+          <line
+            x1={n.x}
+            y1={0}
+            x2={n.x}
+            y2={chartHeight}
+            stroke={nodeColor}
+            strokeWidth="1.25"
+            strokeDasharray="3 3"
+            opacity="0.55"
+          />
+          <rect
+            x={n.x - 4}
+            y={3}
+            width="8"
+            height="8"
+            fill={nodeColor}
+            transform={`rotate(45 ${n.x} ${7})`}
+          />
+        </g>
+      ))}
     </Box>
   );
 }
