@@ -71,9 +71,14 @@ export const api = {
     get: (id) => request(`/materials/${id}`),
     update: (id, data) => request(`/materials/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id) => request(`/materials/${id}`, { method: "DELETE" }),
-    batch: (data) => request("/materials/batch", { method: "POST", body: JSON.stringify(data) }),
-    overdue: () => request("/materials/overdue"),
-    stats: () => request("/materials/stats"),
+    batchImport: (data) => request("/materials/batch", { method: "POST", body: JSON.stringify(data) }),
+    batchRemove: (data) => request("/materials/batch", { method: "DELETE", body: JSON.stringify(data) }),
+    batchUpdateStatus: (data) =>
+      request("/materials/batch-status", { method: "PUT", body: JSON.stringify(data) }),
+    importSnapshot: (projectId) =>
+      request(`/materials/import-snapshot?project_id=${projectId}`),
+    importUndo: (projectId) =>
+      request("/materials/import-undo", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
   },
   // 会议纪要
   meetings: {

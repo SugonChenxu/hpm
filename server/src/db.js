@@ -8,6 +8,18 @@ const db = new Database(join(__dirname, "..", "hpm.db"));
 db.pragma("journal_mode = WAL");
 db.pragma("foreign_keys = ON");
 
+// === 物料表迁移：旧骨架结构(part_no/name...) → 新规范结构 ===
+// 旧表无真实 seed 数据，直接重建以匹配新字段。
+try {
+  const matInfo = db.prepare("PRAGMA table_info(materials)").all().map((c) => c.name);
+  if (matInfo.length && !matInfo.includes("part_number")) {
+    db.exec("DROP TABLE IF EXISTS materials;");
+    console.log("[DB] materials 表已迁移至新规范结构");
+  }
+} catch (e) {
+  // 表不存在时 PRAGMA 会报错，忽略
+}
+
 db.exec(`
 CREATE TABLE IF NOT EXISTS phase_templates (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -113,22 +125,27 @@ CREATE TABLE IF NOT EXISTS mantis_connection (
 CREATE TABLE IF NOT EXISTS materials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    part_no TEXT NOT NULL,
-    name TEXT NOT NULL,
-    spec TEXT,
-    material_type TEXT DEFAULT '开发',
-    quantity INTEGER DEFAULT 1,
-    supplier TEXT,
-    lead_time_days INTEGER,
-    planned_delivery TEXT,
-    actual_delivery TEXT,
-    actual_quantity INTEGER,
-    status TEXT DEFAULT '待下单',
-    is_second_source INTEGER DEFAULT 0,
-    parent_material_id INTEGER REFERENCES materials(id) ON DELETE SET NULL,
+    seq INTEGER NOT NULL DEFAULT 0,
+    part_number TEXT DEFAULT '',
+    manufacturer TEXT DEFAULT '',
+    model TEXT DEFAULT '',
+    material_status TEXT DEFAULT '默认',
+    quantity REAL DEFAULT 0,
+    quantity_per_set REAL DEFAULT 0,
+    set_count INTEGER DEFAULT 0,
+    purchase_date TEXT,
+    lead_time INTEGER,
+    expected_delivery TEXT,
     notes TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS material_import_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    ids_json TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS meeting_platform_config (
@@ -207,8 +224,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_due ON tasks(due_date) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_issues_project ON issues(project_id, status);
 CREATE INDEX IF NOT EXISTS idx_issues_mantis ON issues(mantis_id);
-CREATE INDEX IF NOT EXISTS idx_materials_project ON materials(project_id, status);
-CREATE INDEX IF NOT EXISTS idx_materials_delivery ON materials(planned_delivery);
+CREATE INDEX IF NOT EXISTS idx_materials_project ON materials(project_id, material_status);
+CREATE INDEX IF NOT EXISTS idx_materials_delivery ON materials(expected_delivery);
 CREATE INDEX IF NOT EXISTS idx_meetings_project ON meetings(project_id);
 CREATE INDEX IF NOT EXISTS idx_meetings_time ON meetings(start_time);
 CREATE INDEX IF NOT EXISTS idx_weekly_reports_project ON weekly_reports(project_id, week_start);

@@ -2,6 +2,23 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-16 — 物料管理模块 M4 全量开发（Excel 导入 + 内联编辑 + 批量操作 + 撤销导入）
+
+- **修改模块**
+  - `server/src/db.js`：重建 `materials` 表为新规范字段（seq / part_number / manufacturer / model / material_status / quantity / quantity_per_set / set_count / purchase_date / lead_time / expected_delivery / notes），旧骨架表自动迁移；新增 `material_import_snapshots` 撤销快照表
+  - `server/src/routes/materials.js`：按新字段重写 CRUD；`POST /batch` 批量写入 + 连续序号 + 记快照；`DELETE /batch` 批量删 + 重排；`PUT /batch-status` 批量改状态；`GET /import-snapshot` + `POST /import-undo` 撤销导入（5 分钟窗口）；增删后全局重排序号
+  - `client/src/api/client.js`：materials 接口适配新字段与 batchImport / batchRemove / batchUpdateStatus / importSnapshot / importUndo
+- **新增功能**
+  - `MaterialListPage.jsx`：固定 10 列 + checkbox + 序号；列头排序（▲/▼）；列宽拖拽 + localStorage 持久化；全字段内联编辑（文本/数字/日期，失焦回车保存、Esc 取消、Tab 导航）；状态彩色标签 + Dropdown（5 态）；实时搜索过滤；空状态提示；滚动位置保持
+  - `MaterialImportDialog.jsx`：xlsx 解析（.xls/.xlsx）、列名智能映射、前 50 行预览、错误精准定位、确认批量写入
+  - `utils/materialExcel.js`：Excel 列名映射解析 + exceljs 导出（保留状态颜色）
+  - `utils/materialStatus.js`：状态枚举与色值（默认/已入库/已下单/待决策/高风险）
+  - 批量操作栏（选中后）：批量改状态 / 批量删除（二次确认）/ 批量导出选中；撤销导入按钮（5 分钟倒计时）
+- **接口调整**
+  - 移除旧 `GET /materials/overdue`、`GET /materials/stats`、`POST /materials/batch`（旧签名）接口
+- **参数变动**
+  - 物料状态枚举由 `待下单/已下单/在途/已到货/已逾期` 变更为 `默认/已入库/已下单/待决策/高风险`
+
 ## 2026-07-16 — 甘特图节点里程碑优化（菱形小巧化 + 贯穿虚线标尺）
 
 - **修改模块**
