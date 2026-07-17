@@ -1,5 +1,6 @@
 import { Router } from "express";
 import db from "../db.js";
+import dayjs from "dayjs";
 const router = Router();
 
 const COLUMNS = [
@@ -60,7 +61,16 @@ function normalize(item = {}) {
       item.set_count !== undefined && item.set_count !== "" ? Math.round(num(item.set_count)) : 0,
     purchase_date: item.purchase_date || null,
     lead_time: item.lead_time !== undefined && item.lead_time !== "" ? Math.round(num(item.lead_time)) : null,
-    expected_delivery: item.expected_delivery || null,
+    // 自动计算预计交期：采购时间 + 采购周期
+    expected_delivery: (() => {
+      const pd = item.purchase_date;
+      const lt = item.lead_time;
+      if (pd && lt && lt > 0) {
+        const d = dayjs(pd);
+        if (d.isValid()) return d.add(Number(lt), "day").format("YYYY-MM-DD");
+      }
+      return item.expected_delivery || null;
+    })(),
     notes: item.notes != null ? String(item.notes) : "",
   };
 }

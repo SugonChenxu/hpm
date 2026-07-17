@@ -50,7 +50,7 @@ function StatusChip({ status, onClick }) {
   const st = statusStyle(status);
   return (
     <Chip
-      label={<>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3 }}>▾</Box></>}
+      label={<>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3, opacity: 0.7 }}>▾</Box></>}
       size="small"
       onClick={onClick}
       sx={{ color: st.color, bgcolor: st.bg, fontWeight: 600, cursor: "pointer", maxWidth: 90, "& .MuiChip-label": { px: 1 } }}
@@ -115,6 +115,8 @@ export default function MaterialListPage() {
   const [selected, setSelected] = useState(new Set());
   const [editing, setEditing] = useState(null); // { rowId, field }
   const [statusMenu, setStatusMenu] = useState(null); // { rowId, anchorEl }
+  const [ctxMenu, setCtxMenu] = useState(null); // { mouseX, mouseY, rowId }
+  const [batchEditDlg, setBatchEditDlg] = useState(null); // { field, label, type, ids }
   const [importOpen, setImportOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
@@ -195,8 +197,19 @@ export default function MaterialListPage() {
     const row = rows.find((r) => r.id === rowId);
     if (!row || String(row[field]) === String(value ?? "")) return;
     try {
-      await api.materials.update(rowId, { [field]: value });
-      setRows((prev) => prev.map((r) => r.id === rowId ? { ...r, [field]: value } : r));
+      const updates = { [field]: value };
+
+      // 预计交期自动计算：采购时间 + 采购周期 → 预计交期
+      if (field === "purchase_date" || field === "lead_time") {
+        const pd = field === "purchase_date" ? value : row.purchase_date;
+        const lt = field === "lead_time" ? value : row.lead_time;
+        if (pd && lt && lt > 0) {
+          updates.expected_delivery = dayjs(pd).add(lt, "day").format("YYYY-MM-DD");
+        }
+      }
+
+      await api.materials.update(rowId, updates);
+      setRows((prev) => prev.map((r) => r.id === rowId ? { ...r, ...updates } : r));
     } catch { setSnack({ severity: "error", text: "保存失败" }); load(); }
   };
 
@@ -251,6 +264,54 @@ export default function MaterialListPage() {
         catch { setSnack({ severity: "error", text: "批量删除失败" }); }
       },
     });
+  };
+
+  // ===== 右键菜单 =====
+  const handleCtxMenu = (e, rowId) => {
+    e.preventDefault();
+    if (!selected.has(rowId)) setSelected(new Set([rowId]));
+    setCtxMenu({ mouseX: e.clientX - 2, mouseY: e.clientY - 4, rowId });
+  };
+
+  const CTX_FIELDS = [
+    { key: "manufacturer", label: "厂家", type: "text" },
+    { key: "material_status", label: "物料状态", type: "status" },
+    { key: "quantity", label: "数量", type: "number" },
+    { key: "purchase_date", label: "采购时间", type: "date" },
+    { key: "lead_time", label: "采购周期", type: "number" },
+    { key: "expected_delivery", label: "预计交期", type: "date" },
+    { key: "notes", label: "备注", type: "text" },
+  ];
+
+  const handleCtxAction = (field, label, type) => {
+    setCtxMenu(null);
+    const ids = selected.size > 0 ? [...selected] : [ctxMenu.rowId];
+    setBatchEditDlg({ field, label, type, ids, value: "" });
+  };
+
+  const submitBatchEdit = async (statusOverride) => {
+    const { field, ids } = batchEditDlg;
+    const value = statusOverride ?? batchEditDlg.value;
+    if (!value && value !== 0) return;
+    try {
+      for (const id of ids) {
+        const row = rows.find((r) => r.id === id);
+        if (!row) continue;
+        const val = (field === "quantity" || field === "lead_time") ? Number(value) : value;
+        const updates = { [field]: val };
+        if (field === "purchase_date" || field === "lead_time") {
+          const pd = field === "purchase_date" ? value : row.purchase_date;
+          const lt = field === "lead_time" ? Number(value) : row.lead_time;
+          if (pd && lt && lt > 0) {
+            updates.expected_delivery = dayjs(pd).add(lt, "day").format("YYYY-MM-DD");
+          }
+        }
+        await api.materials.update(id, updates);
+      }
+      setBatchEditDlg(null);
+      setSnack({ severity: "success", text: `已更新 ${ids.length} 项物料的「${batchEditDlg.label}」` });
+      load();
+    } catch { setSnack({ severity: "error", text: "批量编辑失败" }); }
   };
 
   // ===== 导入/导出/撤销 =====
@@ -389,6 +450,7 @@ export default function MaterialListPage() {
                       sx={{
                         width, fontWeight: 700, bgcolor: "grey.50", cursor: "pointer",
                         userSelect: "none", position: "relative", overflow: "visible",
+                        fontSize: "0.8rem", whiteSpace: "nowrap", px: 1,
                       }}
                       onClick={() => col.key !== "material_status" && handleSort(col.key)}
                     >
@@ -417,7 +479,8 @@ export default function MaterialListPage() {
                 </TableRow>
               ) : (
                 filtered.map((row, idx) => (
-                  <TableRow key={row.id} hover sx={{ bgcolor: selected.has(row.id) ? "action.selected" : "inherit" }}>
+                  <TableRow key={row.id} hover sx={{ bgcolor: selected.has(row.id) ? "action.selected" : "inherit" }}
+                    onContextMenu={(e) => handleCtxMenu(e, row.id)}>
                     <TableCell sx={{ p: 0.5 }}>
                       <Checkbox size="small" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
                     </TableCell>
@@ -490,9 +553,9 @@ export default function MaterialListPage() {
             const st = statusStyle(s);
             return (
               <MenuItem key={s} onClick={() => handleStatusChange(statusMenu.rowId, s)}
-                sx={{ gap: 1 }}>
-                <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: st.bg, border: `1px solid ${st.color}` }} />
-                <Typography variant="body2" sx={{ color: st.color, fontWeight: 600 }}>{s}</Typography>
+                sx={{ gap: 1, color: "#222" }}>
+                <Box sx={{ width: 14, height: 14, borderRadius: 3, bgcolor: st.bg, border: "1px solid rgba(0,0,0,0.15)" }} />
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>{s}</Typography>
               </MenuItem>
             );
           })}
@@ -517,6 +580,75 @@ export default function MaterialListPage() {
               <Button onClick={() => setConfirmDlg(null)}>取消</Button>
               <Button onClick={confirmDlg.onOk} color="error" variant="contained">确认</Button>
             </DialogActions>
+          </Dialog>
+        )}
+
+        {/* ---- 右键菜单 ---- */}
+        <Menu
+          open={ctxMenu !== null}
+          onClose={() => setCtxMenu(null)}
+          anchorReference="anchorPosition"
+          anchorPosition={ctxMenu ? { top: ctxMenu.mouseY, left: ctxMenu.mouseX } : undefined}
+        >
+          <MenuItem disabled sx={{ opacity: "0.7 !important" }}>
+            <Typography variant="caption">
+              {selected.size > 1 ? `修改 ${selected.size} 项选中物料` : "修改此项物料"}
+            </Typography>
+          </MenuItem>
+          {CTX_FIELDS.map((f) => (
+            <MenuItem key={f.key} onClick={() => handleCtxAction(f.key, f.label, f.type)}
+              sx={{ color: "#222" }}>
+              {f.label}
+            </MenuItem>
+          ))}
+        </Menu>
+
+        {/* ---- 批量编辑对话框 ---- */}
+        {batchEditDlg && (
+          <Dialog open onClose={() => setBatchEditDlg(null)} maxWidth="xs" fullWidth>
+            <DialogTitle>
+              修改{batchEditDlg.ids.length}项物料的「{batchEditDlg.label}」
+            </DialogTitle>
+            <DialogContent sx={{ pt: 2 }}>
+              {batchEditDlg.field === "material_status" ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                  {MATERIAL_STATUSES.map((s) => {
+                    const st = statusStyle(s);
+                    return (
+                      <Button key={s} variant="outlined"
+                        onClick={() => submitBatchEdit(s)}
+                        sx={{ color: st.color, borderColor: st.bg, justifyContent: "flex-start", gap: 1 }}>
+                        <Box sx={{ width: 16, height: 16, bgcolor: st.bg, borderRadius: 1, flexShrink: 0 }} />
+                        {s}
+                      </Button>
+                    );
+                  })}
+                </Box>
+              ) : (
+                <>
+                  {batchEditDlg.type === "date" ? (
+                    <DatePicker
+                      value={batchEditDlg.value ? dayjs(batchEditDlg.value) : null}
+                      onChange={(d) => setBatchEditDlg((p) => ({ ...p, value: d ? d.format("YYYY-MM-DD") : "" }))}
+                      format="YYYY-MM-DD" slotProps={{ textField: { fullWidth: true, size: "small" } }}
+                    />
+                  ) : (
+                    <TextField
+                      autoFocus fullWidth size="small"
+                      type={batchEditDlg.type === "number" ? "number" : "text"}
+                      label={`新${batchEditDlg.label}`}
+                      value={batchEditDlg.value}
+                      onChange={(e) => setBatchEditDlg((p) => ({ ...p, value: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") submitBatchEdit(); }}
+                    />
+                  )}
+                  <DialogActions sx={{ mt: 2, px: 0 }}>
+                    <Button onClick={() => setBatchEditDlg(null)}>取消</Button>
+                    <Button onClick={submitBatchEdit} variant="contained">确认修改</Button>
+                  </DialogActions>
+                </>
+              )}
+            </DialogContent>
           </Dialog>
         )}
 

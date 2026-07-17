@@ -183,3 +183,7 @@ npx pm2 save
 
 ## 上次任务
 2026-07-10: PM2 开机自启固化（注册表 HKCU\Run + pm2-resurrect.bat → pm2 resurrect），彻底解决重启后服务丢失问题。
+
+## Vite 8 兼容禁止项（2026-07-17）
+1. **禁止使用 @mui/icons-material**：Vite 8/rolldown 对 CJS exports.default 解析异常，运行时变成 object → React #130。已全量替换为 Unicode。
+2. **@mui/x-date-pickers 子路径**需 client/vite.config.js alias 守护。

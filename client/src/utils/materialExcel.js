@@ -9,7 +9,7 @@ const FIELD_ALIASES = [
   ["manufacturer", ["厂家", "供应商", "品牌", "manufacturer"]],
   ["model", ["物料型号", "型号", "规格", "model"]],
   ["part_number", ["物料号", "料号", "编号", "partnumber", "part_no", "partno"]],
-  ["quantity", ["数量", "quantity", "qty"]],
+  ["quantity", ["数量", "总数量", "quantity", "qty"]],
   ["quantity_per_set", ["单套用量", "单套数量", "quantityperset"]],
   ["set_count", ["套数", "总套数", "setcount"]],
   ["purchase_date", ["采购时间", "采购日期", "purchasedate", "purchase_date"]],
