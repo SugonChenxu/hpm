@@ -147,12 +147,23 @@
         let orderNo = "";
         const allEls = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
         for (const el of allEls) {
-          const txt = (el.textContent || "").trim();
-          if (txt === "内部立项号" || txt === "订单号" || txt === "立项号") {
-            const parent = el.closest("tr, div, dl, li");
-            const ptx = (parent || el.parentElement)?.textContent || "";
-            const om = ptx.match(/[A-Za-z0-9_-]{4,}/);
-            if (om) { orderNo = om[0]; break; }
+          const norm = (el.textContent || "").trim().replace(/\s+/g, "");
+          if (norm === "内部立项号" || norm === "订单号" || norm === "立项号") {
+            const next = el.nextElementSibling;
+            if (next && (next.textContent || "").trim()) {
+              orderNo = (next.textContent || "").trim();
+              break;
+            }
+            const parent = el.parentElement;
+            if (parent) {
+              const sibs = Array.from(parent.children);
+              const idx = sibs.indexOf(el);
+              for (let i = idx + 1; i < sibs.length; i++) {
+                const v = (sibs[i].textContent || "").trim();
+                if (v && v.length > 0 && v.length < 50) { orderNo = v; break; }
+              }
+            }
+            if (orderNo) break;
           }
         }
         if (orderNo) {
