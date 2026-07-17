@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
-  Box, Typography, Button, IconButton, Dialog,
+  Box, Typography, Button, IconButton, Dialog, Menu,
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
   Tooltip, Snackbar, Alert, Popper, ClickAwayListener, Paper, Checkbox,
 } from "@mui/material";
@@ -296,6 +296,23 @@ export default function WeekMeetingPage() {
     }
   }, []);
 
+  const handleSetCycle = useCallback(async (itemId, cycle) => {
+    // 乐观更新
+    setOutputs((prev) => {
+      const next = { ...prev };
+      for (const d of Object.keys(next)) {
+        next[d] = next[d].map((o) => (o.id === itemId ? { ...o, cycle } : o));
+      }
+      return next;
+    });
+    try {
+      await api.weekMeetings.meetingOutputs.update(itemId, { cycle });
+    } catch {
+      loadMeetingData(weekKey);
+      setSnackbar({ open: true, message: "设置周期失败", severity: "error" });
+    }
+  }, [weekKey]);
+
   const changeWeek = (delta) => {
     const [y, m, d] = weekKey.split("-").map(Number);
     const date = new Date(y, m - 1, d + delta * 7);
@@ -391,6 +408,7 @@ export default function WeekMeetingPage() {
             onAdd={(title) => handleAddOutput(d, title)}
             onToggle={handleToggleOutput}
             onDelete={handleDeleteOutput}
+            onSetCycle={handleSetCycle}
           />
           </Box>
         ))}
@@ -489,10 +507,20 @@ export default function WeekMeetingPage() {
 // MeetingOutputList — 某星期格内的逐条输出物列表（对齐 SubtaskItem 风格）
 // ============================================================
 
-function MeetingOutputList({ items, onAdd, onToggle, onDelete }) {
+const CYCLE_OPTIONS = [
+  { value: "", label: "" },
+  { value: "weekly", label: "每周" },
+  { value: "biweekly", label: "隔周" },
+  { value: "monthly", label: "每月" },
+];
+
+const CYCLE_COLORS = { weekly: "#237804", biweekly: "#ad6800", monthly: "#1976d2" };
+
+function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const addRef = useRef(null);
+  const [cycleMenu, setCycleMenu] = useState({ anchor: null, itemId: null });
   useEffect(() => { if (adding && addRef.current) addRef.current.focus(); }, [adding]);
 
   const submit = () => {
@@ -506,7 +534,7 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, py: 0.25 }}>
       {(items || []).map((it) => (
-        <Box key={it.id} sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1, "&:hover": { bgcolor: "action.hover" }, "&:hover .del-btn": { opacity: 1 } }}>
+        <Box key={it.id} sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1, "&:hover": { bgcolor: "action.hover" }, "&:hover .act-btn": { opacity: 1 } }}>
           <Checkbox
             size="small"
             checked={!!it.is_done}
@@ -516,7 +544,39 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete }) {
           <Typography sx={{ flex: 1, fontSize: "0.72rem", lineHeight: 1.3, textDecoration: it.is_done ? "line-through" : "none", color: it.is_done ? "text.disabled" : "text.primary", wordBreak: "break-all" }}>
             {it.title}
           </Typography>
-          <IconButton className="del-btn" size="small" onClick={() => onDelete(it)} sx={{ opacity: 0, transition: "opacity 0.15s", p: 0.1, flexShrink: 0 }}>
+          {/* 周期标签 */}
+          {it.cycle && (
+            <Box
+              className="act-btn"
+              onClick={(e) => setCycleMenu({ anchor: e.currentTarget, itemId: it.id })}
+              sx={{
+                fontSize: "0.58rem", px: 0.6, py: 0.1, borderRadius: 1,
+                bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "18",
+                color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
+                fontWeight: 600, cursor: "pointer", lineHeight: 1.8,
+                opacity: 1, transition: "opacity 0.15s", flexShrink: 0,
+                whiteSpace: "nowrap",
+              }}>
+              {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
+            </Box>
+          )}
+          {/* 周期设置按钮 */}
+          <IconButton
+            className="act-btn"
+            size="small"
+            onClick={(e) => setCycleMenu({ anchor: e.currentTarget, itemId: it.id })}
+            sx={{ opacity: it.cycle ? 0 : 1, transition: "opacity 0.15s", p: 0.1, flexShrink: 0 }}
+            title="设置周期"
+          >
+            <Box component="span" sx={{ fontSize: 12, lineHeight: 1 }}>⟳</Box>
+          </IconButton>
+          {/* 删除按钮 */}
+          <IconButton
+            className="act-btn"
+            size="small"
+            onClick={() => onDelete(it)}
+            sx={{ opacity: 0, transition: "opacity 0.15s", p: 0.1, flexShrink: 0 }}
+          >
             <DeleteOutline sx={{ fontSize: 13 }} />
           </IconButton>
         </Box>
@@ -544,6 +604,29 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete }) {
           <Add sx={{ fontSize: 14 }} /> 添加
         </Box>
       )}
+      {/* 周期选择菜单 */}
+      <Menu
+        anchorEl={cycleMenu.anchor}
+        open={!!cycleMenu.anchor}
+        onClose={() => setCycleMenu({ anchor: null, itemId: null })}
+      >
+        {CYCLE_OPTIONS.map((opt) => (
+          <MenuItem
+            key={opt.value || "_none"}
+            selected={opt.value === (items.find(i => i.id === cycleMenu.itemId) || {}).cycle}
+            onClick={() => {
+              onSetCycle(cycleMenu.itemId, opt.value);
+              setCycleMenu({ anchor: null, itemId: null });
+            }}
+            sx={{ fontSize: "0.78rem", gap: 1 }}
+          >
+            {opt.label || "无周期"}
+            {opt.value && (
+              <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: CYCLE_COLORS[opt.value] }} />
+            )}
+          </MenuItem>
+        ))}
+      </Menu>
     </Box>
   );
 }

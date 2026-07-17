@@ -114,16 +114,17 @@ router.post("/week-meetings/outputs", (req, res) => {
   res.json({ ok: true, data: item });
 });
 
-// PUT /week-meetings/outputs/:id — 切换完成态 / 改标题
+// PUT /week-meetings/outputs/:id — 切换完成态 / 改标题 / 设周期
 router.put("/week-meetings/outputs/:id", (req, res) => {
-  const { title, is_done } = req.body;
+  const { title, is_done, cycle } = req.body;
   const existing = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ ok: false, error: "输出物不存在" });
   const newTitle = title !== undefined ? title : existing.title;
   const newDone = is_done !== undefined ? (is_done ? 1 : 0) : existing.is_done;
+  const newCycle = cycle !== undefined ? cycle : existing.cycle;
   db.prepare(
-    "UPDATE meeting_outputs SET title = ?, is_done = ?, updated_at = datetime('now','localtime') WHERE id = ?"
-  ).run(newTitle, newDone, req.params.id);
+    "UPDATE meeting_outputs SET title = ?, is_done = ?, cycle = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+  ).run(newTitle, newDone, newCycle, req.params.id);
   const item = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(req.params.id);
   res.json({ ok: true, data: item });
 });

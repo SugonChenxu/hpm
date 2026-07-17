@@ -604,6 +604,17 @@ try {
   console.warn("Migration meeting_outputs:", e.message);
 }
 
+// 迁移：meeting_outputs 添加 cycle 字段（每周/隔周/每月）
+try {
+  const cols = db.prepare("PRAGMA table_info(meeting_outputs)").all();
+  if (!cols.find((c) => c.name === "cycle")) {
+    db.exec("ALTER TABLE meeting_outputs ADD COLUMN cycle TEXT DEFAULT ''");
+    console.log("Migration meeting_outputs.cycle: done");
+  }
+} catch (e) {
+  console.warn("Migration meeting_outputs.cycle:", e.message);
+}
+
 // =====================================================
 // P0 增量：PLM 连接与只读探针（曙光 PLM / 经典 ENOVIA v6）
 // 本次只建表 + 连接配置，不实现实际排程同步（P1 负责）
