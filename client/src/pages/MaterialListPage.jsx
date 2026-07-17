@@ -123,9 +123,15 @@ export default function MaterialListPage() {
   });
   const [oaImportOpen, setOaImportOpen] = useState(false);
   const [oaJson, setOaJson] = useState("");
+  const [oaUrl, setOaUrl] = useState("");
+  const [oaCookies, setOaCookies] = useState(() => {
+    try { return localStorage.getItem("forge.oa.cookies") || ""; }
+    catch { return ""; }
+  });
   const [oaPreview, setOaPreview] = useState(null);
   const [oaError, setOaError] = useState(null);
-  const [oaSubmitting, setOaSubmitting] = useState(false); // { field, label, type, ids }
+  const [oaSubmitting, setOaSubmitting] = useState(false);
+  const [oaFetching, setOaFetching] = useState(false); // { field, label, type, ids }
   const [importOpen, setImportOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
@@ -375,6 +381,25 @@ export default function MaterialListPage() {
     exportMaterialsExcel(exportRows);
   };
   const handleOaImportOpen = () => { setOaImportOpen(true); setOaJson(""); setOaPreview(null); setOaError(null); };
+  const handleOaFetch = async () => {
+    setOaError(null); setOaPreview(null); setOaFetching(true);
+    if (oaCookies) localStorage.setItem("forge.oa.cookies", oaCookies);
+    try {
+      const res = await fetch("/api/materials/oa-fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: oaUrl, cookies: oaCookies || undefined }),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error);
+      setOaPreview(json.data.items);
+      if (json.data.formDate) setOaError(null); // 成功，清空错误
+    } catch (e) {
+      setOaError("抓取失败：" + e.message);
+    }
+    setOaFetching(false);
+  };
+
   const handleOaParse = () => {
     setOaError(null);
     try {
@@ -789,17 +814,37 @@ export default function MaterialListPage() {
         <Dialog open={oaImportOpen} onClose={() => setOaImportOpen(false)} maxWidth="md" fullWidth>
           <DialogTitle>OA 采购申请导入</DialogTitle>
           <DialogContent>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              在 OA 采购申请页面运行提取脚本后，将剪贴板的 JSON 粘贴到下方，点击「解析预览」确认数据。
-            </Typography>
-            <TextField multiline minRows={6} maxRows={14} fullWidth
+            {/* ---- URL 抓取模式 ---- */}
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>方式一：直接输入 OA 链接抓取</Typography>
+            <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
+              <TextField size="small" fullWidth placeholder="OA 采购申请页 URL..."
+                value={oaUrl} onChange={(e) => setOaUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleOaFetch(); }}
+              />
+              <Button variant="contained" onClick={handleOaFetch} disabled={!oaUrl.trim() || oaFetching}
+                sx={{ whiteSpace: "nowrap", minWidth: 100 }}>
+                {oaFetching ? "抓取中…" : "抓取"}
+              </Button>
+            </Box>
+            <TextField size="small" fullWidth label="Cookie（用于登录态，选填）"
+              value={oaCookies} onChange={(e) => setOaCookies(e.target.value)}
+              sx={{ mb: 1.5, "& .MuiInputBase-input": { fontSize: "0.78rem", fontFamily: "monospace" } }}
+            />
+
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+              <Box sx={{ flex: 1, borderTop: "1px solid", borderColor: "divider" }} />
+              <Typography variant="caption" color="text.secondary">或</Typography>
+              <Box sx={{ flex: 1, borderTop: "1px solid", borderColor: "divider" }} />
+            </Box>
+
+            {/* ---- JSON 粘贴模式 ---- */}
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>方式二：粘贴 JSON（来自 Console 提取脚本）</Typography>
+            <TextField multiline minRows={4} maxRows={10} fullWidth
               placeholder='粘贴 JSON 数据...'
               value={oaJson} onChange={(e) => setOaJson(e.target.value)}
-              sx={{ mb: 2, "& .MuiInputBase-input": { fontSize: "0.82rem", fontFamily: "monospace" } }}
+              sx={{ mb: 1.5, "& .MuiInputBase-input": { fontSize: "0.82rem", fontFamily: "monospace" } }}
             />
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button variant="outlined" onClick={handleOaParse} disabled={!oaJson.trim()}>解析预览</Button>
-            </Box>
+            <Button variant="outlined" onClick={handleOaParse} disabled={!oaJson.trim()} size="small">解析预览</Button>
             {oaError && <Alert severity="error" sx={{ mt: 1 }}>{oaError}</Alert>}
             {oaPreview && (
               <Box sx={{ mt: 2 }}>
