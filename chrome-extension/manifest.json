@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Forge OA 物料导入",
+  "version": "1.0",
+  "description": "一键从 OA 采购申请页面提取物料导入 Forge",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["*://soa.com.cn/*"],
+  "action": {
+    "default_title": "提取物料到 Forge",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
