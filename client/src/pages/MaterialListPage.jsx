@@ -333,9 +333,14 @@ export default function MaterialListPage() {
     });
   };
 
-  const submitBatchEdit = async (statusOverride) => {
+  const submitBatchEdit = async (statusOrValue) => {
+    if (!batchEditDlg) return;
     const { field, ids } = batchEditDlg;
-    const value = statusOverride ?? batchEditDlg.value;
+    // statusOverride 为字符串时是状态值，否则读 batchEditDlg.value（onClick 场景）
+    // 传 explicit 解决 Enter 提交时 onChange 尚未更新 state 的滞后问题
+    const value = typeof statusOrValue === "string" && batchEditDlg.field === "material_status"
+      ? statusOrValue
+      : (statusOrValue !== undefined ? statusOrValue : batchEditDlg.value);
     if (!value && value !== 0) return;
     try {
       for (const id of ids) {
@@ -485,7 +490,9 @@ export default function MaterialListPage() {
                 </TableCell>
                 <TableCell sx={{ width: 60, fontWeight: 700, bgcolor: "grey.50", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", fontSize: "0.8rem", px: 1 }}
                   onClick={() => handleSort("seq")}>
-                  序号<SortArrow dir={sortKey === "seq" ? sortDir : null} />
+                  <Box sx={{ display: "flex", alignItems: "center" }}>
+                    序号<SortArrow dir={sortKey === "seq" ? sortDir : null} />
+                  </Box>
                 </TableCell>
                 {COLUMNS.map((col) => {
                   const width = colWidths.find((c) => c.key === col.key)?.width || col.width;
@@ -694,7 +701,13 @@ export default function MaterialListPage() {
                     <DatePicker
                       value={batchEditDlg.value ? dayjs(batchEditDlg.value) : null}
                       onChange={(d) => setBatchEditDlg((p) => ({ ...p, value: d ? d.format("YYYY-MM-DD") : "" }))}
-                      format="YYYY-MM-DD" slotProps={{ textField: { fullWidth: true, size: "small" } }}
+                      format="YYYY-MM-DD"
+                      slotProps={{
+                        textField: {
+                          fullWidth: true, size: "small",
+                          onKeyDown: (e) => { if (e.key === "Enter") submitBatchEdit(e.target.value); },
+                        },
+                      }}
                     />
                   ) : (
                     <TextField
@@ -703,7 +716,7 @@ export default function MaterialListPage() {
                       label={`新${batchEditDlg.label}`}
                       value={batchEditDlg.value}
                       onChange={(e) => setBatchEditDlg((p) => ({ ...p, value: e.target.value }))}
-                      onKeyDown={(e) => { if (e.key === "Enter") submitBatchEdit(); }}
+                      onKeyDown={(e) => { if (e.key === "Enter") submitBatchEdit(e.target.value); }}
                     />
                   )}
                   <DialogActions sx={{ mt: 2, px: 0 }}>
