@@ -112,44 +112,18 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：先诊断页面文本是否含这些词
-    let orderNo = "";
-    const allText = document.body.innerText;
-    console.log("===== 诊断：搜索关键词 =====");
-    ["内部立项号","立项号","订单号","内部订单号","项目号","立项","订单"].forEach(kw => {
-      const idx = allText.indexOf(kw);
-      if (idx >= 0) {
-        console.log(`✅ "${kw}" 在位置${idx}，上下文: ${allText.slice(Math.max(0,idx-10), idx+60)}`);
-      } else {
-        console.log(`❌ "${kw}" 未找到`);
-      }
-    });
-    // 尝试从"内部立项号"后取数字
-    const labelIdx = allText.indexOf("内部立项号");
-    if (labelIdx >= 0) {
-      const after = allText.slice(labelIdx + 5);
-      const m = after.match(/[：:\s]*(\d{4,8})/);
-      if (m) orderNo = m[1];
-      if (!orderNo) {
-        const m2 = after.match(/[：:\s]*([A-Za-z0-9_-]{4,20})/);
-        if (m2) orderNo = m2[1];
-      }
+    // 提取内部立项号：标签和值在不同行→按行列定位
+    const lines = allText.split(/\n/);
+    let labelLineIdx = -1, labelCol = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const cols = lines[i].split(/\t| {2,}/).filter(Boolean);
+      const ci = cols.findIndex(c => c === "内部立项号");
+      if (ci >= 0) { labelLineIdx = i; labelCol = ci; break; }
     }
-    // 检查 iframe
-    if (!orderNo) {
-      const iframes = document.querySelectorAll("iframe");
-      iframes.forEach(fr => {
-        try {
-          const ftext = fr.contentDocument?.body?.innerText || "";
-          const idx2 = ftext.indexOf("内部立项号");
-          if (idx2 >= 0) {
-            const after = ftext.slice(idx2 + 5);
-            const m = after.match(/[：:\s]*(\d{4,8})/);
-            if (m && !orderNo) orderNo = m[1];
-            console.log("在 iframe 中找到", m ? m[1] : "无数字");
-          }
-        } catch(e) {}
-      });
+    if (labelLineIdx >= 0 && labelLineIdx + 1 < lines.length) {
+      const nextCols = lines[labelLineIdx + 1].split(/\t| {2,}/).filter(Boolean);
+      if (nextCols[labelCol]) orderNo = nextCols[labelCol];
+      console.log("标签行:", labelLineIdx, "列:", labelCol, "→ 取值:", orderNo);
     }
     console.log("内部立项号:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
