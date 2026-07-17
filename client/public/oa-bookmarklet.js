@@ -140,12 +140,39 @@
     document.getElementById("forge-oa-send").onclick = async function () {
       const btn = this, st = document.getElementById("forge-oa-status");
       btn.disabled = true; btn.textContent = "发送中…"; st.textContent = "";
+
+      // 提取内部立项号，匹配项目
+      let projectId = 20; // 默认: 液冷超节点
+      try {
+        let orderNo = "";
+        const allEls = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
+        for (const el of allEls) {
+          const txt = (el.textContent || "").trim();
+          if (txt === "内部立项号" || txt === "订单号" || txt === "立项号") {
+            const parent = el.closest("tr, div, dl, li");
+            const ptx = (parent || el.parentElement)?.textContent || "";
+            const om = ptx.match(/[A-Za-z0-9_-]{4,}/);
+            if (om) { orderNo = om[0]; break; }
+          }
+        }
+        if (orderNo) {
+          const resp = await fetch("http://localhost:3000/api/projects");
+          const j = await resp.json();
+          const matched = (j.data || []).find(p => p.order_number && p.order_number.trim() === orderNo);
+          if (matched) projectId = matched.id;
+          else {
+            const pm = (j.data || []).find(p => p.name && p.name.includes("项目管理部"));
+            if (pm) projectId = pm.id;
+          }
+        }
+      } catch {}
+
       try {
         const resp = await fetch("http://localhost:3000/api/materials/oa-import", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project_id: 20,
+            project_id: projectId,
             items: bestResult.items.map(it => ({
               part_number: it.part_number || "",
               manufacturer: it.manufacturer || "",
@@ -153,6 +180,7 @@
               quantity: it.quantity || 0,
               purchase_date: it.purchase_date || formDate,
               notes: it.notes || "",
+              material_status: "已下单",
             })),
           }),
         });

@@ -121,17 +121,6 @@ export default function MaterialListPage() {
     try { return JSON.parse(localStorage.getItem("forge.material.rowcolors") || "{}"); }
     catch { return {}; }
   });
-  const [oaImportOpen, setOaImportOpen] = useState(false);
-  const [oaJson, setOaJson] = useState("");
-  const [oaUrl, setOaUrl] = useState("");
-  const [oaCookies, setOaCookies] = useState(() => {
-    try { return localStorage.getItem("forge.oa.cookies") || ""; }
-    catch { return ""; }
-  });
-  const [oaPreview, setOaPreview] = useState(null);
-  const [oaError, setOaError] = useState(null);
-  const [oaSubmitting, setOaSubmitting] = useState(false);
-  const [oaFetching, setOaFetching] = useState(false); // { field, label, type, ids }
   const [importOpen, setImportOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
@@ -524,7 +513,6 @@ export default function MaterialListPage() {
             <input type="file" hidden accept=".xlsx,.xls" onChange={(e) => { if (e.target.files?.[0]) setImportOpen(e.target.files[0]); e.target.value = ""; }} />
           </Button>
           <Button variant="outlined" onClick={handleAdd} sx={{ gap: 0.5 }}>＋ 添加一行</Button>
-          <Button variant="outlined" onClick={handleOaImportOpen} sx={{ gap: 0.5 }}>📋 OA 导入</Button>
           <Button variant="outlined" onClick={handleExport} sx={{ gap: 0.5 }}>
             ↓ 导出{selected.size > 0 ? `(${selected.size})` : ""}
           </Button>
@@ -809,84 +797,6 @@ export default function MaterialListPage() {
             </DialogContent>
           </Dialog>
         )}
-
-        {/* ---- OA 导入弹窗 ---- */}
-        <Dialog open={oaImportOpen} onClose={() => setOaImportOpen(false)} maxWidth="md" fullWidth>
-          <DialogTitle>OA 采购申请导入</DialogTitle>
-          <DialogContent>
-            {/* ---- Cookie 抓取模式（主） ---- */}
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-              粘贴 OA 采购申请链接，填入 Cookie 后抓取
-            </Typography>
-            <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
-              <TextField size="small" fullWidth placeholder="OA 采购申请页 URL..."
-                value={oaUrl} onChange={(e) => setOaUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleOaFetch(); }}
-              />
-              <Button variant="contained" onClick={handleOaFetch} disabled={!oaUrl.trim() || oaFetching}
-                sx={{ whiteSpace: "nowrap", minWidth: 100 }}>
-                {oaFetching ? "抓取中…" : "抓取"}
-              </Button>
-            </Box>
-            <TextField size="small" fullWidth
-              label="Cookie（获取方式见下方说明）"
-              value={oaCookies} onChange={(e) => setOaCookies(e.target.value)}
-              sx={{ mb: 0.5, "& .MuiInputBase-input": { fontSize: "0.78rem", fontFamily: "monospace" } }}
-              helperText="仅需设置一次，自动保存。过期后重新获取替换。"
-            />
-            <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 2 }}>
-              💡 <b>获取 Cookie</b>：OA页面 → F12 → <b>Network</b>标签 → 刷新 → 点任意请求 → 右侧<b>Cookie</b>标签 → 表格全选复制 → 粘贴到此处。
-            </Typography>
-
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-              <Box sx={{ flex: 1, borderTop: "1px solid", borderColor: "divider" }} />
-              <Typography variant="caption" color="text.secondary">或</Typography>
-              <Box sx={{ flex: 1, borderTop: "1px solid", borderColor: "divider" }} />
-            </Box>
-
-            {/* ---- JSON 粘贴模式（辅） ---- */}
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>粘贴 JSON（来自书签脚本 / Console 提取）</Typography>
-            <TextField multiline minRows={4} maxRows={10} fullWidth
-              placeholder='粘贴 JSON 数据...'
-              value={oaJson} onChange={(e) => setOaJson(e.target.value)}
-              sx={{ mb: 1.5, "& .MuiInputBase-input": { fontSize: "0.82rem", fontFamily: "monospace" } }}
-            />
-            <Button variant="outlined" onClick={handleOaParse} disabled={!oaJson.trim()} size="small">解析预览</Button>
-            {oaError && <Alert severity="error" sx={{ mt: 1 }}>{oaError}</Alert>}
-            {oaPreview && (
-              <Box sx={{ mt: 2 }}>
-                <Alert severity="info" sx={{ mb: 1 }}>已识别 {oaPreview.length} 条物料，确认无误后点击导入。</Alert>
-                <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
-                  <Table size="small" stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        {["物料号","厂家","型号","数量","申请日期","备注"].map(h => <TableCell key={h} sx={{ fontWeight: 700, fontSize: "0.78rem" }}>{h}</TableCell>)}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {oaPreview.slice(0, 50).map((item, i) => (
-                        <TableRow key={i}>
-                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.part_number || "-"}</TableCell>
-                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.manufacturer || "-"}</TableCell>
-                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.model || "-"}</TableCell>
-                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.quantity || 0}</TableCell>
-                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.purchase_date || "-"}</TableCell>
-                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.notes || "-"}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </Box>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOaImportOpen(false)}>取消</Button>
-            <Button onClick={handleOaConfirm} variant="contained" disabled={!oaPreview || oaPreview.length === 0 || oaSubmitting}>
-              {oaSubmitting ? "导入中…" : `确认导入 ${oaPreview ? oaPreview.length : 0} 条`}
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         {/* ---- Snackbar ---- */}
         {snack && (

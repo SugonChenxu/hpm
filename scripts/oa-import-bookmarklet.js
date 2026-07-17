@@ -99,6 +99,7 @@
           item.notes = (item.notes ? item.notes + " | " : "") + "单价:" + item._price + ",金额:" + (item._amount || item._price * item.quantity);
         }
         delete item._price; delete item._amount;
+        item.material_status = "已下单";
         item.purchase_date = formDate;
         items.push(item);
       }
@@ -111,7 +112,19 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请" }, null, 2);
+    // 提取内部立项号
+    let orderNo = "";
+    const allEls2 = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
+    for (const el of allEls2) {
+      const txt = (el.textContent || "").trim();
+      if (txt === "内部立项号" || txt === "订单号" || txt === "立项号") {
+        const parent = el.closest("tr, div, dl, li");
+        const ptx = (parent || el.parentElement)?.textContent || "";
+        const om = ptx.match(/[A-Za-z0-9_-]{4,}/);
+        if (om) { orderNo = om[0]; break; }
+      }
+    }
+    const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
     console.log("===== 最终结果 =====");
     console.log("选中表格:", bestResult.tableIndex, "| 列:", bestResult.matched.join(", "));
     console.log("申请日期:", formDate || "未找到");

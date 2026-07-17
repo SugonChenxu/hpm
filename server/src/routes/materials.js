@@ -409,7 +409,7 @@ router.post("/materials/oa-import", (req, res) => {
   let seq = nextSeq(Number(project_id));
   const insert = db.prepare(
     `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes)
-     VALUES (?, ?, ?, ?, ?, '默认', ?, ?, 0, null, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -417,6 +417,7 @@ router.post("/materials/oa-import", (req, res) => {
       const r = insert.run(
         Number(project_id), seq++,
         it.part_number || "", it.manufacturer || "", it.model || "",
+        it.material_status || "已下单",
         parseFloat(it.quantity) || 0,
         it.purchase_date || null,
         it.notes || ""
