@@ -19,10 +19,22 @@
     return null;
   }
 
-  // ===== 申请日期 =====
+  // ===== 申请日期（多模式兜底） =====
   let formDate = null;
-  const dm = document.body.innerText.match(/申请日期[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
-  if (dm) formDate = dm[1].replace(/[./]/g, "-");
+  const text = document.body.innerText;
+  const patterns = [
+    /申请日期[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/,
+    /申请日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/,
+    /日期[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/,
+    /创建时间[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) {
+      formDate = m[1].replace(/[年月]/g, "-").replace(/日/g, "").replace(/[./]/g, "-");
+      break;
+    }
+  }
 
   // ===== 遍历表格 =====
   const tables = document.querySelectorAll("table");
