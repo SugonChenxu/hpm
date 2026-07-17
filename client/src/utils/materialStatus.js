@@ -4,7 +4,7 @@ export const MATERIAL_STATUSES = ["默认", "已入库", "已下单", "待决策
 
 export const STATUS_STYLE = {
   默认:   { color: "#8c8c8c", bg: "#f5f5f5", border: "#d9d9d9" },
-  已入库: { color: "#135200", bg: "#d9f7be", border: "#95de64" },
+  已入库: { color: "#003a70", bg: "#d6e4ff", border: "#91caff" },
   已下单: { color: "#237804", bg: "#d9f7be", border: "#95de64" },
   待决策: { color: "#ad6800", bg: "#fff7e6", border: "#ffd591" },
   高风险: { color: "#a8071a", bg: "#fff1f0", border: "#ffa39e" },
