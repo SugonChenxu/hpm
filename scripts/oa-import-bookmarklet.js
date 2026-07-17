@@ -112,37 +112,34 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：找元素的父级行→取下一个非空非标签单元格
-    const allText = document.body.innerText;
+    // 提取内部立项号：宽搜→打印找到的标签+父级
     let orderNo = "";
-    console.log("===== 内部立项号提取(行遍历) =====");
-    const allCells = document.querySelectorAll("td, th");
+    console.log("===== 内部立项号提取 =====");
+    const allCells = document.querySelectorAll("*");
     for (const cell of allCells) {
       const txt = (cell.textContent || "").trim().replace(/\s+/g, "");
-      if (txt === "内部立项号" || txt === "订单号") {
-        const row = cell.closest("tr");
-        if (!row) continue;
-        const sibs = Array.from(row.querySelectorAll("td, th"));
-        const idx = sibs.indexOf(cell);
-        console.log("找到标签 cell[", idx, "], 行(" + sibs.length + "cell):", sibs.map(c => c.textContent.trim().slice(0,15)).join(" | "));
-        // 取后续不含中文且不含"标签关键字"的格子
-        for (let i = idx + 1; i < sibs.length; i++) {
-          const v = (sibs[i].textContent || "").trim();
-          if (v && !/[\u4e00-\u9fff]/.test(v) && !/立项|订单|型号|科目|名称|编号/.test(v)) {
-            orderNo = v;
-            break;
-          }
-        }
-        // 兜底：找下一个非空格子
-        if (!orderNo) {
+      if (txt === "内部立项号" && cell.children.length === 0) {
+        console.log("找到:", cell.tagName, cell.className, "| parent:", cell.parentElement?.tagName);
+        // 遍历所有父级，找最近的 TR/TBODY，再找同行/表的值
+        let row = cell.closest("tr") || cell.closest("[class*=row]") || cell.parentElement;
+        if (row) {
+          const sibs = Array.from(row.querySelectorAll("td, th, span, div, input"));
+          const idx = sibs.indexOf(cell);
+          console.log("  行(" + sibs.length + "子):", sibs.map(c => (c.textContent||"").trim().slice(0,12)).join("|"));
+          // 取下一个非标签非空格子
           for (let i = idx + 1; i < sibs.length; i++) {
             const v = (sibs[i].textContent || "").trim();
-            if (v) { orderNo = v; break; }
+            if (v && !/内[部立]|订单|科目|名称|编号|型号/.test(v) && v !== "无") {
+              orderNo = v;
+              console.log("  → 取:", orderNo);
+              break;
+            }
           }
         }
         break;
       }
     }
+    if (!orderNo) console.log("❌ 未找到标签元素");
     console.log("内部立项号:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
     console.log("===== 最终结果 =====");
