@@ -113,6 +113,8 @@
   // ===== 输出 =====
   if (bestResult) {
     // 提取内部立项号：标签和值在不同行→按行列定位
+    let orderNo = "";
+    const allText = document.body.innerText;
     const lines = allText.split(/\n/);
     let labelLineIdx = -1, labelCol = -1;
     for (let i = 0; i < lines.length; i++) {
