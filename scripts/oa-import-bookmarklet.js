@@ -19,21 +19,22 @@
     return null;
   }
 
-  // ===== 申请日期（多模式兜底） =====
+  // ===== 申请日期（多策略） =====
   let formDate = null;
-  const text = document.body.innerText;
-  const patterns = [
-    /申请日期[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/,
-    /申请日期[：:\s]*(\d{4}年\d{1,2}月\d{1,2}日)/,
-    /日期[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/,
-    /创建时间[：:\s]*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/,
-  ];
-  for (const p of patterns) {
-    const m = text.match(p);
-    if (m) {
-      formDate = m[1].replace(/[年月]/g, "-").replace(/日/g, "").replace(/[./]/g, "-");
-      break;
+  // 策略A: 找含"申请日期"的元素，取其父容器内所有文字匹配日期
+  const allEls = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
+  for (const el of allEls) {
+    if ((el.textContent || "").trim() === "申请日期") {
+      const parent = el.closest("tr, div, dl, li");
+      const txt = (parent || el.parentElement)?.textContent || "";
+      const m = txt.match(/(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})/);
+      if (m) { formDate = `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`; break; }
     }
+  }
+  // 策略B: 正则兜底
+  if (!formDate) {
+    const m = document.body.innerText.match(/申请日期[\s\S]*?(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})/);
+    if (m) formDate = `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
   }
 
   // ===== 遍历表格 =====
