@@ -142,28 +142,22 @@
       btn.disabled = true; btn.textContent = "发送中…"; st.textContent = "";
 
       // 提取内部立项号，匹配项目
-      let projectId = 20; // 默认: 液冷超节点
+      let projectId = 20; // 默认
       try {
         let orderNo = "";
-        const allEls = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
-        for (const el of allEls) {
-          const norm = (el.textContent || "").trim().replace(/\s+/g, "");
-          if (norm === "内部立项号" || norm === "订单号" || norm === "立项号") {
-            const next = el.nextElementSibling;
-            if (next && (next.textContent || "").trim()) {
-              orderNo = (next.textContent || "").trim();
-              break;
-            }
+        const allLbl = document.querySelectorAll("span, label, div");
+        for (const el of allLbl) {
+          if (el.children.length > 0) continue;
+          const txt = (el.textContent || "").trim().replace(/\s+/g, "");
+          if (txt === "内部立项号") {
             const parent = el.parentElement;
             if (parent) {
-              const sibs = Array.from(parent.children);
-              const idx = sibs.indexOf(el);
-              for (let i = idx + 1; i < sibs.length; i++) {
-                const v = (sibs[i].textContent || "").trim();
-                if (v && v.length > 0 && v.length < 50) { orderNo = v; break; }
-              }
+              const input = parent.querySelector("input, select, textarea");
+              if (input) orderNo = input.value || "";
+              if (!orderNo && parent.nextElementSibling)
+                orderNo = (parent.nextElementSibling.textContent || "").trim();
             }
-            if (orderNo) break;
+            break;
           }
         }
         if (orderNo) {

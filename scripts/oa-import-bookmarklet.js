@@ -112,31 +112,19 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：找label SPAN→取父级(input_field)→找input/select
+    // 提取内部立项号：找label SPAN→取父级(input_field)→找input值
     let orderNo = "";
-    console.log("===== 内部立项号提取(input字段) =====");
     const allLbl = document.querySelectorAll("span, label, div");
     for (const el of allLbl) {
-      if (el.children.length > 0) continue; // 只匹配纯文本叶子
+      if (el.children.length > 0) continue;
       const txt = (el.textContent || "").trim().replace(/\s+/g, "");
       if (txt === "内部立项号") {
         const parent = el.parentElement;
-        console.log("找到 label, parent:", parent?.tagName, "class:", parent?.className);
-        // 1) 父级容器内找 input/select
         if (parent) {
           const input = parent.querySelector("input, select, textarea");
-          if (input) {
-            orderNo = input.value || (input.textContent || "").trim();
-            console.log("  → input value:", orderNo);
-            if (orderNo) break;
-          }
-          // 2) 父级下一个兄弟
-          let pNext = parent.nextElementSibling;
-          if (pNext) {
-            const v = (pNext.textContent || "").trim();
-            console.log("  父级下一兄弟:", v);
-            if (v) { orderNo = v; break; }
-          }
+          if (input) orderNo = input.value || "";
+          if (!orderNo && parent.nextElementSibling)
+            orderNo = (parent.nextElementSibling.textContent || "").trim();
         }
         break;
       }
