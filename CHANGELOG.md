@@ -2,6 +2,23 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-17 — 修复物料页白屏（React #130）+ 增量重构
+
+- **缺陷修复**
+  - 根因定位：Vite 8 (rolldown) 对 `@mui/icons-material` v5.18 CJS 的 `exports.default` 导出解析异常，所有 `import Icon from "@mui/icons-material/..."` 在运行时被解析为 module namespace object 而非 React 组件 → React #130 → 整页白屏
+  - Vite 8 对 `@mui/x-date-pickers` v7 子路径（无 exports 字段）的目录解析也有类似风险 → 加 `vite.config.js` 的 `resolve.alias` 强制映射到具体 .js 文件
+- **接口调整**
+  - MaterialListPage.jsx：所有 `@mui/icons-material` 图标替换为 Unicode 字符（▲▼▾📥＋↓✕🔍↩），彻底绕过 Vite 8 兼容问题
+  - 新增 `client/vite.config.js`：alias 映射三个 x-date-pickers 子路径至具体 .js 文件
+- **新增功能**（增量重构验证通过）
+  - 表格骨架（固定10列 + 序号 + 列头排序 ▲▼）
+  - 内联编辑（文本/数字/日期 + 失焦保存 + Esc取消 + Tab导航）
+  - 状态列彩色标签（5态色值）+ Dropdown 切换
+  - 列宽拖拽 + localStorage 持久化
+  - 批量操作（checkbox 行选择 + 批量改状态/删除 + 二次确认）
+  - Excel 导入（复用 MaterialImportDialog + xlsx）+ 导出（exceljs）
+  - 撤销导入（5分钟倒计时）+ 搜索过滤 + 空状态
+
 ## 2026-07-16 — 物料管理模块 M4 全量开发（Excel 导入 + 内联编辑 + 批量操作 + 撤销导入）
 
 - **修改模块**

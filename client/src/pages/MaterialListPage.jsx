@@ -2,44 +2,15 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useSearchParams } from "react-router-dom";
 import dayjs from "dayjs";
 import {
-  Box,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  TextField,
-  Button,
-  IconButton,
-  Menu,
-  MenuItem,
-  Checkbox,
-  Tooltip,
-  Alert,
-  Snackbar,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
+  Box, Typography, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Paper, Chip, TextField, Button, IconButton,
+  Menu, MenuItem, Checkbox, Tooltip, Alert, Snackbar,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import "dayjs/locale/zh-cn";
-import UploadFileIcon from "@mui/icons-material/UploadFile";
-import AddIcon from "@mui/icons-material/Add";
-import DownloadIcon from "@mui/icons-material/Download";
-import UndoIcon from "@mui/icons-material/Undo";
-import SearchIcon from "@mui/icons-material/Search";
-import DeleteIcon from "@mui/icons-material/Delete";
-import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
 import api from "../api/client";
 import ProjectSelector from "../components/common/ProjectSelector";
@@ -49,39 +20,40 @@ import MaterialImportDialog from "../components/material/MaterialImportDialog";
 import { MATERIAL_STATUSES, statusStyle } from "../utils/materialStatus";
 import { exportMaterialsExcel } from "../utils/materialExcel";
 
+// ===== 常量 =====
 const COLUMNS = [
-  { key: "part_number", label: "物料号", type: "text", width: 150 },
-  { key: "manufacturer", label: "厂家", type: "text", width: 120 },
-  { key: "model", label: "物料型号", type: "text", width: 170 },
-  { key: "material_status", label: "物料状态", type: "status", width: 110 },
-  { key: "quantity", label: "数量", type: "number", width: 90 },
-  { key: "purchase_date", label: "采购时间", type: "date", width: 120 },
-  { key: "lead_time", label: "采购周期", type: "number", width: 90 },
-  { key: "expected_delivery", label: "预计交期", type: "date", width: 120 },
-  { key: "notes", label: "备注", type: "text", width: 220 },
+  { key: "part_number",       label: "物料号",   type: "text",   width: 150 },
+  { key: "manufacturer",      label: "厂家",     type: "text",   width: 120 },
+  { key: "model",             label: "物料型号", type: "text",   width: 170 },
+  { key: "material_status",   label: "物料状态", type: "status", width: 110 },
+  { key: "quantity",          label: "数量",     type: "number", width: 90 },
+  { key: "purchase_date",     label: "采购时间", type: "date",   width: 120 },
+  { key: "lead_time",         label: "采购周期", type: "number", width: 90 },
+  { key: "expected_delivery", label: "预计交期", type: "date",   width: 120 },
+  { key: "notes",             label: "备注",     type: "text",   width: 220 },
 ];
 const COL_WIDTH_KEY = "forge.material.colwidths.v1";
 const UNDO_WINDOW = 5 * 60 * 1000;
 
-// ===== 状态彩色标签（带 ▾ 提示可交互） =====
+// ===== Unicode 箭头 =====
+function SortArrow({ dir }) {
+  return (
+    <Box sx={{ display: "inline-flex", flexDirection: "column", ml: 0.5, lineHeight: 0 }}>
+      <Box component="span" sx={{ fontSize: 11, color: dir === "asc" ? "#1976d2" : "#ccc", lineHeight: 1 }}>▲</Box>
+      <Box component="span" sx={{ fontSize: 11, color: dir === "desc" ? "#1976d2" : "#ccc", lineHeight: 1 }}>▼</Box>
+    </Box>
+  );
+}
+
+// ===== 状态彩色标签 =====
 function StatusChip({ status, onClick }) {
   const st = statusStyle(status);
   return (
     <Chip
-      label={status}
+      label={<>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3 }}>▾</Box></>}
       size="small"
       onClick={onClick}
-      onDelete={onClick}
-      deleteIcon={<ArrowDropDownIcon />}
-      sx={{
-        color: st.color,
-        bgcolor: st.bg,
-        fontWeight: 600,
-        cursor: "pointer",
-        border: "none",
-        "& .MuiChip-label": { px: 0.6 },
-        "& .MuiChip-deleteIcon": { ml: 0, mr: -0.4 },
-      }}
+      sx={{ color: st.color, bgcolor: st.bg, fontWeight: 600, cursor: "pointer", maxWidth: 90, "& .MuiChip-label": { px: 1 } }}
     />
   );
 }
@@ -89,640 +61,472 @@ function StatusChip({ status, onClick }) {
 // ===== 内联编辑控件 =====
 function EditControl({ type, value, onSave, onCancel, onTab }) {
   const [val, setVal] = useState(value ?? "");
-  useEffect(() => {
-    setVal(value ?? "");
-  }, [value]);
-
-  const save = () => onSave(type === "number" ? Number(val) : val);
-  const handleKey = (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      save();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      onCancel();
-    } else if (e.key === "Tab") {
-      e.preventDefault();
-      save();
-      onTab(e.shiftKey ? -1 : 1);
-    }
+  useEffect(() => { setVal(value ?? ""); }, [value]);
+  const save = () => {
+    if (type === "number") {
+      const n = Number(val);
+      if (isNaN(n)) return;
+      onSave(n);
+    } else { onSave(val); }
   };
-
+  const handleKey = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    else if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+    else if (e.key === "Tab") { e.preventDefault(); save(); onTab(e.shiftKey ? -1 : 1); }
+  };
   if (type === "date") {
     return (
       <DatePicker
         value={val ? dayjs(val) : null}
         onChange={(d) => onSave(d ? d.format("YYYY-MM-DD") : "")}
         format="YYYY-MM-DD"
-        autoFocus
-        closeOnSelect
-        slotProps={{
-          textField: { size: "small", fullWidth: true, onKeyDown: handleKey },
-        }}
+        autoFocus closeOnSelect
+        slotProps={{ textField: { size: "small", fullWidth: true, onKeyDown: handleKey } }}
       />
     );
   }
-
   return (
     <TextField
-      size="small"
+      size="small" autoFocus fullWidth
       type={type === "number" ? "number" : "text"}
-      value={val}
-      autoFocus
-      onChange={(e) => setVal(e.target.value)}
-      onBlur={save}
-      onKeyDown={handleKey}
-      fullWidth
-      sx={{ "& .MuiInputBase-root": { height: 32 } }}
+      value={val} onChange={(e) => setVal(e.target.value)}
+      onBlur={save} onKeyDown={handleKey}
+      inputProps={type === "number" ? { min: 0, style: { textAlign: "right" } } : undefined}
+      sx={{ "& .MuiInputBase-input": { fontSize: "0.88rem", py: 0.5 } }}
     />
   );
 }
 
+// ===== 主组件 =====
 export default function MaterialListPage() {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("projectId") || null;
 
-  const [materials, setMaterials] = useState([]);
+  // 数据
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState(null);
+  const [snapshot, setSnapshot] = useState(null); // undo 快照
+  const [undoTime, setUndoTime] = useState(null);
+
+  // UI 状态
+  const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(new Set());
-  const [editing, setEditing] = useState(null); // { id, field }
-  const [statusMenu, setStatusMenu] = useState({ id: null, anchor: null });
-
-  const [importFile, setImportFile] = useState(null);
+  const [editing, setEditing] = useState(null); // { rowId, field }
+  const [statusMenu, setStatusMenu] = useState(null); // { rowId, anchorEl }
   const [importOpen, setImportOpen] = useState(false);
-  const [snapshot, setSnapshot] = useState(null);
-  const [undoSeconds, setUndoSeconds] = useState(0);
-
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [batchStatusAnchor, setBatchStatusAnchor] = useState(null);
-  const [snackbar, setSnackbar] = useState(null);
-
-  // 列宽（含持久化）
+  const [snack, setSnack] = useState(null);
+  const [confirmDlg, setConfirmDlg] = useState(null);
   const [colWidths, setColWidths] = useState(() => {
-    let saved = {};
     try {
-      saved = JSON.parse(localStorage.getItem(COL_WIDTH_KEY) || "{}");
-    } catch (e) {
-      saved = {};
-    }
-    return COLUMNS.map((c) => ({ ...c, width: saved[c.key] || c.width }));
+      const saved = JSON.parse(localStorage.getItem(COL_WIDTH_KEY) || "{}");
+      return COLUMNS.map((c) => ({ key: c.key, width: saved[c.key] || c.width }));
+    } catch { return COLUMNS.map((c) => ({ key: c.key, width: c.width })); }
   });
-  const colWidthsRef = useRef(colWidths);
-  useEffect(() => {
-    colWidthsRef.current = colWidths;
-  }, [colWidths]);
-  const resizing = useRef(null);
 
-  const load = useCallback(() => {
-    if (!projectId) {
-      setMaterials([]);
-      setLoading(false);
-      return;
-    }
+  // 列宽拖拽
+  const resizing = useRef(null);
+  const colWidthsRef = useRef(colWidths);
+  colWidthsRef.current = colWidths;
+  const onResizeStart = useCallback((e, key) => {
+    e.preventDefault(); e.stopPropagation();
+    const col = colWidthsRef.current.find((c) => c.key === key);
+    const startX = e.clientX, startW = col.width;
+    const move = (ev) => {
+      setColWidths((prev) => prev.map((c) => c.key === key ? { ...c, width: Math.max(60, startW + ev.clientX - startX) } : c));
+    };
+    const up = () => {
+      setColWidths((prev) => { colWidthsRef.current = prev; return prev; });
+      const save = {}; colWidthsRef.current.forEach((c) => save[c.key] = c.width);
+      localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(save));
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  }, []);
+
+  // 排序
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      if (sortDir === "asc") setSortDir("desc");
+      else { setSortKey(null); setSortDir("asc"); }
+    } else { setSortKey(key); setSortDir("asc"); }
+  };
+
+  // ===== 数据加载 =====
+  const load = useCallback(async () => {
+    if (!projectId) { setRows([]); setLoading(false); return; }
     setLoading(true);
-    Promise.all([
-      api.materials.list({ project_id: Number(projectId) }),
-      api.materials.importSnapshot(Number(projectId)),
-    ])
-      .then(([listRes, snapRes]) => {
-        setMaterials(listRes.data);
-        setSnapshot(snapRes.data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    try {
+      const [res, snap] = await Promise.all([
+        api.materials.list({ project_id: Number(projectId) }),
+        api.materials.importSnapshot(Number(projectId)),
+      ]);
+      setRows(res.data || []);
+      if (snap.data && snap.data.ids_json && snap.data.created_at) {
+        setSnapshot(snap.data);
+        const elapsed = Date.now() - new Date(snap.data.created_at + "+08:00").getTime();
+        if (elapsed < UNDO_WINDOW) setUndoTime(elapsed);
+        else setUndoTime(null);
+      }
+    } catch { setSnack({ severity: "error", text: "加载物料数据失败" }); }
+    setLoading(false);
   }, [projectId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  // 撤销倒计时
+  // undo 倒计时
   useEffect(() => {
-    if (!snapshot) {
-      setUndoSeconds(0);
-      return;
-    }
-    const calc = () => {
-      const created = new Date(
-        snapshot.created_at.replace(" ", "T") + (snapshot.created_at.includes("Z") ? "" : "+08:00")
-      );
-      const remain = Math.floor((UNDO_WINDOW - (Date.now() - created.getTime())) / 1000);
-      if (remain <= 0) {
-        setSnapshot(null);
-        setUndoSeconds(0);
-      } else {
-        setUndoSeconds(remain);
-      }
-    };
-    calc();
-    const t = setInterval(calc, 1000);
-    return () => clearInterval(t);
-  }, [snapshot]);
-
-  // 排序 + 搜索后的视图数据
-  const viewRows = useMemo(() => {
-    let list = materials;
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter((m) =>
-        [m.part_number, m.manufacturer, m.model, m.material_status, m.notes]
-          .some((v) => (v || "").toLowerCase().includes(s))
-      );
-    }
-    if (sortField) {
-      list = [...list].sort((a, b) => {
-        let av = a[sortField];
-        let bv = b[sortField];
-        if (sortField === "quantity" || sortField === "lead_time") {
-          av = Number(av) || 0;
-          bv = Number(bv) || 0;
-        }
-        if (av < bv) return sortDir === "asc" ? -1 : 1;
-        if (av > bv) return sortDir === "asc" ? 1 : -1;
-        return 0;
+    if (undoTime == null || undoTime >= UNDO_WINDOW) { setUndoTime(null); return; }
+    const t = setInterval(() => {
+      setUndoTime((prev) => {
+        if (prev == null || prev >= UNDO_WINDOW) { clearInterval(t); return null; }
+        return prev + 1000;
       });
-    }
-    return list;
-  }, [materials, search, sortField, sortDir]);
+    }, 1000);
+    return () => clearInterval(t);
+  }, [undoTime != null]);
 
-  // ===== 内联编辑保存 =====
-  const commitEdit = useCallback(
-    async (id, field, value) => {
-      try {
-        await api.materials.update(id, { [field]: value });
-        setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, [field]: value } : m)));
-      } catch (e) {
-        setSnackbar({ type: "error", msg: e.message || "保存失败" });
-      }
-    },
-    []
-  );
-
-  const startEdit = (m, col) => {
-    if (col.type === "status") return;
-    setEditing({ id: m.id, field: col.key });
-  };
-
-  const editFieldNav = (dir) => {
-    if (!editing) return;
-    const keys = COLUMNS.filter((c) => c.type !== "status").map((c) => c.key);
-    const idx = keys.indexOf(editing.field);
-    const ni = (idx + dir + keys.length) % keys.length;
-    setEditing({ id: editing.id, field: keys[ni] });
-  };
-
-  // ===== 状态菜单（单元格 / 批量） =====
-  const openStatusMenu = (e, id) => {
-    e.stopPropagation();
-    setStatusMenu({ id, anchor: e.currentTarget });
-  };
-  const selectStatus = async (status) => {
-    const id = statusMenu.id;
-    setStatusMenu({ id: null, anchor: null });
-    if (!id) return;
+  // ===== 编辑保存 =====
+  const handleSave = async (rowId, field, value) => {
+    setEditing(null);
+    const row = rows.find((r) => r.id === rowId);
+    if (!row || String(row[field]) === String(value ?? "")) return;
     try {
-      await api.materials.update(id, { material_status: status });
-      setMaterials((prev) => prev.map((m) => (m.id === id ? { ...m, material_status: status } : m)));
-    } catch (e) {
-      setSnackbar({ type: "error", msg: e.message || "更新失败" });
-    }
+      await api.materials.update(rowId, { [field]: value });
+      setRows((prev) => prev.map((r) => r.id === rowId ? { ...r, [field]: value } : r));
+    } catch { setSnack({ severity: "error", text: "保存失败" }); load(); }
   };
 
-  // ===== 行选择 =====
-  const allSelected = viewRows.length > 0 && viewRows.every((m) => selected.has(m.id));
-  const toggleAll = () => {
-    if (allSelected) setSelected(new Set());
-    else setSelected(new Set(viewRows.map((m) => m.id)));
-  };
-  const toggleRow = (id) => {
-    setSelected((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
+  // ===== 状态切换 =====
+  const handleStatusChange = async (rowId, status) => {
+    setStatusMenu(null);
+    try {
+      await api.materials.update(rowId, { material_status: status });
+      setRows((prev) => prev.map((r) => r.id === rowId ? { ...r, material_status: status } : r));
+    } catch { setSnack({ severity: "error", text: "状态更新失败" }); }
   };
 
   // ===== 添加一行 =====
-  const handleAddRow = async () => {
+  const handleAdd = async () => {
     if (!projectId) return;
     try {
       const res = await api.materials.create({ project_id: Number(projectId), material_status: "默认" });
-      const newId = res.data.id;
-      setMaterials((prev) => [...prev, res.data]);
-      setEditing({ id: newId, field: "part_number" });
-    } catch (e) {
-      setSnackbar({ type: "error", msg: e.message || "添加失败" });
-    }
+      load(); // 重新加载获取完整 seq
+    } catch { setSnack({ severity: "error", text: "添加失败" }); }
   };
 
-  // ===== 导入 =====
-  const handleFileChange = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (file) {
-      setImportFile(file);
-      setImportOpen(true);
-    }
-    e.target.value = "";
-  };
-  const handleImported = (count) => {
-    setImportOpen(false);
-    setImportFile(null);
-    load();
-    setSnackbar({ type: "success", msg: `成功导入 ${count} 条物料` });
-  };
-
-  // ===== 撤销导入 =====
-  const handleUndo = async () => {
-    try {
-      await api.materials.importUndo(Number(projectId));
-      setSnapshot(null);
-      load();
-      setSnackbar({ type: "success", msg: "已撤销最近一次导入" });
-    } catch (e) {
-      setSnapshot(null);
-      load();
-      setSnackbar({ type: "error", msg: e.message || "撤销失败" });
-    }
+  // ===== 删除 =====
+  const handleDelete = (rowId) => {
+    setConfirmDlg({
+      title: "确认删除", text: "确定要删除该物料吗？此操作不可撤销。",
+      onOk: async () => {
+        setConfirmDlg(null);
+        try { await api.materials.remove(rowId); load(); }
+        catch { setSnack({ severity: "error", text: "删除失败" }); }
+      },
+    });
   };
 
   // ===== 批量操作 =====
-  const handleBatchDelete = async () => {
-    setConfirmDeleteOpen(false);
-    try {
-      await api.materials.batchRemove({ project_id: Number(projectId), ids: [...selected] });
-      setMaterials((prev) => prev.filter((m) => !selected.has(m.id)));
-      setSnackbar({ type: "success", msg: `已删除 ${selected.size} 条` });
-      setSelected(new Set());
-    } catch (e) {
-      setSnackbar({ type: "error", msg: e.message || "删除失败" });
-    }
-  };
   const handleBatchStatus = async (status) => {
-    setBatchStatusAnchor(null);
-    try {
-      await api.materials.batchUpdateStatus({ ids: [...selected], material_status: status });
-      setMaterials((prev) =>
-        prev.map((m) => (selected.has(m.id) ? { ...m, material_status: status } : m))
+    setConfirmDlg({
+      title: "批量修改状态",
+      text: `确定将选中的 ${selected.size} 项物料状态改为「${status}」吗？`,
+      onOk: async () => {
+        setConfirmDlg(null);
+        try { await api.materials.batchUpdateStatus({ ids: [...selected], material_status: status }); setSelected(new Set()); load(); }
+        catch { setSnack({ severity: "error", text: "批量修改失败" }); }
+      },
+    });
+  };
+  const handleBatchDelete = () => {
+    setConfirmDlg({
+      title: "批量删除", text: `确定删除选中的 ${selected.size} 项物料吗？此操作不可撤销。`,
+      onOk: async () => {
+        setConfirmDlg(null);
+        try { await api.materials.batchRemove({ project_id: Number(projectId), ids: [...selected] }); setSelected(new Set()); load(); }
+        catch { setSnack({ severity: "error", text: "批量删除失败" }); }
+      },
+    });
+  };
+
+  // ===== 导入/导出/撤销 =====
+  const handleImportDone = () => { setImportOpen(false); load(); };
+  const handleExport = () => {
+    const exportRows = selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
+    exportMaterialsExcel(exportRows);
+  };
+  const handleUndo = async () => {
+    try { await api.materials.importUndo(Number(projectId)); setUndoTime(null); load(); }
+    catch { setSnack({ severity: "error", text: "撤销导入失败" }); }
+  };
+
+  // ===== 全选 =====
+  const allIds = rows.map((r) => r.id);
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const toggleAll = () => {
+    setSelected(allSelected ? new Set() : new Set(allIds));
+  };
+  const toggleRow = (id) => {
+    setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  };
+
+  // ===== 排序 + 搜索 =====
+  const filtered = useMemo(() => {
+    let list = [...rows];
+    if (search.trim()) {
+      const kw = search.trim().toLowerCase();
+      list = list.filter((r) =>
+        ["part_number", "manufacturer", "model", "material_status", "notes"].some((k) =>
+          String(r[k] ?? "").toLowerCase().includes(kw)
+        )
       );
-      setSnackbar({ type: "success", msg: `已更新 ${selected.size} 条状态` });
-    } catch (e) {
-      setSnackbar({ type: "error", msg: e.message || "更新失败" });
     }
-  };
-  const handleBatchExport = () => {
-    const rows = materials.filter((m) => selected.has(m.id));
-    exportMaterialsExcel(rows, "物料清单_选中.xlsx");
-  };
-  const handleExportAll = () => {
-    exportMaterialsExcel(materials, "物料清单.xlsx");
-  };
-
-  // ===== 列宽拖拽 =====
-  const onResizeStart = (e, key) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const col = colWidths.find((c) => c.key === key);
-    resizing.current = { key, startX: e.clientX, startW: col.width };
-    const move = (ev) => {
-      if (!resizing.current) return;
-      const dx = ev.clientX - resizing.current.startX;
-      const newW = Math.max(60, resizing.current.startW + dx);
-      setColWidths((prev) =>
-        prev.map((c) => (c.key === resizing.current.key ? { ...c, width: newW } : c))
-      );
-    };
-    const end = () => {
-      resizing.current = null;
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", end);
-      const save = {};
-      colWidthsRef.current.forEach((c) => (save[c.key] = c.width));
-      localStorage.setItem(COL_WIDTH_KEY, JSON.stringify(save));
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", end);
-  };
-
-  const toggleSort = (key) => {
-    if (sortField === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortField(key);
-      setSortDir("asc");
+    if (sortKey) {
+      list.sort((a, b) => {
+        const va = String(a[sortKey === "seq" ? "seq" : sortKey] ?? "");
+        const vb = String(b[sortKey === "seq" ? "seq" : sortKey] ?? "");
+        const cmp = va.localeCompare(vb, "zh-CN", { numeric: true });
+        return sortDir === "asc" ? cmp : -cmp;
+      });
     }
-  };
-  const sortArrow = (key) => {
-    if (sortField !== key) return null;
-    return sortDir === "asc" ? (
-      <KeyboardArrowUpIcon fontSize="small" />
-    ) : (
-      <KeyboardArrowDownIcon fontSize="small" />
-    );
-  };
+    return list;
+  }, [rows, sortKey, sortDir, search]);
 
-  const displayValue = (m, col) => {
-    const v = m[col.key];
-    if (col.type === "date") return v ? v : "-";
-    if (col.type === "number") return v != null ? String(v) : "";
-    return v || "";
-  };
+  // ===== 搜索框 =====
+  const searchInput = (
+    <TextField
+      size="small" placeholder="搜索物料号/厂家/型号/状态/备注..."
+      value={search} onChange={(e) => setSearch(e.target.value)}
+      sx={{ width: 320 }}
+      InputProps={{ startAdornment: <Box component="span" sx={{ mr: 0.5, color: "#999" }}>🔍</Box> }}
+    />
+  );
 
+  // ===== 渲染 =====
   if (loading) return <PageLoading />;
+
+  if (!projectId) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ mb: 2 }}><ProjectSelector /></Box>
+        <PageHeader title="物料管理" subtitle="BOM 与备料跟踪" />
+        <Paper sx={{ textAlign: "center", py: 6 }}>
+          <Typography color="text.secondary">请先在右上角选择项目，再管理物料清单</Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="zh-cn">
-      <Box>
-        <Box sx={{ mb: 2 }}>
-          <ProjectSelector />
-        </Box>
+      <Box sx={{ p: 2 }}>
+        <Box sx={{ mb: 2 }}><ProjectSelector /></Box>
         <PageHeader title="物料管理" subtitle="BOM 与备料跟踪" />
 
-        {!projectId ? (
-          <Paper sx={{ textAlign: "center", py: 6 }}>
-            <Typography color="text.secondary">请先在右上角选择项目，再管理物料清单</Typography>
-          </Paper>
-        ) : (
-          <Box>
-            {/* 工具栏 */}
-            <Box sx={{ display: "flex", gap: 1, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
-              <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
-                导入 Excel
-                <input
-                  hidden
-                  accept=".xlsx,.xls"
-                  type="file"
-                  onChange={handleFileChange}
-                />
-              </Button>
-              <Button variant="contained" startIcon={<AddIcon />} onClick={handleAddRow}>
-                添加一行
-              </Button>
-              <Button variant="outlined" startIcon={<DownloadIcon />} onClick={handleExportAll}>
-                导出 Excel
-              </Button>
-              {snapshot && undoSeconds > 0 && (
-                <Button
-                  variant="outlined"
-                  color="warning"
-                  startIcon={<UndoIcon />}
-                  onClick={handleUndo}
-                >
-                  撤销导入（{undoSeconds}s）
-                </Button>
-              )}
-              <Box sx={{ flexGrow: 1 }} />
-              <TextField
-                size="small"
-                placeholder="搜索物料号 / 厂家 / 型号 / 状态 / 备注"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 0.5, color: "text.secondary" }} /> }}
-                sx={{ width: 320 }}
-              />
-            </Box>
+        {/* ---- 工具栏 ---- */}
+        <Box sx={{ display: "flex", gap: 1, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
+          <Button variant="outlined" component="label" sx={{ gap: 0.5 }}>
+            📥 导入 Excel
+            <input type="file" hidden accept=".xlsx,.xls" onChange={(e) => { if (e.target.files?.[0]) setImportOpen(e.target.files[0]); e.target.value = ""; }} />
+          </Button>
+          <Button variant="outlined" onClick={handleAdd} sx={{ gap: 0.5 }}>＋ 添加一行</Button>
+          <Button variant="outlined" onClick={handleExport} sx={{ gap: 0.5 }}>
+            ↓ 导出{selected.size > 0 ? `(${selected.size})` : ""}
+          </Button>
+          {undoTime != null && (
+            <Button variant="outlined" color="warning" onClick={handleUndo} sx={{ gap: 0.5 }}>
+              ↩ 撤销导入({Math.max(0, Math.ceil((UNDO_WINDOW - undoTime) / 60000))}分钟)
+            </Button>
+          )}
+          <Box sx={{ flex: 1 }} />
+          {searchInput}
+        </Box>
 
-            {/* 批量操作栏 */}
-            {selected.size > 0 && (
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  mb: 1.5,
-                  p: 1,
-                  borderRadius: 1,
-                  bgcolor: "primary.main",
-                  color: "primary.contrastText",
-                }}
-              >
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  已选 {selected.size} 项
-                </Typography>
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="inherit"
-                  onClick={(e) => setBatchStatusAnchor(e.currentTarget)}
-                  endIcon={<ArrowDropDownIcon />}
-                  sx={{ bgcolor: "rgba(255,255,255,0.9)", color: "primary.main" }}
-                >
-                  批量改状态
+        {/* ---- 批量操作栏 ---- */}
+        {selected.size > 0 && (
+          <Alert severity="info" sx={{ mb: 1, py: 0 }}
+            action={
+              <Box sx={{ display: "flex", gap: 0.5 }}>
+                {MATERIAL_STATUSES.map((s) => (
+                  <Button key={s} size="small" variant="outlined" onClick={() => handleBatchStatus(s)}
+                    sx={{ fontSize: "0.75rem", py: 0, color: statusStyle(s).color, borderColor: statusStyle(s).bg }}>
+                    {s}
+                  </Button>
+                ))}
+                <Button size="small" color="error" variant="outlined" onClick={handleBatchDelete} sx={{ fontSize: "0.75rem", py: 0 }}>
+                  ✕ 删除({selected.size})
                 </Button>
-                <Button
-                  size="small"
-                  variant="contained"
-                  color="error"
-                  onClick={() => setConfirmDeleteOpen(true)}
-                  startIcon={<DeleteIcon />}
-                  sx={{ bgcolor: "#ff7875" }}
-                >
-                  批量删除
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="inherit"
-                  onClick={handleBatchExport}
-                  startIcon={<DownloadIcon />}
-                  sx={{ borderColor: "rgba(255,255,255,0.7)", color: "inherit" }}
-                >
-                  导出选中
-                </Button>
-                <Box sx={{ flexGrow: 1 }} />
-                <Button size="small" color="inherit" onClick={() => setSelected(new Set())}>
-                  清除
+                <Button size="small" onClick={() => setSelected(new Set())} sx={{ fontSize: "0.75rem", py: 0 }}>
+                  清除选择
                 </Button>
               </Box>
-            )}
-
-            {/* 表格 */}
-            <TableContainer
-              component={Paper}
-              sx={{ maxHeight: "calc(100vh - 280px)", overflow: "auto" }}
-            >
-              <Table
-                size="small"
-                stickyHeader
-                sx={{ tableLayout: "fixed", minWidth: colWidths.reduce((s, c) => s + c.width, 150) }}
-              >
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ width: 48 }}>
-                      <Checkbox
-                        size="small"
-                        checked={allSelected}
-                        indeterminate={selected.size > 0 && !allSelected}
-                        onChange={toggleAll}
-                      />
-                    </TableCell>
-                    <TableCell sx={{ width: 60 }}>序号</TableCell>
-                    {colWidths.map((col) => (
-                      <TableCell key={col.key} sx={{ width: col.width, position: "relative" }}>
-                        <Box
-                          sx={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 0.3,
-                            cursor: "pointer",
-                            userSelect: "none",
-                          }}
-                          onClick={() => toggleSort(col.key)}
-                        >
-                          <span>{col.label}</span>
-                          {sortArrow(col.key)}
-                        </Box>
-                        <Box
-                          onMouseDown={(e) => onResizeStart(e, col.key)}
-                          sx={{
-                            position: "absolute",
-                            right: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: 6,
-                            cursor: "col-resize",
-                            userSelect: "none",
-                            "&:hover": { bgcolor: "rgba(0,0,0,0.08)" },
-                          }}
-                        />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {viewRows.map((m, i) => (
-                    <TableRow key={m.id} hover selected={selected.has(m.id)}>
-                      <TableCell>
-                        <Checkbox size="small" checked={selected.has(m.id)} onChange={() => toggleRow(m.id)} />
-                      </TableCell>
-                      <TableCell>{i + 1}</TableCell>
-                      {colWidths.map((col) => {
-                        const isEditing = editing && editing.id === m.id && editing.field === col.key;
-                        if (col.type === "status") {
-                          return (
-                            <TableCell key={col.key} onClick={(e) => openStatusMenu(e, m.id)} sx={{ cursor: "pointer" }}>
-                              <StatusChip status={m.material_status} onClick={(e) => openStatusMenu(e, m.id)} />
-                            </TableCell>
-                          );
-                        }
-                        if (isEditing) {
-                          return (
-                            <TableCell key={col.key} sx={{ p: 0.5 }}>
-                              <EditControl
-                                type={col.type}
-                                value={m[col.key]}
-                                onSave={(v) => {
-                                  commitEdit(m.id, col.key, v);
-                                  setEditing(null);
-                                }}
-                                onCancel={() => setEditing(null)}
-                                onTab={editFieldNav}
-                              />
-                            </TableCell>
-                          );
-                        }
-                        return (
-                          <TableCell
-                            key={col.key}
-                            onClick={() => startEdit(m, col)}
-                            sx={{ cursor: "text", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-                          >
-                            {displayValue(m, col)}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                  {viewRows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={COLUMNS.length + 2} align="center" sx={{ py: 6 }}>
-                        <Typography color="text.secondary">
-                          {search ? "未找到匹配的物料" : "暂无物料，点击「添加一行」或「导入 Excel」开始"}
-                        </Typography>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
+            }
+          >
+            已选 {selected.size} 项
+          </Alert>
         )}
 
-        {/* 单元格状态下拉菜单 */}
-        <Menu anchorEl={statusMenu.anchor} open={Boolean(statusMenu.anchor)} onClose={() => setStatusMenu({ id: null, anchor: null })}>
-          {MATERIAL_STATUSES.map((s) => {
-            const st = statusStyle(s);
-            return (
-              <MenuItem key={s} onClick={() => selectStatus(s)} sx={{ gap: 1 }}>
-                <Box
-                  sx={{
-                    width: 14,
-                    height: 14,
-                    borderRadius: "3px",
-                    bgcolor: st.bg,
-                    border: `1px solid ${st.color}`,
-                  }}
-                />
-                <span style={{ color: st.bg === "#f5f5f5" ? "#8c8c8c" : st.bg }}>{s}</span>
-              </MenuItem>
-            );
-          })}
-        </Menu>
+        {/* ---- 表格 ---- */}
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: 42, fontWeight: 700, bgcolor: "grey.50", p: 0.5 }}>
+                  <Checkbox size="small" checked={allSelected} indeterminate={selected.size > 0 && !allSelected} onChange={toggleAll} />
+                </TableCell>
+                <TableCell sx={{ width: 60, fontWeight: 700, bgcolor: "grey.50", cursor: "pointer", userSelect: "none" }}
+                  onClick={() => handleSort("seq")}>
+                  序号<SortArrow dir={sortKey === "seq" ? sortDir : null} />
+                </TableCell>
+                {COLUMNS.map((col) => {
+                  const width = colWidths.find((c) => c.key === col.key)?.width || col.width;
+                  return (
+                    <TableCell key={col.key}
+                      sx={{
+                        width, fontWeight: 700, bgcolor: "grey.50", cursor: "pointer",
+                        userSelect: "none", position: "relative", overflow: "visible",
+                      }}
+                      onClick={() => col.key !== "material_status" && handleSort(col.key)}
+                    >
+                      <Box sx={{ display: "flex", alignItems: "center" }}>
+                        {col.label}
+                        {col.key !== "material_status" && <SortArrow dir={sortKey === col.key ? sortDir : null} />}
+                      </Box>
+                      <Box
+                        sx={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 4, cursor: "col-resize", "&:hover": { bgcolor: "primary.light" } }}
+                        onMouseDown={(e) => onResizeStart(e, col.key)}
+                      />
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            </TableHead>
 
-        {/* 批量改状态菜单 */}
-        <Menu anchorEl={batchStatusAnchor} open={Boolean(batchStatusAnchor)} onClose={() => setBatchStatusAnchor(null)}>
-          {MATERIAL_STATUSES.map((s) => {
-            const st = statusStyle(s);
-            return (
-              <MenuItem key={s} onClick={() => handleBatchStatus(s)} sx={{ gap: 1 }}>
-                <Box sx={{ width: 14, height: 14, borderRadius: "3px", bgcolor: st.bg, border: `1px solid ${st.color}` }} />
-                <span>{s}</span>
-              </MenuItem>
-            );
-          })}
-        </Menu>
+            <TableBody>
+              {filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={COLUMNS.length + 2} sx={{ textAlign: "center", py: 8 }}>
+                    <Typography color="text.secondary">
+                      {search ? "无匹配结果" : "暂无数据，请通过「导入 Excel」或「添加一行」录入物料"}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map((row, idx) => (
+                  <TableRow key={row.id} hover sx={{ bgcolor: selected.has(row.id) ? "action.selected" : "inherit" }}>
+                    <TableCell sx={{ p: 0.5 }}>
+                      <Checkbox size="small" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
+                    </TableCell>
 
-        <MaterialImportDialog
-          open={importOpen}
-          file={importFile}
-          projectId={projectId}
-          onClose={() => {
-            setImportOpen(false);
-            setImportFile(null);
-          }}
-          onConfirmed={handleImported}
-        />
+                    {/* 序号 */}
+                    <TableCell sx={{ color: "text.secondary", fontSize: "0.82rem" }}>{idx + 1}</TableCell>
 
-        {/* 批量删除确认 */}
-        <Dialog open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)}>
-          <DialogTitle>确认批量删除</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              确定要删除选中的 {selected.size} 条物料吗？此操作不可撤销。
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setConfirmDeleteOpen(false)}>取消</Button>
-            <Button color="error" variant="contained" onClick={handleBatchDelete}>
-              删除
-            </Button>
-          </DialogActions>
-        </Dialog>
+                    {/* 业务列 */}
+                    {COLUMNS.map((col) => {
+                      const isEditing = editing?.rowId === row.id && editing?.field === col.key;
+                      if (isEditing) {
+                        return (
+                          <TableCell key={col.key} sx={{ p: 0.5 }}>
+                            <EditControl
+                              type={col.type} value={row[col.key]}
+                              onSave={(v) => handleSave(row.id, col.key, v)}
+                              onCancel={() => setEditing(null)}
+                              onTab={(dir) => {
+                                const ci = COLUMNS.indexOf(col);
+                                const next = ci + dir;
+                                if (next >= 0 && next < COLUMNS.length) setEditing({ rowId: row.id, field: COLUMNS[next].key });
+                                else setEditing(null);
+                              }}
+                            />
+                          </TableCell>
+                        );
+                      }
 
-        <Snackbar
-          open={Boolean(snackbar)}
-          autoHideDuration={3000}
-          onClose={() => setSnackbar(null)}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+                      // 状态列
+                      if (col.key === "material_status") {
+                        return (
+                          <TableCell key={col.key} sx={{ p: 0.5 }}>
+                            <StatusChip
+                              status={row.material_status || "默认"}
+                              onClick={(e) => setStatusMenu({ rowId: row.id, anchorEl: e.currentTarget })}
+                            />
+                          </TableCell>
+                        );
+                      }
+
+                      // 普通单元格
+                      const raw = row[col.key];
+                      const display = col.type === "date"
+                        ? (raw ? dayjs(raw).format("YYYY/M/D") : "-")
+                        : (raw ?? "-");
+                      return (
+                        <TableCell key={col.key}
+                          onClick={() => setEditing({ rowId: row.id, field: col.key })}
+                          sx={{ p: 0.5, cursor: "pointer", fontSize: "0.88rem", "&:hover": { bgcolor: "action.hover" } }}
+                        >
+                          <Box component="span" sx={{ color: display === "-" ? "text.disabled" : "text.primary" }}>
+                            {display}
+                          </Box>
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+
+        {/* ---- 状态菜单 ---- */}
+        <Menu
+          anchorEl={statusMenu?.anchorEl} open={!!statusMenu}
+          onClose={() => setStatusMenu(null)}
         >
-          {snackbar ? (
-            <Alert severity={snackbar.type} onClose={() => setSnackbar(null)}>
-              {snackbar.msg}
-            </Alert>
-          ) : undefined}
-        </Snackbar>
+          {MATERIAL_STATUSES.map((s) => {
+            const st = statusStyle(s);
+            return (
+              <MenuItem key={s} onClick={() => handleStatusChange(statusMenu.rowId, s)}
+                sx={{ gap: 1 }}>
+                <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: st.bg, border: `1px solid ${st.color}` }} />
+                <Typography variant="body2" sx={{ color: st.color, fontWeight: 600 }}>{s}</Typography>
+              </MenuItem>
+            );
+          })}
+        </Menu>
+
+        {/* ---- 导入弹窗 ---- */}
+        {importOpen && (
+          <MaterialImportDialog
+            file={importOpen}
+            projectId={Number(projectId)}
+            onClose={() => setImportOpen(false)}
+            onDone={handleImportDone}
+          />
+        )}
+
+        {/* ---- 确认弹窗 ---- */}
+        {confirmDlg && (
+          <Dialog open onClose={() => setConfirmDlg(null)}>
+            <DialogTitle>{confirmDlg.title}</DialogTitle>
+            <DialogContent><DialogContentText>{confirmDlg.text}</DialogContentText></DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmDlg(null)}>取消</Button>
+              <Button onClick={confirmDlg.onOk} color="error" variant="contained">确认</Button>
+            </DialogActions>
+          </Dialog>
+        )}
+
+        {/* ---- Snackbar ---- */}
+        {snack && (
+          <Snackbar open autoHideDuration={4000} onClose={() => setSnack(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
+            <Alert severity={snack.severity} onClose={() => setSnack(null)} variant="filled">{snack.text}</Alert>
+          </Snackbar>
+        )}
       </Box>
     </LocalizationProvider>
   );
