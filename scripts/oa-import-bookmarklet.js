@@ -6,9 +6,10 @@
   function matchField(h) {
     const t = norm(h);
     if (!t) return null;
-    // 优先级：物料标识 > 厂家 > 型号 > 数量 > 价格 > 备注
-    if (t.includes("物料") || t.includes("料号") || t.includes("partno")) return "part_number";
+    // 物料编号要明确匹配"编号"或"料号"，避免"物料描述"误匹配
+    if (t.includes("物料编号") || t.includes("料号") || t.includes("partno") || t === "编号") return "part_number";
     if (t.includes("厂家") || t.includes("供应商") || t.includes("品牌") || t.includes("厂商")) return "manufacturer";
+    // 型号/规格/型号配置/物料描述(含"型号"则算)
     if (t.includes("型号") || t.includes("规格") || t === "型" || t === "号") return "model";
     if (t.includes("数量") || t === "qty") return "quantity";
     if (t === "单价" || t.includes("unitprice")) return "_price";
@@ -61,7 +62,8 @@
 
     // 提取数据行
     const items = [];
-    const startRow = rows.length > 3 ? 3 : 1;
+    // 第一行作为表头，从第二行开始取数据
+    const startRow = 1;
     for (let r = startRow; r < rows.length; r++) {
       const cells = rows[r].querySelectorAll("th, td");
       if (cells.length === 0) continue;
