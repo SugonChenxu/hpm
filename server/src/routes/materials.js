@@ -314,16 +314,29 @@ router.post("/materials/oa-fetch", async (req, res) => {
     if (dateMatch) formDate = dateMatch[1].replace(/[./]/g, "-");
 
     // 2. 找物料表格 — 找到包含"物料编号"或"料号"的 <table>
-    const tableMatch = html.match(/<table[\s\S]*?物料编号[\s\S]*?<\/table>/i)
-      || html.match(/<table[\s\S]*?料号[\s\S]*?<\/table>/i)
-      || html.match(/<table[\s\S]*?part_no[\s\S]*?<\/table>/i);
-    if (!tableMatch) {
+    // 找物料表格 — 在所有 <table> 中找包含"物料编号"或含物料列关键字的
+    const tableMatches = html.match(/<table[\s>][\s\S]*?<\/table>/gi) || [];
+    let bestTable = null;
+    let bestScore = 0;
+    for (const tbl of tableMatches) {
+      const rows = tbl.match(/<tr[\s>][\s\S]*?<\/tr>/gi) || [];
+      let score = 0;
+      // 检查是否含物料关键字
+      if (/物料编号|料号|part_no/i.test(tbl)) score += 10;
+      if (/厂家|供应商/.test(tbl)) score += 5;
+      if (/型号|规格/.test(tbl)) score += 5;
+      if (/数量/.test(tbl)) score += 3;
+      if (score > bestScore && rows.length >= 2) {
+        bestScore = score;
+        bestTable = { html: tbl, rows };
+      }
+    }
+    if (!bestTable) {
       const preview = html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 600);
       throw new Error("未找到物料表格。页面是否加载完整？前600字: " + preview);
     }
 
-    const tableHtml = tableMatch[0];
-    const trs = tableHtml.match(/<tr[\s>][\s\S]*?<\/tr>/gi) || [];
+    const trs = bestTable.rows;
 
     // 3. 解析列映射 — 取第一个有效 tr 作为表头
     let colMap = {};
