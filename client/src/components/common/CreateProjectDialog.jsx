@@ -124,9 +124,9 @@ export default function CreateProjectDialog({ open, onClose, onCreated, project,
             <TextField label="部门" value={form.department}
               onChange={(e) => setForm({ ...form, department: e.target.value })}
               helperText="如 硬件研发部" />
-            <TextField label="订单号" value={form.order_number}
+            <TextField label="内部立项号" value={form.order_number}
               onChange={(e) => setForm({ ...form, order_number: e.target.value })}
-              helperText="如 ORD-2024-001" />
+              helperText="如 PRJ-2024-001" />
             <TextField label="库位" value={form.storage_location}
               onChange={(e) => setForm({ ...form, storage_location: e.target.value })}
               helperText="如 A-03" />

@@ -162,7 +162,7 @@ export default function ProjectCard({ project, tasks = [], onEdit, onPhaseChange
 
           {/* 信息聚合区 */}
           <Box sx={{ mb: 1 }}>
-            <InfoRow label="订单号" value={project.order_number} />
+            <InfoRow label="内部立项号" value={project.order_number} />
             <InfoRow label="库位" value={project.storage_location} />
             <InfoRow label="例会时间" value={project.meeting_time} />
           </Box>
