@@ -120,7 +120,12 @@ export default function MaterialListPage() {
   const [rowColors, setRowColors] = useState(() => {
     try { return JSON.parse(localStorage.getItem("forge.material.rowcolors") || "{}"); }
     catch { return {}; }
-  }); // { field, label, type, ids }
+  });
+  const [oaImportOpen, setOaImportOpen] = useState(false);
+  const [oaJson, setOaJson] = useState("");
+  const [oaPreview, setOaPreview] = useState(null);
+  const [oaError, setOaError] = useState(null);
+  const [oaSubmitting, setOaSubmitting] = useState(false); // { field, label, type, ids }
   const [importOpen, setImportOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
@@ -369,6 +374,51 @@ export default function MaterialListPage() {
     const exportRows = selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
     exportMaterialsExcel(exportRows);
   };
+  const handleOaImportOpen = () => { setOaImportOpen(true); setOaJson(""); setOaPreview(null); setOaError(null); };
+  const handleOaParse = () => {
+    setOaError(null);
+    try {
+      const parsed = JSON.parse(oaJson);
+      let items = parsed.items || parsed.data || parsed;
+      if (!Array.isArray(items)) throw new Error("JSON 必须是一个数组，或包含 items/data 数组的对象");
+      // 规范化字段名
+      items = items.map((it) => ({
+        part_number: it.part_number || it.partNumber || it["物料编号"] || it["物料号"] || "",
+        manufacturer: it.manufacturer || it["厂家"] || it["供应商"] || "",
+        model: it.model || it["型号配置"] || it["型号"] || it["规格"] || "",
+        material_status: "默认",
+        quantity: parseFloat(it.quantity || it["数量"]) || 0,
+        purchase_date: it.purchase_date || it.purchaseDate || it["申请日期"] || it["采购日期"] || null,
+        notes: it.notes || it["备注"] || "",
+        expected_delivery: it.expected_delivery || it.expectedDelivery || it["交期"] || it["预计交期"] || null,
+      }));
+      setOaPreview(items);
+    } catch (e) {
+      setOaError("JSON 解析失败：" + e.message);
+      setOaPreview(null);
+    }
+  };
+  const handleOaConfirm = async () => {
+    if (!oaPreview || !oaPreview.length) return;
+    setOaSubmitting(true);
+    try {
+      const res = await fetch("/api/materials/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: Number(projectId), items: oaPreview }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "导入失败");
+      setOaImportOpen(false);
+      setSnack({ severity: "success", text: `OA 导入成功，新增 ${json.data.count} 条物料` });
+      load();
+    } catch (e) {
+      setOaError(e.message);
+    }
+    setOaSubmitting(false);
+  };
+
+  // ===== 撤销导入 =====
   const handleUndo = async () => {
     try { await api.materials.importUndo(Number(projectId)); setUndoTime(null); load(); }
     catch { setSnack({ severity: "error", text: "撤销导入失败" }); }
@@ -444,6 +494,7 @@ export default function MaterialListPage() {
             <input type="file" hidden accept=".xlsx,.xls" onChange={(e) => { if (e.target.files?.[0]) setImportOpen(e.target.files[0]); e.target.value = ""; }} />
           </Button>
           <Button variant="outlined" onClick={handleAdd} sx={{ gap: 0.5 }}>＋ 添加一行</Button>
+          <Button variant="outlined" onClick={handleOaImportOpen} sx={{ gap: 0.5 }}>📋 OA 导入</Button>
           <Button variant="outlined" onClick={handleExport} sx={{ gap: 0.5 }}>
             ↓ 导出{selected.size > 0 ? `(${selected.size})` : ""}
           </Button>
@@ -728,6 +779,57 @@ export default function MaterialListPage() {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* ---- OA 导入弹窗 ---- */}
+        <Dialog open={oaImportOpen} onClose={() => setOaImportOpen(false)} maxWidth="md" fullWidth>
+          <DialogTitle>OA 采购申请导入</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              在 OA 采购申请页面运行提取脚本后，将剪贴板的 JSON 粘贴到下方，点击「解析预览」确认数据。
+            </Typography>
+            <TextField multiline minRows={6} maxRows={14} fullWidth
+              placeholder='粘贴 JSON 数据...'
+              value={oaJson} onChange={(e) => setOaJson(e.target.value)}
+              sx={{ mb: 2, "& .MuiInputBase-input": { fontSize: "0.82rem", fontFamily: "monospace" } }}
+            />
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button variant="outlined" onClick={handleOaParse} disabled={!oaJson.trim()}>解析预览</Button>
+            </Box>
+            {oaError && <Alert severity="error" sx={{ mt: 1 }}>{oaError}</Alert>}
+            {oaPreview && (
+              <Box sx={{ mt: 2 }}>
+                <Alert severity="info" sx={{ mb: 1 }}>已识别 {oaPreview.length} 条物料，确认无误后点击导入。</Alert>
+                <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 300 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        {["物料号","厂家","型号","数量","申请日期","备注"].map(h => <TableCell key={h} sx={{ fontWeight: 700, fontSize: "0.78rem" }}>{h}</TableCell>)}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {oaPreview.slice(0, 50).map((item, i) => (
+                        <TableRow key={i}>
+                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.part_number || "-"}</TableCell>
+                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.manufacturer || "-"}</TableCell>
+                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.model || "-"}</TableCell>
+                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.quantity || 0}</TableCell>
+                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.purchase_date || "-"}</TableCell>
+                          <TableCell sx={{ fontSize: "0.82rem" }}>{item.notes || "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOaImportOpen(false)}>取消</Button>
+            <Button onClick={handleOaConfirm} variant="contained" disabled={!oaPreview || oaPreview.length === 0 || oaSubmitting}>
+              {oaSubmitting ? "导入中…" : `确认导入 ${oaPreview ? oaPreview.length : 0} 条`}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* ---- Snackbar ---- */}
         {snack && (
