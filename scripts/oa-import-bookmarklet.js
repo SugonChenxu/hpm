@@ -112,41 +112,33 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：找"内部立项号"所在的<td>→记下列号→去下一行同列取值
+    // 提取内部立项号：宽搜索→打印完整上下文供诊断
     let orderNo = "";
     console.log("===== 扫描「内部立项号」 =====");
-    const allEls2 = document.querySelectorAll("td, th");
+    const allEls2 = document.querySelectorAll("*");
     for (const el of allEls2) {
       const txt = (el.textContent || "").trim().replace(/\s+/g, "");
-      if (txt === "内部立项号" || txt === "订单号" || txt === "立项号") {
-        console.log("找到:", el.textContent.trim(), "tag:", el.tagName);
-        // 先查同一<tr>里的下一个<td>
-        let parent = el.parentElement;
-        if (parent && parent.tagName === "TR") {
-          const sibs = parent.querySelectorAll("td, th");
-          const myIdx = Array.from(sibs).indexOf(el);
-          // 去下一行取同列
-          const nextRow = parent.nextElementSibling;
-          if (nextRow && nextRow.tagName === "TR") {
-            const nextCells = nextRow.querySelectorAll("td, th");
-            if (nextCells[myIdx]) {
-              orderNo = (nextCells[myIdx].textContent || "").trim();
-              console.log("  下一行同列(" + myIdx + "):", orderNo);
-              if (orderNo) break;
-            }
-          }
+      if (txt === "内部立项号" && el.children.length === 0) {
+        console.log("找到:", el.textContent.trim(), "| tag:", el.tagName, "| class:", el.className);
+        // 打印父级上下文
+        let p = el.parentElement;
+        for (let depth = 0; depth < 4 && p; depth++, p = p.parentElement) {
+          const snippet = (p.textContent || "").trim().replace(/\s+/g, "").slice(0, 200);
+          console.log(`  父级${depth}: tag=${p.tagName}, class=${p.className}, text[:200]=${snippet}`);
         }
-        // 如果上面没找到，尝试在同行往下找（行内布局）
-        if (!orderNo && parent) {
-          const allCells = Array.from(parent.querySelectorAll("td, th"));
-          const myIdx = allCells.indexOf(el);
-          for (let i = myIdx + 1; i < allCells.length; i++) {
-            const v = (allCells[i].textContent || "").trim();
-            if (v && v.length > 0 && v.length < 50 && !/立项|订单|型号|科目/.test(v)) {
-              orderNo = v; break;
-            }
+        // 取紧邻右侧的值 — 找到下一个含有有效数字/字母串的兄弟
+        const walk = document.createTreeWalker(el.parentElement || document.body, NodeFilter.SHOW_TEXT);
+        let foundLabel = false;
+        while (walk.nextNode()) {
+          const n = walk.currentNode;
+          if (n === el || n.contains(el) || el.contains(n)) { foundLabel = true; continue; }
+          if (!foundLabel) continue;
+          const nt = n.textContent.trim();
+          if (nt && nt.length > 0 && nt.length < 30) {
+            orderNo = nt;
+            console.log("  提取值:", orderNo);
+            break;
           }
-          if (orderNo) console.log("  同行右侧:", orderNo);
         }
         if (orderNo) break;
       }
