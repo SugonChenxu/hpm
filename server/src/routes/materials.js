@@ -291,8 +291,10 @@ router.delete("/materials/:id", (req, res) => {
   res.json({ ok: true });
 });
 
-// ===== OA 采购申请链接抓取 =====
+// ===== OA 采购申请链接抓取（支持 CORS 使书签可跨域调用） =====
 router.post("/materials/oa-fetch", async (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
   const { url, cookies } = req.body;
   if (!url) return res.status(400).json({ ok: false, error: "url 必填" });
 
@@ -377,6 +379,45 @@ router.post("/materials/oa-fetch", async (req, res) => {
   } catch (e) {
     res.json({ ok: false, error: e.message || "OA 抓取失败" });
   }
+});
+
+// ===== OA 书签直接提交（跨域）: 浏览器端提取 DOM 后 POST items，无需 cookie =====
+router.post("/materials/oa-import", (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  const { project_id, items } = req.body;
+  if (!project_id || !Array.isArray(items) || !items.length)
+    return res.json({ ok: false, error: "project_id 与 items 必填" });
+
+  let seq = nextSeq(Number(project_id));
+  const insert = db.prepare(
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes)
+     VALUES (?, ?, ?, ?, ?, '默认', ?, ?, 0, null, ?)`
+  );
+  const insertedIds = [];
+  db.transaction(() => {
+    items.forEach((it) => {
+      const r = insert.run(
+        Number(project_id), seq++,
+        it.part_number || "", it.manufacturer || "", it.model || "",
+        parseFloat(it.quantity) || 0,
+        it.purchase_date || null,
+        it.notes || ""
+      );
+      insertedIds.push(r.lastInsertRowid);
+    });
+  })();
+  // 快照
+  db.prepare("INSERT INTO material_import_snapshots (project_id, ids_json) VALUES (?, ?)")
+    .run(Number(project_id), JSON.stringify(insertedIds));
+  res.json({ ok: true, data: { count: items.length, ids: insertedIds } });
+});
+
+// 处理 CORS 预检
+router.options("/materials/oa-import", (req, res) => {
+  res.set("Access-Control-Allow-Origin", "*");
+  res.set("Access-Control-Allow-Headers", "Content-Type");
+  res.sendStatus(204);
 });
 
 export default router;
