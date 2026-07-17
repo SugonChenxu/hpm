@@ -114,9 +114,15 @@
   if (bestResult) {
     // 提取内部立项号
     let orderNo = "";
+    console.log("===== 扫描「立项」相关文字 =====");
     const allEls2 = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
     for (const el of allEls2) {
       const txt = (el.textContent || "").trim();
+      if (txt.includes("立项") || txt.includes("订单")) {
+        const parent = el.closest("tr, div, dl, li");
+        const ptx = (parent || el.parentElement)?.textContent || "";
+        console.log("找到:", txt, "→ 父容器文字:", ptx.slice(0, 100));
+      }
       if (txt === "内部立项号" || txt === "订单号" || txt === "立项号") {
         const parent = el.closest("tr, div, dl, li");
         const ptx = (parent || el.parentElement)?.textContent || "";
@@ -124,15 +130,19 @@
         if (om) { orderNo = om[0]; break; }
       }
     }
+    console.log("内部立项号提取结果:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
     console.log("===== 最终结果 =====");
     console.log("选中表格:", bestResult.tableIndex, "| 列:", bestResult.matched.join(", "));
     console.log("申请日期:", formDate || "未找到");
+    console.log("内部立项号:", orderNo || "❌ 未找到");
     console.log("第1条:", JSON.stringify(bestResult.items[0]));
     console.log("全部JSON:\n" + json);
 
     navigator.clipboard.writeText(json).then(() => {
-      alert("提取 " + bestResult.items.length + " 条 | 型号:" + (bestResult.items[0]?.model || "❌") + " | 日期:" + (formDate || "❌") + "\n\n已复制。请把 Console 中「表格X」的输出截图发我。");
+      alert("提取 " + bestResult.items.length + " 条\n" +
+        "型号: " + (bestResult.items[0]?.model || "❌") + " | 日期: " + (formDate || "❌") + "\n" +
+        "立项号: " + (orderNo || "❌") + "\n\n已复制。");
     }).catch(() => {
       const ta = document.createElement("textarea"); ta.value = json;
       document.body.appendChild(ta); ta.select(); document.execCommand("copy");
