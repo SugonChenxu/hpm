@@ -112,29 +112,44 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号（同申请日期策略）
+    // 提取内部立项号：先诊断页面文本是否含这些词
     let orderNo = "";
-    console.log("===== 扫描「内部立项号」(同申请日期策略) =====");
-    const allEls2 = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
-    for (const el of allEls2) {
-      const txt = (el.textContent || "").trim();
-      if (txt === "内部立项号" || txt === "订单号" || txt === "内部订单号") {
-        const parent = el.closest("tr, div, dl, li, table");
-        const ptx = (parent || el.parentElement)?.textContent || "";
-        console.log("找到标签:", txt, "| 父容器首200字:", ptx.slice(0, 200));
-        // 找"内部立项号"后面紧跟的纯数字（4-8位优先）、或字母数字串
-        const idx = ptx.indexOf(txt);
-        if (idx >= 0) {
-          const after = ptx.slice(idx + txt.length);
-          const m = after.match(/[：:\s]*(\d{4,8})/);
-          if (m) { orderNo = m[1]; console.log("  匹配纯数字:", orderNo); }
-          else {
-            const m2 = after.match(/[：:\s]*([A-Za-z0-9_-]{4,20})/);
-            if (m2) { orderNo = m2[1]; console.log("  匹配字母数字:", orderNo); }
-          }
-        }
-        if (orderNo) break;
+    const allText = document.body.innerText;
+    console.log("===== 诊断：搜索关键词 =====");
+    ["内部立项号","立项号","订单号","内部订单号","项目号","立项","订单"].forEach(kw => {
+      const idx = allText.indexOf(kw);
+      if (idx >= 0) {
+        console.log(`✅ "${kw}" 在位置${idx}，上下文: ${allText.slice(Math.max(0,idx-10), idx+60)}`);
+      } else {
+        console.log(`❌ "${kw}" 未找到`);
       }
+    });
+    // 尝试从"内部立项号"后取数字
+    const labelIdx = allText.indexOf("内部立项号");
+    if (labelIdx >= 0) {
+      const after = allText.slice(labelIdx + 5);
+      const m = after.match(/[：:\s]*(\d{4,8})/);
+      if (m) orderNo = m[1];
+      if (!orderNo) {
+        const m2 = after.match(/[：:\s]*([A-Za-z0-9_-]{4,20})/);
+        if (m2) orderNo = m2[1];
+      }
+    }
+    // 检查 iframe
+    if (!orderNo) {
+      const iframes = document.querySelectorAll("iframe");
+      iframes.forEach(fr => {
+        try {
+          const ftext = fr.contentDocument?.body?.innerText || "";
+          const idx2 = ftext.indexOf("内部立项号");
+          if (idx2 >= 0) {
+            const after = ftext.slice(idx2 + 5);
+            const m = after.match(/[：:\s]*(\d{4,8})/);
+            if (m && !orderNo) orderNo = m[1];
+            console.log("在 iframe 中找到", m ? m[1] : "无数字");
+          }
+        } catch(e) {}
+      });
     }
     console.log("内部立项号:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
