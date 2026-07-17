@@ -380,7 +380,7 @@ export default function MaterialListPage() {
     const exportRows = selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
     exportMaterialsExcel(exportRows);
   };
-  const handleOaImportOpen = () => { setOaImportOpen(true); setOaJson(""); setOaPreview(null); setOaError(null); };
+  const handleOaImportOpen = () => { setOaImportOpen(true); setOaUrl(""); setOaJson(""); setOaPreview(null); setOaError(null); };
   const handleOaFetch = async () => {
     setOaError(null); setOaPreview(null); setOaFetching(true);
     if (oaCookies) localStorage.setItem("forge.oa.cookies", oaCookies);
@@ -814,8 +814,10 @@ export default function MaterialListPage() {
         <Dialog open={oaImportOpen} onClose={() => setOaImportOpen(false)} maxWidth="md" fullWidth>
           <DialogTitle>OA 采购申请导入</DialogTitle>
           <DialogContent>
-            {/* ---- URL 抓取模式 ---- */}
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>方式一：直接输入 OA 链接抓取</Typography>
+            {/* ---- Cookie 抓取模式（主） ---- */}
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+              粘贴 OA 采购申请链接，填入 Cookie 后抓取
+            </Typography>
             <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
               <TextField size="small" fullWidth placeholder="OA 采购申请页 URL..."
                 value={oaUrl} onChange={(e) => setOaUrl(e.target.value)}
@@ -826,10 +828,15 @@ export default function MaterialListPage() {
                 {oaFetching ? "抓取中…" : "抓取"}
               </Button>
             </Box>
-            <TextField size="small" fullWidth label="Cookie（用于登录态，选填）"
+            <TextField size="small" fullWidth
+              label="Cookie（获取方式见下方说明）"
               value={oaCookies} onChange={(e) => setOaCookies(e.target.value)}
-              sx={{ mb: 1.5, "& .MuiInputBase-input": { fontSize: "0.78rem", fontFamily: "monospace" } }}
+              sx={{ mb: 0.5, "& .MuiInputBase-input": { fontSize: "0.78rem", fontFamily: "monospace" } }}
+              helperText="仅需设置一次，自动保存。过期后重新获取替换。"
             />
+            <Typography variant="caption" color="text.secondary" component="div" sx={{ mb: 2 }}>
+              💡 <b>获取 Cookie</b>：OA页面 → F12 → <b>Network</b>标签 → 刷新 → 点任意请求 → 右侧<b>Cookie</b>标签 → 表格全选复制 → 粘贴到此处。
+            </Typography>
 
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
               <Box sx={{ flex: 1, borderTop: "1px solid", borderColor: "divider" }} />
@@ -837,8 +844,8 @@ export default function MaterialListPage() {
               <Box sx={{ flex: 1, borderTop: "1px solid", borderColor: "divider" }} />
             </Box>
 
-            {/* ---- JSON 粘贴模式 ---- */}
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>方式二：粘贴 JSON（来自 Console 提取脚本）</Typography>
+            {/* ---- JSON 粘贴模式（辅） ---- */}
+            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>粘贴 JSON（来自书签脚本 / Console 提取）</Typography>
             <TextField multiline minRows={4} maxRows={10} fullWidth
               placeholder='粘贴 JSON 数据...'
               value={oaJson} onChange={(e) => setOaJson(e.target.value)}

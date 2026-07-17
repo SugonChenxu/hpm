@@ -302,7 +302,7 @@ router.post("/materials/oa-fetch", async (req, res) => {
     const headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
     };
-    if (cookies) headers["Cookie"] = cookies;
+    if (cookies) headers["Cookie"] = cookies.replace(/[^\x20-\x7E]/g, "").trim();
 
     const resp = await fetch(url, { headers, redirect: "follow", timeout: 30000 });
     if (!resp.ok) throw new Error("OA 页面返回 HTTP " + resp.status);
