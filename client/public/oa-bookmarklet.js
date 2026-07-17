@@ -15,9 +15,9 @@
   function matchField(h) {
     const t = norm(h);
     if (!t) return null;
-    if (t.includes("物料编号") || t.includes("料号")) return "part_number";
+    if (t.includes("物料") || t.includes("料号") || t === "编号") return "part_number";
     if (t.includes("厂家") || t.includes("供应商") || t.includes("品牌") || t.includes("厂商")) return "manufacturer";
-    if (t.includes("型号") || t.includes("描述") || t.includes("规格")) return "model";
+    if (t.includes("型号") || t.includes("规格")) return "model";
     if (t.includes("数量")) return "quantity";
     if (t.includes("备注") || t.includes("说明")) return "notes";
     return null;

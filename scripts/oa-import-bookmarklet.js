@@ -50,11 +50,10 @@
   function matchField(headerText) {
     const hn = norm(headerText);
     if (!hn) return null;
-    if (hn.includes("物料编号") || hn.includes("料号") || hn === "编号" || hn.includes("partno")) return "part_number";
+    if (hn.includes("物料") || hn.includes("料号") || hn === "编号" || hn.includes("partno")) return "part_number";
     if (hn.includes("厂家") || hn.includes("供应商") || hn.includes("品牌") || hn.includes("厂商")) return "manufacturer";
-    // 型号宽容匹配：含「型号」或「描述」或「规格」即视为型号列
-    if (hn.includes("型号") || hn.includes("描述") || hn.includes("规格")) return "model";
-    if (hn.includes("数量") || hn === "qty") return "quantity";
+    if (hn.includes("型号") || hn.includes("规格")) return "model";
+    if (hn.includes("数量")) return "quantity";
     if (hn === "单价" || hn.includes("unitprice")) return "_price";
     if (hn === "金额" || hn.includes("总价") || hn.includes("total")) return "_amount";
     if (hn.includes("备注") || hn.includes("说明") || hn.includes("用途") || hn.includes("remark")) return "notes";
