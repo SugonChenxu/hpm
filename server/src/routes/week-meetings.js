@@ -32,11 +32,62 @@ router.get("/week-meetings", (req, res) => {
     "SELECT * FROM week_meetings WHERE week_key = ? ORDER BY weekday, start_time"
   ).all(weekKey);
 
+  // 本周实际输出物
   const outputs = db.prepare(
     "SELECT * FROM meeting_outputs WHERE week_key = ? ORDER BY weekday, sort_order, id"
   ).all(weekKey);
 
-  // 从 projects 表拉取例会（projects 表为硬删除，无 deleted_at 列）
+  // ===== 周期性输出物：从历史周拉取带 cycle 的模板，按周期规则判断本周是否显示 =====
+  const cycleTemplates = db.prepare(
+    "SELECT * FROM meeting_outputs WHERE cycle != '' AND cycle IS NOT NULL"
+  ).all();
+
+  // 计算两个周 key 之间的周数差
+  function weeksBetween(a, b) {
+    const [ya, ma, da] = a.split("-").map(Number);
+    const [yb, mb, db] = b.split("-").map(Number);
+    return Math.round((new Date(yb, mb-1, db) - new Date(ya, ma-1, da)) / (7*24*60*60*1000));
+  }
+  // 判断本周是否为该月第一周（周一落在 1-7 号）
+  function isFirstWeekOfMonth(wk) {
+    return parseInt(wk.split("-")[2], 10) <= 7;
+  }
+
+  // 已有输出物的 key（避免重复）
+  const existingKeys = new Set(outputs.map(o => o.weekday + "|" + o.title));
+
+  const recurringOutputs = [];
+  for (const tpl of cycleTemplates) {
+    // 跳过本周已创建的
+    if (tpl.week_key === weekKey) continue;
+    if (existingKeys.has(tpl.weekday + "|" + tpl.title)) continue;
+
+    let shouldShow = false;
+    const weekDiff = weeksBetween(tpl.week_key, weekKey);
+    if (weekDiff < 0) continue; // 不回溯
+
+    if (tpl.cycle === "weekly") {
+      shouldShow = true;
+    } else if (tpl.cycle === "biweekly") {
+      shouldShow = weekDiff % 2 === 0;
+    } else if (tpl.cycle === "monthly") {
+      shouldShow = isFirstWeekOfMonth(weekKey);
+    }
+
+    if (shouldShow) {
+      recurringOutputs.push({
+        ...tpl,
+        id: "recurring_" + tpl.id, // 虚拟 ID，标记为周期项
+        week_key: weekKey,
+        is_recurring: true,
+        original_week_key: tpl.week_key,
+      });
+    }
+  }
+
+  const allOutputs = [...outputs, ...recurringOutputs];
+
+  // 从 projects 表拉取例会
   const projects = db.prepare(
     "SELECT id, code, name, theme_color, meeting_time FROM projects WHERE meeting_time != ''"
   ).all();
@@ -56,7 +107,7 @@ router.get("/week-meetings", (req, res) => {
     })
     .filter(Boolean);
 
-  res.json({ ok: true, data: { meetings, outputs, recurring } });
+  res.json({ ok: true, data: { meetings, outputs: allOutputs, recurring } });
 });
 
 // POST /week-meetings

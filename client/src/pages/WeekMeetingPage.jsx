@@ -276,6 +276,22 @@ export default function WeekMeetingPage() {
   }, [weekKey]);
 
   const handleToggleOutput = useCallback(async (item) => {
+    // 周期项（虚拟ID）→ 先创建实体记录再切换
+    if (item.is_recurring || String(item.id).startsWith("recurring_")) {
+      try {
+        const created = await api.weekMeetings.meetingOutputs.add({
+          week_key: weekKey, weekday: item.weekday, title: item.title,
+        });
+        if (item.is_done) {
+          // 如果原模板已完成，新记录先创建再切换
+          await api.weekMeetings.meetingOutputs.update(created.id, { is_done: 1 });
+        }
+        loadMeetingData(weekKey);
+      } catch {
+        setSnackbar({ open: true, message: "操作失败", severity: "error" });
+      }
+      return;
+    }
     const nextDone = item.is_done ? 0 : 1;
     setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: nextDone } : o)) }));
     try {
@@ -284,7 +300,7 @@ export default function WeekMeetingPage() {
       setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: item.is_done } : o)) }));
       setSnackbar({ open: true, message: "更新失败", severity: "error" });
     }
-  }, []);
+  }, [weekKey]);
 
   const handleDeleteOutput = useCallback(async (item) => {
     setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).filter((o) => o.id !== item.id) }));
@@ -297,21 +313,36 @@ export default function WeekMeetingPage() {
   }, []);
 
   const handleSetCycle = useCallback(async (itemId, cycle) => {
+    // 周期项（虚拟ID）→ 先创建实体记录
+    let realId = itemId;
+    const allItems = Object.values(outputs).flat();
+    const item = allItems.find(o => o.id === itemId);
+    if (item && (item.is_recurring || String(itemId).startsWith("recurring_"))) {
+      try {
+        const created = await api.weekMeetings.meetingOutputs.add({
+          week_key: weekKey, weekday: item.weekday, title: item.title,
+        });
+        realId = created.id;
+      } catch {
+        setSnackbar({ open: true, message: "操作失败", severity: "error" });
+        return;
+      }
+    }
     // 乐观更新
     setOutputs((prev) => {
       const next = { ...prev };
       for (const d of Object.keys(next)) {
-        next[d] = next[d].map((o) => (o.id === itemId ? { ...o, cycle } : o));
+        next[d] = next[d].map((o) => (o.id === itemId ? { ...o, id: realId, cycle, is_recurring: false } : o));
       }
       return next;
     });
     try {
-      await api.weekMeetings.meetingOutputs.update(itemId, { cycle });
+      await api.weekMeetings.meetingOutputs.update(realId, { cycle });
     } catch {
       loadMeetingData(weekKey);
       setSnackbar({ open: true, message: "设置周期失败", severity: "error" });
     }
-  }, [weekKey]);
+  }, [weekKey, outputs]);
 
   const changeWeek = (delta) => {
     const [y, m, d] = weekKey.split("-").map(Number);
@@ -534,7 +565,11 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, py: 0.25 }}>
       {(items || []).map((it) => (
-        <Box key={it.id} sx={{ display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1, "&:hover": { bgcolor: "action.hover" }, "&:hover .act-btn": { opacity: 1 } }}>
+        <Box key={it.id} sx={{
+          display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1,
+          "&:hover": { bgcolor: "action.hover" }, "&:hover .act-btn": { opacity: 1 },
+          ...(it.is_recurring ? { border: "1px dashed", borderColor: "divider", bgcolor: "action.hover" } : {}),
+        }}>
           <Checkbox
             size="small"
             checked={!!it.is_done}
@@ -544,6 +579,10 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
           <Typography sx={{ flex: 1, fontSize: "0.72rem", lineHeight: 1.3, textDecoration: it.is_done ? "line-through" : "none", color: it.is_done ? "text.disabled" : "text.primary", wordBreak: "break-all" }}>
             {it.title}
           </Typography>
+          {/* 周期项标识 */}
+          {it.is_recurring && (
+            <Box sx={{ fontSize: "0.55rem", color: "text.secondary", flexShrink: 0, opacity: 0.7 }}>↻周期</Box>
+          )}
           {/* 周期标签 */}
           {it.cycle && (
             <Box
