@@ -112,43 +112,33 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：标签在SPAN内→找SPAN的同级下一个元素
+    // 提取内部立项号：找label SPAN→取父级(input_field)→找input/select
     let orderNo = "";
-    console.log("===== 内部立项号提取(同层兄弟) =====");
-    const spans = document.querySelectorAll("span.field_labe, span.field_label, span[class*=label], span[class*=Label]");
-    for (const sp of spans) {
-      const txt = (sp.textContent || "").trim().replace(/\s+/g, "");
-      if (txt === "内部立项号" || txt === "订单号") {
-        console.log("找到 label SPAN, parent:", sp.parentElement?.tagName, "class:", sp.parentElement?.className);
-        // 1) 先试 SPAN 的下一个兄弟
-        let next = sp.nextElementSibling;
-        while (next && !(next.textContent || "").trim()) next = next.nextElementSibling;
-        if (next) {
-          const v = (next.textContent || "").trim();
-          console.log("  SPAN 下一个兄弟:", v);
-          if (v) { orderNo = v; break; }
-        }
-        // 2) 退而求其次：父级的下一个兄弟
-        if (!orderNo && sp.parentElement) {
-          let pNext = sp.parentElement.nextElementSibling;
-          while (pNext && !(pNext.textContent || "").trim()) pNext = pNext.nextElementSibling;
+    console.log("===== 内部立项号提取(input字段) =====");
+    const allLbl = document.querySelectorAll("span, label, div");
+    for (const el of allLbl) {
+      if (el.children.length > 0) continue; // 只匹配纯文本叶子
+      const txt = (el.textContent || "").trim().replace(/\s+/g, "");
+      if (txt === "内部立项号") {
+        const parent = el.parentElement;
+        console.log("找到 label, parent:", parent?.tagName, "class:", parent?.className);
+        // 1) 父级容器内找 input/select
+        if (parent) {
+          const input = parent.querySelector("input, select, textarea");
+          if (input) {
+            orderNo = input.value || (input.textContent || "").trim();
+            console.log("  → input value:", orderNo);
+            if (orderNo) break;
+          }
+          // 2) 父级下一个兄弟
+          let pNext = parent.nextElementSibling;
           if (pNext) {
             const v = (pNext.textContent || "").trim();
-            console.log("  父级下一个兄弟:", v);
-            if (v) orderNo = v;
+            console.log("  父级下一兄弟:", v);
+            if (v) { orderNo = v; break; }
           }
         }
         break;
-      }
-    }
-    if (!orderNo) {
-      // 兜底：再宽搜"内部立项号"文本
-      const allEls = document.querySelectorAll("span, div, td, th");
-      for (const el of allEls) {
-        if ((el.textContent || "").trim() === "内部立项号") {
-          const sib = el.nextElementSibling;
-          if (sib && (sib.textContent || "").trim()) { orderNo = sib.textContent.trim(); break; }
-        }
       }
     }
     console.log("内部立项号:", orderNo || "❌ 未找到");
