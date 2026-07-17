@@ -112,32 +112,25 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：宽搜索→打印完整上下文供诊断
+    // 提取内部立项号（同申请日期策略）
     let orderNo = "";
-    console.log("===== 扫描「内部立项号」 =====");
-    const allEls2 = document.querySelectorAll("*");
+    console.log("===== 扫描「内部立项号」(同申请日期策略) =====");
+    const allEls2 = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
     for (const el of allEls2) {
-      const txt = (el.textContent || "").trim().replace(/\s+/g, "");
-      if (txt === "内部立项号" && el.children.length === 0) {
-        console.log("找到:", el.textContent.trim(), "| tag:", el.tagName, "| class:", el.className);
-        // 打印父级上下文
-        let p = el.parentElement;
-        for (let depth = 0; depth < 4 && p; depth++, p = p.parentElement) {
-          const snippet = (p.textContent || "").trim().replace(/\s+/g, "").slice(0, 200);
-          console.log(`  父级${depth}: tag=${p.tagName}, class=${p.className}, text[:200]=${snippet}`);
-        }
-        // 取紧邻右侧的值 — 找到下一个含有有效数字/字母串的兄弟
-        const walk = document.createTreeWalker(el.parentElement || document.body, NodeFilter.SHOW_TEXT);
-        let foundLabel = false;
-        while (walk.nextNode()) {
-          const n = walk.currentNode;
-          if (n === el || n.contains(el) || el.contains(n)) { foundLabel = true; continue; }
-          if (!foundLabel) continue;
-          const nt = n.textContent.trim();
-          if (nt && nt.length > 0 && nt.length < 30) {
-            orderNo = nt;
-            console.log("  提取值:", orderNo);
-            break;
+      const txt = (el.textContent || "").trim();
+      if (txt === "内部立项号" || txt === "订单号" || txt === "内部订单号") {
+        const parent = el.closest("tr, div, dl, li, table");
+        const ptx = (parent || el.parentElement)?.textContent || "";
+        console.log("找到标签:", txt, "| 父容器首200字:", ptx.slice(0, 200));
+        // 找"内部立项号"后面紧跟的纯数字（4-8位优先）、或字母数字串
+        const idx = ptx.indexOf(txt);
+        if (idx >= 0) {
+          const after = ptx.slice(idx + txt.length);
+          const m = after.match(/[：:\s]*(\d{4,8})/);
+          if (m) { orderNo = m[1]; console.log("  匹配纯数字:", orderNo); }
+          else {
+            const m2 = after.match(/[：:\s]*([A-Za-z0-9_-]{4,20})/);
+            if (m2) { orderNo = m2[1]; console.log("  匹配字母数字:", orderNo); }
           }
         }
         if (orderNo) break;
