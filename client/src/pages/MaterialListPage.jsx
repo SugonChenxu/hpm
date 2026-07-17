@@ -336,11 +336,11 @@ export default function MaterialListPage() {
   const submitBatchEdit = async (statusOrValue) => {
     if (!batchEditDlg) return;
     const { field, ids } = batchEditDlg;
-    // statusOverride 为字符串时是状态值，否则读 batchEditDlg.value（onClick 场景）
-    // 传 explicit 解决 Enter 提交时 onChange 尚未更新 state 的滞后问题
-    const value = typeof statusOrValue === "string" && batchEditDlg.field === "material_status"
-      ? statusOrValue
-      : (statusOrValue !== undefined ? statusOrValue : batchEditDlg.value);
+    // 防御：onClick 传 event 对象 → 忽略，读 batchEditDlg.value
+    // 显式传 string：Enter 传 e.target.value，状态按钮传 s
+    const value = (typeof statusOrValue === "string")
+      ? (field === "material_status" ? statusOrValue : statusOrValue)  // 状态 或 Enter 显式值
+      : batchEditDlg.value;  // onClick 无参 → 读 state
     if (!value && value !== 0) return;
     try {
       for (const id of ids) {
@@ -721,7 +721,7 @@ export default function MaterialListPage() {
                   )}
                   <DialogActions sx={{ mt: 2, px: 0 }}>
                     <Button onClick={() => setBatchEditDlg(null)}>取消</Button>
-                    <Button onClick={submitBatchEdit} variant="contained">确认修改</Button>
+                    <Button onClick={() => submitBatchEdit()} variant="contained">确认修改</Button>
                   </DialogActions>
                 </>
               )}
