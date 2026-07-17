@@ -19,19 +19,29 @@
     return null;
   }
 
-  // ===== 申请日期（多策略） =====
+  // ===== 申请日期（同内部立项号策略：找label→父级input_field→input.value） =====
   let formDate = null;
-  // 策略A: 找含"申请日期"的元素，取其父容器内所有文字匹配日期
-  const allEls = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
-  for (const el of allEls) {
-    if ((el.textContent || "").trim() === "申请日期") {
-      const parent = el.closest("tr, div, dl, li");
-      const txt = (parent || el.parentElement)?.textContent || "";
-      const m = txt.match(/(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})/);
+  const allLblDate = document.querySelectorAll("span, label, div");
+  for (const el of allLblDate) {
+    if (el.children.length > 0) continue;
+    const txt = (el.textContent || "").trim().replace(/\s+/g, "");
+    if (txt === "申请日期") {
+      const parent = el.parentElement;
+      if (parent) {
+        const input = parent.querySelector("input, select, textarea");
+        if (input && input.value) {
+          const m = input.value.match(/(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})/);
+          if (m) { formDate = `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`; break; }
+        }
+      }
+      // 兜底：父容器文本匹配
+      const p = el.closest("tr, div, dl, li");
+      const ptx = (p || el.parentElement)?.textContent || "";
+      const m = ptx.match(/(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})/);
       if (m) { formDate = `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`; break; }
     }
   }
-  // 策略B: 正则兜底
+  // 兜底：全页正则
   if (!formDate) {
     const m = document.body.innerText.match(/申请日期[\s\S]*?(\d{4})[年\-/.](\d{1,2})[月\-/.](\d{1,2})/);
     if (m) formDate = `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
