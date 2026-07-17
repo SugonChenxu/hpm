@@ -315,8 +315,12 @@ router.post("/materials/oa-fetch", async (req, res) => {
 
     // 2. 找物料表格 — 找到包含"物料编号"或"料号"的 <table>
     const tableMatch = html.match(/<table[\s\S]*?物料编号[\s\S]*?<\/table>/i)
-      || html.match(/<table[\s\S]*?料号[\s\S]*?<\/table>/i);
-    if (!tableMatch) throw new Error("未在页面中找到物料表格（需包含「物料编号」列）");
+      || html.match(/<table[\s\S]*?料号[\s\S]*?<\/table>/i)
+      || html.match(/<table[\s\S]*?part_no[\s\S]*?<\/table>/i);
+    if (!tableMatch) {
+      const preview = html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 600);
+      throw new Error("未找到物料表格。页面是否加载完整？前600字: " + preview);
+    }
 
     const tableHtml = tableMatch[0];
     const trs = tableHtml.match(/<tr[\s>][\s\S]*?<\/tr>/gi) || [];
