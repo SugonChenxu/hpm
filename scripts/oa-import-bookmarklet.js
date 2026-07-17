@@ -112,31 +112,33 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号
-    let orderNo = "";
+    // 提取内部立项号：找元素的父级行→取下一个非空非标签单元格
     const allText = document.body.innerText;
-    const lines = allText.split(/\n/);
-    console.log("===== 搜索「内部立项号」所在行 =====");
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes("内部立项号")) {
-        const cols = lines[i].split(/\s+/).filter(Boolean);
-        console.log("行" + i + " (有" + cols.length + "列):", cols.join(" | "));
-        const ci = cols.indexOf("内部立项号");
-        if (ci >= 0 && ci + 1 < cols.length) {
-          // 取同行下一列
-          orderNo = cols[ci + 1];
-        }
-        // 如果下一列仍是标签（含中文），继续往后找
-        if (orderNo && /[\u4e00-\u9fff]/.test(orderNo)) {
-          for (let j = ci + 2; j < cols.length; j++) {
-            if (!/[\u4e00-\u9fff]/.test(cols[j])) { orderNo = cols[j]; break; }
+    let orderNo = "";
+    console.log("===== 内部立项号提取(行遍历) =====");
+    const allCells = document.querySelectorAll("td, th");
+    for (const cell of allCells) {
+      const txt = (cell.textContent || "").trim().replace(/\s+/g, "");
+      if (txt === "内部立项号" || txt === "订单号") {
+        const row = cell.closest("tr");
+        if (!row) continue;
+        const sibs = Array.from(row.querySelectorAll("td, th"));
+        const idx = sibs.indexOf(cell);
+        console.log("找到标签 cell[", idx, "], 行(" + sibs.length + "cell):", sibs.map(c => c.textContent.trim().slice(0,15)).join(" | "));
+        // 取后续不含中文且不含"标签关键字"的格子
+        for (let i = idx + 1; i < sibs.length; i++) {
+          const v = (sibs[i].textContent || "").trim();
+          if (v && !/[\u4e00-\u9fff]/.test(v) && !/立项|订单|型号|科目|名称|编号/.test(v)) {
+            orderNo = v;
+            break;
           }
         }
-        if (!orderNo && i + 1 < lines.length) {
-          // 退一步：下一行同列
-          const nextCols = lines[i + 1].split(/\s+/).filter(Boolean);
-          if (nextCols[ci]) orderNo = nextCols[ci];
-          console.log("  下一行同列:", orderNo);
+        // 兜底：找下一个非空格子
+        if (!orderNo) {
+          for (let i = idx + 1; i < sibs.length; i++) {
+            const v = (sibs[i].textContent || "").trim();
+            if (v) { orderNo = v; break; }
+          }
         }
         break;
       }
