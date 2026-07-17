@@ -503,11 +503,11 @@ export default function MaterialListPage() {
                         userSelect: "none", position: "relative", overflow: "visible",
                         fontSize: "0.8rem", whiteSpace: "nowrap", px: 1,
                       }}
-                      onClick={() => col.key !== "material_status" && handleSort(col.key)}
+                      onClick={() => handleSort(col.key)}
                     >
                       <Box sx={{ display: "flex", alignItems: "center" }}>
                         {col.label}
-                        {col.key !== "material_status" && <SortArrow dir={sortKey === col.key ? sortDir : null} />}
+                        <SortArrow dir={sortKey === col.key ? sortDir : null} />
                       </Box>
                       <Box
                         sx={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 4, cursor: "col-resize", "&:hover": { bgcolor: "primary.light" } }}
