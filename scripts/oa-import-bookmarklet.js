@@ -112,20 +112,34 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：标签和值在不同行→按行列定位
+    // 提取内部立项号
     let orderNo = "";
     const allText = document.body.innerText;
     const lines = allText.split(/\n/);
-    let labelLineIdx = -1, labelCol = -1;
+    console.log("===== 搜索「内部立项号」所在行 =====");
     for (let i = 0; i < lines.length; i++) {
-      const cols = lines[i].split(/\t| {2,}/).filter(Boolean);
-      const ci = cols.findIndex(c => c === "内部立项号");
-      if (ci >= 0) { labelLineIdx = i; labelCol = ci; break; }
-    }
-    if (labelLineIdx >= 0 && labelLineIdx + 1 < lines.length) {
-      const nextCols = lines[labelLineIdx + 1].split(/\t| {2,}/).filter(Boolean);
-      if (nextCols[labelCol]) orderNo = nextCols[labelCol];
-      console.log("标签行:", labelLineIdx, "列:", labelCol, "→ 取值:", orderNo);
+      if (lines[i].includes("内部立项号")) {
+        const cols = lines[i].split(/\s+/).filter(Boolean);
+        console.log("行" + i + " (有" + cols.length + "列):", cols.join(" | "));
+        const ci = cols.indexOf("内部立项号");
+        if (ci >= 0 && ci + 1 < cols.length) {
+          // 取同行下一列
+          orderNo = cols[ci + 1];
+        }
+        // 如果下一列仍是标签（含中文），继续往后找
+        if (orderNo && /[\u4e00-\u9fff]/.test(orderNo)) {
+          for (let j = ci + 2; j < cols.length; j++) {
+            if (!/[\u4e00-\u9fff]/.test(cols[j])) { orderNo = cols[j]; break; }
+          }
+        }
+        if (!orderNo && i + 1 < lines.length) {
+          // 退一步：下一行同列
+          const nextCols = lines[i + 1].split(/\s+/).filter(Boolean);
+          if (nextCols[ci]) orderNo = nextCols[ci];
+          console.log("  下一行同列:", orderNo);
+        }
+        break;
+      }
     }
     console.log("内部立项号:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
