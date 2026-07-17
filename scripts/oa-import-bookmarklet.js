@@ -112,34 +112,45 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号：宽搜→打印找到的标签+父级
+    // 提取内部立项号：标签在SPAN内→找SPAN的同级下一个元素
     let orderNo = "";
-    console.log("===== 内部立项号提取 =====");
-    const allCells = document.querySelectorAll("*");
-    for (const cell of allCells) {
-      const txt = (cell.textContent || "").trim().replace(/\s+/g, "");
-      if (txt === "内部立项号" && cell.children.length === 0) {
-        console.log("找到:", cell.tagName, cell.className, "| parent:", cell.parentElement?.tagName);
-        // 遍历所有父级，找最近的 TR/TBODY，再找同行/表的值
-        let row = cell.closest("tr") || cell.closest("[class*=row]") || cell.parentElement;
-        if (row) {
-          const sibs = Array.from(row.querySelectorAll("td, th, span, div, input"));
-          const idx = sibs.indexOf(cell);
-          console.log("  行(" + sibs.length + "子):", sibs.map(c => (c.textContent||"").trim().slice(0,12)).join("|"));
-          // 取下一个非标签非空格子
-          for (let i = idx + 1; i < sibs.length; i++) {
-            const v = (sibs[i].textContent || "").trim();
-            if (v && !/内[部立]|订单|科目|名称|编号|型号/.test(v) && v !== "无") {
-              orderNo = v;
-              console.log("  → 取:", orderNo);
-              break;
-            }
+    console.log("===== 内部立项号提取(同层兄弟) =====");
+    const spans = document.querySelectorAll("span.field_labe, span.field_label, span[class*=label], span[class*=Label]");
+    for (const sp of spans) {
+      const txt = (sp.textContent || "").trim().replace(/\s+/g, "");
+      if (txt === "内部立项号" || txt === "订单号") {
+        console.log("找到 label SPAN, parent:", sp.parentElement?.tagName, "class:", sp.parentElement?.className);
+        // 1) 先试 SPAN 的下一个兄弟
+        let next = sp.nextElementSibling;
+        while (next && !(next.textContent || "").trim()) next = next.nextElementSibling;
+        if (next) {
+          const v = (next.textContent || "").trim();
+          console.log("  SPAN 下一个兄弟:", v);
+          if (v) { orderNo = v; break; }
+        }
+        // 2) 退而求其次：父级的下一个兄弟
+        if (!orderNo && sp.parentElement) {
+          let pNext = sp.parentElement.nextElementSibling;
+          while (pNext && !(pNext.textContent || "").trim()) pNext = pNext.nextElementSibling;
+          if (pNext) {
+            const v = (pNext.textContent || "").trim();
+            console.log("  父级下一个兄弟:", v);
+            if (v) orderNo = v;
           }
         }
         break;
       }
     }
-    if (!orderNo) console.log("❌ 未找到标签元素");
+    if (!orderNo) {
+      // 兜底：再宽搜"内部立项号"文本
+      const allEls = document.querySelectorAll("span, div, td, th");
+      for (const el of allEls) {
+        if ((el.textContent || "").trim() === "内部立项号") {
+          const sib = el.nextElementSibling;
+          if (sib && (sib.textContent || "").trim()) { orderNo = sib.textContent.trim(); break; }
+        }
+      }
+    }
     console.log("内部立项号:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
     console.log("===== 最终结果 =====");
