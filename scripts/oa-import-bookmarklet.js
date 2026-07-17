@@ -112,25 +112,28 @@
 
   // ===== 输出 =====
   if (bestResult) {
-    // 提取内部立项号
+    // 提取内部立项号（同申请日期策略：找标签→取父容器文字→正则提取）
     let orderNo = "";
     console.log("===== 扫描「立项」相关文字 =====");
     const allEls2 = document.querySelectorAll("td, th, span, div, dt, dd, label, p");
     for (const el of allEls2) {
       const txt = (el.textContent || "").trim();
-      if (txt.includes("立项") || txt.includes("订单")) {
-        const parent = el.closest("tr, div, dl, li");
+      if (txt.includes("立项")) {
+        const parent = el.closest("tr, div, dl, li, td");
         const ptx = (parent || el.parentElement)?.textContent || "";
-        console.log("找到:", txt, "→ 父容器文字:", ptx.slice(0, 100));
-      }
-      if (txt === "内部立项号" || txt === "订单号" || txt === "立项号") {
-        const parent = el.closest("tr, div, dl, li");
-        const ptx = (parent || el.parentElement)?.textContent || "";
-        const om = ptx.match(/[A-Za-z0-9_-]{4,}/);
-        if (om) { orderNo = om[0]; break; }
+        console.log("找到:", txt, "→ 父容器:", ptx.slice(0, 120));
+        // 取立项号：字母数字组合、4-20位
+        const om = ptx.match(/(?:立项号|订单号|编号)[：:\s]*([A-Za-z0-9_-]{4,20})/);
+        if (om && !orderNo) orderNo = om[1];
+        // 兜底：取父容器内第一个字母数字组合
+        if (!orderNo) {
+          const fm = ptx.match(/[A-Z]{2,}\d+|PRJ[A-Za-z0-9_-]+|[A-Za-z0-9_-]{6,20}/);
+          if (fm && fm[0].length >= 4) orderNo = fm[0];
+        }
+        if (orderNo) break;
       }
     }
-    console.log("内部立项号提取结果:", orderNo || "❌ 未找到");
+    console.log("内部立项号:", orderNo || "❌ 未找到");
     const json = JSON.stringify({ items: bestResult.items, source: "OA采购申请", order_number: orderNo || null }, null, 2);
     console.log("===== 最终结果 =====");
     console.log("选中表格:", bestResult.tableIndex, "| 列:", bestResult.matched.join(", "));
