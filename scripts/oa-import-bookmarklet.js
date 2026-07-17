@@ -6,7 +6,7 @@
   const COLUMN_MAP = [
     { keys: ["物料编号", "物料号", "料号", "编号", "partnumber", "part_no"], field: "part_number" },
     { keys: ["厂家", "供应商", "品牌", "manufacturer", "厂商"], field: "manufacturer" },
-    { keys: ["型号配置", "型号", "规格", "物料型号", "model", "配置"], field: "model" },
+    { keys: ["型号配置", "型号", "规格", "物料型号", "物料描述", "model", "配置"], field: "model" },
     { keys: ["数量", "quantity", "qty", "总数量", "采购数量"], field: "quantity" },
     { keys: ["申请日期", "采购日期", "日期", "purchasedate", "申请时间"], field: "purchase_date" },
     { keys: ["单价", "unitprice", "price"], field: "_price" },
@@ -65,6 +65,10 @@
           hasData = true;
           if (field === "quantity" || field === "_price" || field === "_amount") {
             item[field] = parseFloat(val.replace(/[,，¥￥]/g, "")) || 0;
+          } else if (field === "purchase_date" || field === "expected_delivery") {
+            // 截取年月日，剔除时分秒
+            const m = val.match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
+            item[field] = m ? m[1].replace(/[./]/g, "-") : val.slice(0, 10);
           } else {
             item[field] = val;
           }

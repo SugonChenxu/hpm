@@ -385,10 +385,15 @@ export default function MaterialListPage() {
       items = items.map((it) => ({
         part_number: it.part_number || it.partNumber || it["物料编号"] || it["物料号"] || "",
         manufacturer: it.manufacturer || it["厂家"] || it["供应商"] || "",
-        model: it.model || it["型号配置"] || it["型号"] || it["规格"] || "",
+        model: it.model || it["型号配置"] || it["型号"] || it["规格"] || it["物料描述"] || "",
         material_status: "默认",
         quantity: parseFloat(it.quantity || it["数量"]) || 0,
-        purchase_date: it.purchase_date || it.purchaseDate || it["申请日期"] || it["采购日期"] || null,
+        purchase_date: (() => {
+          const d = it.purchase_date || it.purchaseDate || it["申请日期"] || it["采购日期"];
+          if (!d) return null;
+          const m = String(d).match(/(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
+          return m ? m[1].replace(/[./]/g, "-") : String(d).slice(0, 10);
+        })(),
         notes: it.notes || it["备注"] || "",
         expected_delivery: it.expected_delivery || it.expectedDelivery || it["交期"] || it["预计交期"] || null,
       }));
