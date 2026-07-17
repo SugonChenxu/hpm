@@ -50,10 +50,10 @@ function StatusChip({ status, onClick }) {
   const st = statusStyle(status);
   return (
     <Chip
-      label={<>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3, opacity: 0.7 }}>▾</Box></>}
+      label={<Box component="span" sx={{ color: st.color }}>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3, opacity: 0.7 }}>▾</Box></Box>}
       size="small"
       onClick={onClick}
-      sx={{ color: st.color, bgcolor: st.bg, fontWeight: 600, cursor: "pointer", maxWidth: 90, "& .MuiChip-label": { px: 1 } }}
+      sx={{ bgcolor: st.bg, fontWeight: 600, cursor: "pointer", maxWidth: 90, border: "1px solid", borderColor: st.border, "& .MuiChip-label": { px: 1 } }}
     />
   );
 }
@@ -688,7 +688,7 @@ export default function MaterialListPage() {
                     return (
                       <Button key={s} variant="outlined"
                         onClick={() => submitBatchEdit(s)}
-                        sx={{ color: st.color, borderColor: st.bg, justifyContent: "flex-start", gap: 1 }}>
+                        sx={{ color: st.color, borderColor: st.border, bgcolor: st.bg, justifyContent: "flex-start", gap: 1, fontWeight: 600 }}>
                         <Box sx={{ width: 16, height: 16, bgcolor: st.bg, borderRadius: 1, flexShrink: 0 }} />
                         {s}
                       </Button>
