@@ -116,7 +116,11 @@ export default function MaterialListPage() {
   const [editing, setEditing] = useState(null); // { rowId, field }
   const [statusMenu, setStatusMenu] = useState(null); // { rowId, anchorEl }
   const [ctxMenu, setCtxMenu] = useState(null); // { mouseX, mouseY, rowId }
-  const [batchEditDlg, setBatchEditDlg] = useState(null); // { field, label, type, ids }
+  const [batchEditDlg, setBatchEditDlg] = useState(null);
+  const [rowColors, setRowColors] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("forge.material.rowcolors") || "{}"); }
+    catch { return {}; }
+  }); // { field, label, type, ids }
   const [importOpen, setImportOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
@@ -283,10 +287,50 @@ export default function MaterialListPage() {
     { key: "notes", label: "备注", type: "text" },
   ];
 
+  // 预设行底色
+  const ROW_COLORS = [
+    { label: "默认(无)", value: null },
+    { label: "浅蓝", value: "#e6f7ff" },
+    { label: "浅绿", value: "#f6ffed" },
+    { label: "浅黄", value: "#fffbe6" },
+    { label: "浅红", value: "#fff1f0" },
+    { label: "浅紫", value: "#f9f0ff" },
+    { label: "浅灰", value: "#f5f5f5" },
+  ];
+
   const handleCtxAction = (field, label, type) => {
     setCtxMenu(null);
     const ids = selected.size > 0 ? [...selected] : [ctxMenu.rowId];
     setBatchEditDlg({ field, label, type, ids, value: "" });
+  };
+
+  // 行底色操作
+  const handleCtxColor = (color) => {
+    setCtxMenu(null);
+    const ids = selected.size > 0 ? [...selected] : [ctxMenu.rowId];
+    setRowColors((prev) => {
+      const next = { ...prev };
+      ids.forEach((id) => {
+        if (color) next[id] = color; else delete next[id];
+      });
+      localStorage.setItem("forge.material.rowcolors", JSON.stringify(next));
+      return next;
+    });
+    setSnack({ severity: "success", text: `已更新 ${ids.length} 行的底色` });
+  };
+
+  // 右键删除
+  const handleCtxDelete = () => {
+    setCtxMenu(null);
+    const ids = selected.size > 0 ? [...selected] : [ctxMenu.rowId];
+    setConfirmDlg({
+      title: "确认删除", text: `确定删除选中的 ${ids.length} 项物料吗？此操作不可撤销。`,
+      onOk: async () => {
+        setConfirmDlg(null);
+        try { await api.materials.batchRemove({ project_id: Number(projectId), ids }); setSelected(new Set()); load(); }
+        catch { setSnack({ severity: "error", text: "批量删除失败" }); }
+      },
+    });
   };
 
   const submitBatchEdit = async (statusOverride) => {
@@ -436,10 +480,10 @@ export default function MaterialListPage() {
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: 42, fontWeight: 700, bgcolor: "grey.50", p: 0.5 }}>
+                <TableCell sx={{ width: 42, fontWeight: 700, bgcolor: "grey.50", p: 0.5, whiteSpace: "nowrap" }}>
                   <Checkbox size="small" checked={allSelected} indeterminate={selected.size > 0 && !allSelected} onChange={toggleAll} />
                 </TableCell>
-                <TableCell sx={{ width: 60, fontWeight: 700, bgcolor: "grey.50", cursor: "pointer", userSelect: "none" }}
+                <TableCell sx={{ width: 60, fontWeight: 700, bgcolor: "grey.50", cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", fontSize: "0.8rem", px: 1 }}
                   onClick={() => handleSort("seq")}>
                   序号<SortArrow dir={sortKey === "seq" ? sortDir : null} />
                 </TableCell>
@@ -479,7 +523,7 @@ export default function MaterialListPage() {
                 </TableRow>
               ) : (
                 filtered.map((row, idx) => (
-                  <TableRow key={row.id} hover sx={{ bgcolor: selected.has(row.id) ? "action.selected" : "inherit" }}
+                  <TableRow key={row.id} hover sx={{ bgcolor: rowColors[row.id] || (selected.has(row.id) ? "action.selected" : "inherit") }}
                     onContextMenu={(e) => handleCtxMenu(e, row.id)}>
                     <TableCell sx={{ p: 0.5 }}>
                       <Checkbox size="small" checked={selected.has(row.id)} onChange={() => toggleRow(row.id)} />
@@ -564,10 +608,11 @@ export default function MaterialListPage() {
         {/* ---- 导入弹窗 ---- */}
         {importOpen && (
           <MaterialImportDialog
+            open={!!importOpen}
             file={importOpen}
             projectId={Number(projectId)}
             onClose={() => setImportOpen(false)}
-            onDone={handleImportDone}
+            onConfirmed={handleImportDone}
           />
         )}
 
@@ -592,15 +637,34 @@ export default function MaterialListPage() {
         >
           <MenuItem disabled sx={{ opacity: "0.7 !important" }}>
             <Typography variant="caption">
-              {selected.size > 1 ? `修改 ${selected.size} 项选中物料` : "修改此项物料"}
+              {selected.size > 1 ? `已选 ${selected.size} 项` : "右键操作"}
             </Typography>
           </MenuItem>
-          {CTX_FIELDS.map((f) => (
-            <MenuItem key={f.key} onClick={() => handleCtxAction(f.key, f.label, f.type)}
-              sx={{ color: "#222" }}>
-              {f.label}
-            </MenuItem>
-          ))}
+          <MenuItem onClick={() => handleCtxAction("manufacturer", "厂家", "text")} sx={{ color: "#222" }}>修改厂家</MenuItem>
+          <MenuItem onClick={() => handleCtxAction("material_status", "物料状态", "status")} sx={{ color: "#222" }}>修改状态</MenuItem>
+          <MenuItem onClick={() => handleCtxAction("quantity", "数量", "number")} sx={{ color: "#222" }}>修改数量</MenuItem>
+          <MenuItem onClick={() => handleCtxAction("purchase_date", "采购时间", "date")} sx={{ color: "#222" }}>采购时间</MenuItem>
+          <MenuItem onClick={() => handleCtxAction("lead_time", "采购周期", "number")} sx={{ color: "#222" }}>采购周期</MenuItem>
+          <MenuItem onClick={() => handleCtxAction("expected_delivery", "预计交期", "date")} sx={{ color: "#222" }}>预计交期</MenuItem>
+          <MenuItem onClick={() => handleCtxAction("notes", "备注", "text")} sx={{ color: "#222" }}>修改备注</MenuItem>
+          <Box sx={{ borderTop: "1px solid", borderColor: "divider", my: 0.5 }} />
+          {/* 底色子菜单 */}
+          <MenuItem sx={{ color: "#222", justifyContent: "space-between" }}>
+            表格底色
+            <Box component="span" sx={{ display: "flex", gap: 0.3, ml: 1 }}>
+              {ROW_COLORS.filter(c => c.value).map((c) => (
+                <Box key={c.value} component="span"
+                  onClick={(e) => { e.stopPropagation(); handleCtxColor(c.value); }}
+                  sx={{ width: 16, height: 16, bgcolor: c.value, borderRadius: 2, cursor: "pointer", border: "1px solid #ddd", "&:hover": { outline: "2px solid #1976d2" } }}
+                />
+              ))}
+            </Box>
+          </MenuItem>
+          <MenuItem onClick={() => handleCtxColor(null)} sx={{ color: "#222", pl: 4 }}>清除底色</MenuItem>
+          <Box sx={{ borderTop: "1px solid", borderColor: "divider", my: 0.5 }} />
+          <MenuItem onClick={handleCtxDelete} sx={{ color: "#d32f2f" }}>
+            ✕ 删除{selected.size > 1 ? `(${selected.size})` : ""}
+          </MenuItem>
         </Menu>
 
         {/* ---- 批量编辑对话框 ---- */}
