@@ -23,14 +23,14 @@ import PriorityChip from "./PriorityChip";
 // 饼图配色（与故障仪表板 CategoryBarChart 保持一致）
 const PIE_COLORS = ["#7C3AED", "#F59E0B", "#10B981", "#8B5CF6", "#EF4444", "#3B82F6", "#6D28D9", "#9CA3AF"];
 
-// DI 阈值配色：≤10 绿，≤20 黄，其余 红
+// DI 阈值配色：≤10 绿，≤30 黄，其余 红
 function diColor(di) {
   if (di <= 10) return "#10B981";
-  if (di <= 20) return "#F59E0B";
+  if (di <= 30) return "#F59E0B";
   return "#EF4444";
 }
 function rateColor(rate) {
-  if (rate >= 80) return "#10B981";
+  if (rate >= 90) return "#10B981";
   if (rate >= 50) return "#F59E0B";
   return "#EF4444";
 }
@@ -270,7 +270,7 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                   </Box>
 
                   {/* 指标行 */}
-                  <Box sx={{ display: "flex", gap: 1.5, mb: 0.75 }}>
+                  <Box sx={{ display: "flex", gap: 2.5, mb: 0.75 }}>
                     <Box>
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>DI</Typography>
                       <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, color: diColor(di), lineHeight: 1.1 }}>{di}</Typography>
