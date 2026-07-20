@@ -63,7 +63,7 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                 key={task.id}
                 sx={{
                   display: "flex",
-                  alignItems: "flex-start",
+                  alignItems: "center",
                   gap: 0.5,
                   py: 0.5,
                   px: 0.5,
@@ -73,77 +73,72 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                   "&:hover .done-actions": { opacity: 1 },
                 }}
               >
-                {/* 优先级灯 — 垂直居中 */}
+                {/* 优先级灯 — 淡化，与文本垂直居中 */}
                 <Box
                   sx={{
                     opacity: 0.35,
                     display: "flex",
                     alignItems: "center",
                     flexShrink: 0,
-                    mt: "2px",
-                    pt: 0,
                   }}
                 >
                   <PriorityChip priority={task.priority} />
                 </Box>
 
-                {/* 标题 + 日期信息 */}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        textDecoration: "line-through",
-                        color: "text.secondary",
-                        fontSize: 12,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                        flex: 1,
-                      }}
-                    >
-                      {task.title}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: "success.main", fontSize: 10, flexShrink: 0, lineHeight: 1 }}
-                    >
-                      {fmtDone(task.completed_at)}
-                    </Typography>
-                  </Box>
+                {/* 标题（单行，超长截断） */}
+                <Typography
+                  variant="body2"
+                  sx={{
+                    textDecoration: "line-through",
+                    color: "text.secondary",
+                    fontSize: 12,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    flex: 1,
+                    minWidth: 0,
+                  }}
+                >
+                  {task.title}
+                </Typography>
 
-                  {/* 子任务标识 + 悬浮操作 */}
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.25 }}>
-                    {/* 子任务计数 */}
-                    {task.subtask_count > 0 && (
-                      <Tooltip title={`已完成 ${task.subtask_count} 项`}>
-                        <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10, cursor: "default" }}>
-                          📋
-                        </Typography>
-                      </Tooltip>
-                    )}
+                {/* 完成时间 */}
+                <Typography
+                  variant="caption"
+                  sx={{ color: "success.main", fontSize: 10, flexShrink: 0, lineHeight: 1 }}
+                >
+                  {fmtDone(task.completed_at)}
+                </Typography>
 
-                    <Box
-                      className="done-actions"
-                      sx={{
-                        display: "flex",
-                        opacity: 0,
-                        transition: "opacity 0.15s",
-                        ml: "auto",
-                      }}
-                    >
-                      <Tooltip title="撤销完成">
-                        <IconButton size="small" onClick={() => onUndo(task)} sx={{ p: 0.25 }}>
-                          <Undo sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="删除">
-                        <IconButton size="small" onClick={() => setDeleteTarget(task)} sx={{ p: 0.25 }}>
-                          <DeleteOutline sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </Box>
+                {/* 子任务计数 */}
+                {task.subtask_count > 0 && (
+                  <Tooltip title={`已完成 ${task.subtask_count} 项`}>
+                    <Typography variant="caption" color="text.disabled" sx={{ fontSize: 10, cursor: "default", flexShrink: 0 }}>
+                      📋
+                    </Typography>
+                  </Tooltip>
+                )}
+
+                {/* 操作键：撤销完成 / 删除（悬浮显出） */}
+                <Box
+                  className="done-actions"
+                  sx={{
+                    display: "flex",
+                    opacity: 0,
+                    transition: "opacity 0.15s",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Tooltip title="撤销完成">
+                    <IconButton size="small" onClick={() => onUndo(task)} sx={{ p: 0.25 }}>
+                      <Undo sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
+                  <Tooltip title="删除">
+                    <IconButton size="small" onClick={() => setDeleteTarget(task)} sx={{ p: 0.25 }}>
+                      <DeleteOutline sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </Tooltip>
                 </Box>
               </Box>
             ))
