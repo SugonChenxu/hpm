@@ -597,15 +597,15 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, py: 0.25 }}>
       {(items || []).map((it, idx) => (
         <Box key={it.id} sx={{
-          display: "flex", alignItems: "flex-start", gap: 0.5, px: 0.5, borderRadius: 1,
+          display: "flex", alignItems: "baseline", gap: 0.5, px: 0.5, borderRadius: 1,
           "&:hover": { bgcolor: "action.hover" },
         }}>
-          {/* 完成框：微调 mt 使其与右侧文字首行水平中线对齐 */}
+          {/* 完成框：baseline 对齐，始终与右侧文字首行同基线 */}
           <Checkbox
             size="small"
             checked={!!it.is_done}
             onChange={() => onToggle(it)}
-            sx={{ p: 0.25, mt: "0.1rem", flexShrink: 0 }}
+            sx={{ p: 0.25, flexShrink: 0 }}
           />
           {/* 内容区：1W 标签 + 编号 + 标题 同处一段文字流（inline），首行共享同一基线水平对齐；
               换行后第二行落在文字块左缘，即与 1W 列对齐 */}
