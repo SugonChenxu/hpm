@@ -34,6 +34,12 @@ copy /Y scripts\portable\开机自启.bat "%PKG%\"
 copy /Y scripts\portable\防火墙放行.bat "%PKG%\"
 copy /Y scripts\portable\使用说明.txt "%PKG%\"
 
+REM 6.5 OA 物料导入脚本（选装，给同事配置用）
+mkdir "%PKG%\OA导入"
+copy /Y scripts\oa-bookmarklet.txt "%PKG%\OA导入\书签链接.txt"
+copy /Y scripts\oa-import-bookmarklet.js "%PKG%\OA导入\OA导入脚本.js"
+copy /Y client\public\oa-bookmarklet.js "%PKG%\OA导入\OA浮窗脚本.js"
+
 echo ============ 封装完成 ============
 echo 绿色包位置: %CD%\%PKG%
 echo 体积（MB）:
