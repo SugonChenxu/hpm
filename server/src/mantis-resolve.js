@@ -86,6 +86,53 @@ export async function resolveMantisId(ownerId, forgeProjectId) {
   return match.id;
 }
 
+/**
+ * 将 Mantis hex 项目 id 解析为 Forge 数字项目 id（用于所有权校验与落库）。
+ * 前端下拉传来的是 Mantis hex id，但 issues 表以 Forge 数字 id 关联，需要在此转换。
+ * 优先使用已保存的 project_mapping；缺失时按项目名模糊匹配并自动保存映射。
+ * @returns {Promise<number>} Forge 项目 id
+ */
+export async function resolveForgeId(ownerId, mantisId) {
+  const conn = getConnection(ownerId);
+  if (!conn) {
+    const e = new Error("未配置 Mantis 连接");
+    e.code = "auth_failed";
+    throw e;
+  }
+  let mapping = [];
+  try { mapping = JSON.parse(conn.project_mapping || "[]"); } catch {}
+  const found = mapping.find((m) => String(m.mantis_id) === String(mantisId));
+  if (found && found.forge_id != null) {
+    const proj = db.prepare("SELECT id FROM projects WHERE id=? AND owner_id=?").get(found.forge_id, ownerId);
+    if (proj) return proj.id;
+  }
+
+  // 名称匹配：通过 Mantis 项目名反查 Forge 项目
+  const adapter = new MantisAdapter(conn);
+  const mantisProjects = await fetchAllMantisProjects(adapter, ownerId);
+  const mp = mantisProjects.find((p) => String(p.id) === String(mantisId));
+  if (!mp) {
+    const e = new Error("未找到对应的 Mantis 项目，请确认连接配置");
+    e.code = "no_match";
+    throw e;
+  }
+  const mn = normalizeName(mp.name);
+  const forgeProjects = db.prepare("SELECT id, name FROM projects WHERE owner_id=?").all(ownerId);
+  const match = forgeProjects.find((p) => {
+    const fn = normalizeName(p.name);
+    return fn.startsWith(mn) || mn.startsWith(fn) || fn.includes(mn) || mn.includes(fn);
+  });
+  if (!match) {
+    const e = new Error(`未能在 Forge 项目中找到与「${mp.name}」匹配的项目`);
+    e.code = "no_match";
+    throw e;
+  }
+  mapping.push({ forge_id: match.id, mantis_id: mantisId });
+  db.prepare("UPDATE mantis_connection SET project_mapping=? WHERE id=? AND owner_id=?")
+    .run(JSON.stringify(mapping), conn.id, ownerId);
+  return match.id;
+}
+
 /** 统一将 Mantis 错误映射为 { status, message } */
 export function mantisError(e, fallback) {
   switch (e.code) {

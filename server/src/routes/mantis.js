@@ -11,7 +11,7 @@
 
 import { Router } from "express";
 import db from "../db.js";
-import { getAdapter, resolveMantisId, mantisError } from "../mantis-resolve.js";
+import { getAdapter, resolveMantisId, resolveForgeId, mantisError } from "../mantis-resolve.js";
 
 const router = Router();
 
@@ -51,19 +51,20 @@ router.post("/mantis/sync", async (req, res) => {
   const { project_id } = req.body;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
 
-  // 校验项目归属（仅当前用户可同步自己的项目）
-  const proj = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(project_id, req.userId);
-  if (!proj) return res.status(403).json({ ok: false, error: "无权访问该项目" });
-
-  // 解析当前用户的 Mantis 适配器 + Forge→Mantis hex 项目 id
-  let adapter, mantisHexId;
+  // 前端传入的是 Mantis hex 项目 id；解析为 Forge 数字 id（用于归属校验与落库）
+  let adapter, mantisHexId, forgeId;
   try {
     adapter = getAdapter(req.userId);
-    mantisHexId = await resolveMantisId(req.userId, project_id);
+    mantisHexId = project_id;
+    forgeId = await resolveForgeId(req.userId, project_id);
   } catch (error) {
     const { status, message } = mantisError(error, "解析 Mantis 项目失败");
     return res.status(status).json({ ok: false, error: message });
   }
+
+  // 校验 Forge 项目归属（仅当前用户可同步自己的项目）
+  const proj = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(forgeId, req.userId);
+  if (!proj) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   try {
     const issues = await adapter.fetchIssues(mantisHexId);
@@ -111,7 +112,7 @@ router.post("/mantis/sync", async (req, res) => {
             diWeight, category, resolution, mantisUpdatedAt, mantisId, req.userId);
         } else {
           const code = `MNT-${mantisId}`;
-          insert.run(project_id, mantisId, code, title, description,
+          insert.run(forgeId, mantisId, code, title, description,
             severity, status, assignee, diWeight, category, resolution,
             req.userId, mantisUpdatedAt);
         }
@@ -121,7 +122,7 @@ router.post("/mantis/sync", async (req, res) => {
     })(issues);
 
     // 清除该项目的所有缓存（仅当前用户）
-    db.prepare("DELETE FROM sync_cache WHERE project_id=? AND owner_id=?").run(project_id, req.userId);
+    db.prepare("DELETE FROM sync_cache WHERE project_id=? AND owner_id=?").run(forgeId, req.userId);
 
     // 更新最后同步状态
     updateLastSync("success", req.userId);

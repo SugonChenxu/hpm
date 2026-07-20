@@ -526,9 +526,18 @@ try {
 
 // sync_cache 索引
 try {
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_sync_cache_project_key ON sync_cache(project_id, cache_key)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sync_cache_project_key ON sync_cache(project_id, cache_key, owner_id)`);
 } catch (e) {
   console.warn("Migration idx_sync_cache_project_key:", e.message);
+}
+
+// sync_cache 表新增 owner_id 列（多用户隔离：避免不同用户同号项目共享缓存）
+try {
+  db.exec(`ALTER TABLE sync_cache ADD COLUMN owner_id INTEGER`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration sync_cache.owner_id:", e.message);
+  }
 }
 
 // =====================================================
