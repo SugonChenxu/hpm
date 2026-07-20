@@ -600,26 +600,15 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
           display: "flex", alignItems: "flex-start", gap: 0.5, px: 0.5, borderRadius: 1,
           "&:hover": { bgcolor: "action.hover" },
         }}>
-          {/* 左标记区：checkbox + 1W 周期标签（固定宽度，文字区紧接其后） */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, flexShrink: 0 }}>
-            <Checkbox
-              size="small"
-              checked={!!it.is_done}
-              onChange={() => onToggle(it)}
-              sx={{ p: 0.25 }}
-            />
-            {it.cycle && (
-              <Box component="span" sx={{
-                fontSize: "0.6rem", px: 0.5, py: 0.05, borderRadius: 0.75, fontWeight: 700,
-                lineHeight: 1.5, whiteSpace: "nowrap", userSelect: "none",
-                bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "1f",
-                color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
-              }}>
-                {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
-              </Box>
-            )}
-          </Box>
-          {/* 内容区：编号与标题同字号同元素，flex:1；换行后第二行对齐到本区左缘（即 1W 列） */}
+          {/* 完成框：微调 mt 使其与右侧文字首行水平中线对齐 */}
+          <Checkbox
+            size="small"
+            checked={!!it.is_done}
+            onChange={() => onToggle(it)}
+            sx={{ p: 0.25, mt: "0.1rem", flexShrink: 0 }}
+          />
+          {/* 内容区：1W 标签 + 编号 + 标题 同处一段文字流（inline），首行共享同一基线水平对齐；
+              换行后第二行落在文字块左缘，即与 1W 列对齐 */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {editingId === it.id ? (
               <TextField
@@ -645,6 +634,16 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
                   wordBreak: "break-word", "&:hover": { color: "primary.main" },
                 }}
               >
+                {it.cycle && (
+                  <Box component="span" sx={{
+                    fontSize: "0.6rem", px: 0.5, py: 0.05, borderRadius: 0.75, fontWeight: 700,
+                    lineHeight: 1.5, whiteSpace: "nowrap", userSelect: "none", mr: 0.35,
+                    bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "1f",
+                    color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
+                  }}>
+                    {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
+                  </Box>
+                )}
                 <Box component="span" sx={{ fontWeight: 700, color: it.is_done ? "text.disabled" : "text.secondary", mr: 0.3 }}>{idx + 1}.</Box>
                 {it.title}
               </Typography>
