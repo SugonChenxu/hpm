@@ -259,9 +259,10 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                 <Divider sx={{ my: 1 }} />
                 <Box>
                   {/* 标题 */}
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
-                    <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#EF4444", flexShrink: 0 }} />
-                    <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", letterSpacing: "0.02em" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5, mt: 0.5 }}>
+                    <Typography
+                      sx={{ fontSize: "0.8rem", fontWeight: 700, color: "text.primary", letterSpacing: "0.02em" }}
+                    >
                       故障概览
                     </Typography>
                     <Box sx={{ flexGrow: 1 }} />
