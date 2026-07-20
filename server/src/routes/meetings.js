@@ -16,6 +16,8 @@ router.get("/meetings", (req, res) => {
   const { project_id, platform, from, to, search } = req.query;
   let sql = "SELECT * FROM meetings WHERE 1=1";
   const params = [];
+  sql += " AND owner_id = ?";
+  params.push(req.userId);
 
   if (project_id) {
     sql += " AND project_id = ?";
@@ -77,8 +79,8 @@ router.post("/meetings/fetch", async (req, res) => {
     // 5. 批量入库
     const insertStmt = db.prepare(`
       INSERT INTO meetings
-        (platform, external_id, meeting_code, title, start_time, end_time, duration_minutes)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+        (platform, external_id, meeting_code, title, start_time, end_time, duration_minutes, owner_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     let newCount = 0;
@@ -97,7 +99,8 @@ router.post("/meetings/fetch", async (req, res) => {
           m.subject,
           m.start_time || null,
           m.end_time || null,
-          duration
+          duration,
+          req.userId
         );
         if (result.changes > 0) newCount++;
       }
@@ -135,7 +138,7 @@ router.get("/meetings/:id/minutes", async (req, res) => {
       return res.status(400).json({ ok: false, error: "Invalid meeting ID" });
     }
 
-    const meeting = db.prepare("SELECT * FROM meetings WHERE id = ?").get(id);
+    const meeting = db.prepare("SELECT * FROM meetings WHERE id = ? AND owner_id = ?").get(id, req.userId);
     if (!meeting) {
       return res.status(404).json({ ok: false, error: "会议不存在" });
     }
@@ -231,15 +234,16 @@ router.get("/meetings/:id/minutes", async (req, res) => {
     // 缓存入库
     db.prepare(`
       INSERT INTO smart_minutes
-        (meeting_id, record_file_id, content, summary, action_items_json, fetched_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now','localtime'))
+        (meeting_id, record_file_id, content, summary, action_items_json, owner_id, fetched_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))
       ON CONFLICT(meeting_id) DO UPDATE SET
         record_file_id = excluded.record_file_id,
         content = excluded.content,
         summary = excluded.summary,
         action_items_json = excluded.action_items_json,
+        owner_id = excluded.owner_id,
         fetched_at = datetime('now','localtime')
-    `).run(id, recordFileId, content, summary, JSON.stringify(actionItems));
+    `).run(id, recordFileId, content, summary, JSON.stringify(actionItems), req.userId);
 
     const saved = db.prepare("SELECT * FROM smart_minutes WHERE meeting_id = ?").get(id);
     res.json({ ok: true, data: saved, source: "fetched" });
@@ -267,13 +271,17 @@ router.post("/meetings", (req, res) => {
     minutes_url,
   } = req.body;
   if (!title) return res.status(400).json({ ok: false, error: "title 必填" });
+  if (project_id) {
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
+  }
   const duration =
     start_time && end_time
       ? Math.round((new Date(end_time) - new Date(start_time)) / 60000)
       : null;
   const result = db
     .prepare(
-      "INSERT INTO meetings (project_id, phase_id, platform, external_id, meeting_code, title, start_time, end_time, duration_minutes, attendee_count, attendees_json, minutes_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO meetings (project_id, phase_id, platform, external_id, meeting_code, title, start_time, end_time, duration_minutes, attendee_count, attendees_json, minutes_url, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .run(
       project_id || null,
@@ -287,7 +295,8 @@ router.post("/meetings", (req, res) => {
       duration,
       attendee_count || null,
       attendees_json ? JSON.stringify(attendees_json) : null,
-      minutes_url || null
+      minutes_url || null,
+      req.userId
     );
   res.status(201).json({
     ok: true,
@@ -299,7 +308,7 @@ router.post("/meetings", (req, res) => {
 // GET /api/meetings/:id — 单条会议详情（保留原有功能）
 // =====================================================
 router.get("/meetings/:id", (req, res) => {
-  const meeting = db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id);
+  const meeting = db.prepare("SELECT * FROM meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!meeting) return res.status(404).json({ ok: false, error: "会议不存在" });
   const actionItems = db
     .prepare("SELECT * FROM meeting_action_items WHERE meeting_id = ?")
@@ -312,11 +321,11 @@ router.get("/meetings/:id", (req, res) => {
 // =====================================================
 router.put("/meetings/:id", (req, res) => {
   const { title, minutes_text, minutes_status, start_time, end_time, minutes_url } = req.body;
-  const m = db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id);
+  const m = db.prepare("SELECT * FROM meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!m) return res.status(404).json({ ok: false, error: "会议不存在" });
   db.prepare(
-    "UPDATE meetings SET title=COALESCE(?,title), minutes_text=COALESCE(?,minutes_text), minutes_status=COALESCE(?,minutes_status), start_time=COALESCE(?,start_time), end_time=COALESCE(?,end_time), minutes_url=COALESCE(?,minutes_url), updated_at=datetime('now','localtime') WHERE id=?"
-  ).run(title, minutes_text, minutes_status, start_time, end_time, minutes_url, req.params.id);
+    "UPDATE meetings SET title=COALESCE(?,title), minutes_text=COALESCE(?,minutes_text), minutes_status=COALESCE(?,minutes_status), start_time=COALESCE(?,start_time), end_time=COALESCE(?,end_time), minutes_url=COALESCE(?,minutes_url), updated_at=datetime('now','localtime') WHERE id=? AND owner_id = ?"
+  ).run(title, minutes_text, minutes_status, start_time, end_time, minutes_url, req.params.id, req.userId);
   res.json({
     ok: true,
     data: db.prepare("SELECT * FROM meetings WHERE id = ?").get(req.params.id),
@@ -329,6 +338,8 @@ router.put("/meetings/:id", (req, res) => {
 router.post("/meetings/:id/action-items", (req, res) => {
   const { content, assignee, due_date } = req.body;
   if (!content) return res.status(400).json({ ok: false, error: "content 必填" });
+  const meeting = db.prepare("SELECT owner_id FROM meetings WHERE id = ?").get(req.params.id);
+  if (!meeting || meeting.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const result = db
     .prepare(
       "INSERT INTO meeting_action_items (meeting_id, content, assignee, due_date) VALUES (?, ?, ?, ?)"
@@ -342,6 +353,8 @@ router.post("/meetings/:id/action-items", (req, res) => {
 
 router.put("/meetings/:id/action-items/:aid", (req, res) => {
   const { content, assignee, due_date, status } = req.body;
+  const meeting = db.prepare("SELECT owner_id FROM meetings WHERE id = ?").get(req.params.id);
+  if (!meeting || meeting.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   db.prepare(
     "UPDATE meeting_action_items SET content=COALESCE(?,content), assignee=COALESCE(?,assignee), due_date=COALESCE(?,due_date), status=COALESCE(?,status), completed_at=CASE WHEN ?='已完成' THEN datetime('now','localtime') ELSE completed_at END WHERE id=? AND meeting_id=?"
   ).run(content, assignee, due_date, status, status, req.params.aid, req.params.id);
@@ -351,11 +364,13 @@ router.put("/meetings/:id/action-items/:aid", (req, res) => {
 router.post("/meetings/:id/action-items/:aid/convert", (req, res) => {
   const ai = db.prepare("SELECT * FROM meeting_action_items WHERE id = ?").get(req.params.aid);
   if (!ai) return res.status(404).json({ ok: false, error: "决议项不存在" });
+  const meeting = db.prepare("SELECT owner_id FROM meetings WHERE id = ?").get(ai.meeting_id);
+  if (!meeting || meeting.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const result = db
     .prepare(
-      "INSERT INTO tasks (project_id, title, description, assignee, due_date, priority, kanban_column) VALUES (?, ?, ?, ?, ?, 'P1', '待开始')"
+      "INSERT INTO tasks (project_id, title, description, assignee, due_date, priority, kanban_column, owner_id) VALUES (?, ?, ?, ?, ?, 'P1', '待开始', ?)"
     )
-    .run(null, ai.content, `来自会议决议 #${ai.id}`, ai.assignee, ai.due_date);
+    .run(null, ai.content, `来自会议决议 #${ai.id}`, ai.assignee, ai.due_date, req.userId);
   db.prepare("UPDATE meeting_action_items SET linked_task_id = ? WHERE id = ?").run(
     result.lastInsertRowid,
     req.params.aid

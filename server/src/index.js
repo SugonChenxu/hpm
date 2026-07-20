@@ -2,10 +2,14 @@ import express from "express";
 import cors from "cors";
 import morgan from "morgan";
 import path from "path";
+import session from "express-session";
+import FileStore from "session-file-store";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import db from "./db.js";
 import "./seed.js";
+import authRouter from "./auth.js";
+import { requireAuth } from "./auth-middleware.js";
 
 import projectsRouter from "./routes/projects.js";
 import tasksRouter from "./routes/tasks.js";
@@ -26,10 +30,34 @@ app.use(cors());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use(express.json());
 
+// === Session（持久化到文件，登录保持 30 天）===
+const SESSION_SECRET = process.env.SESSION_SECRET || "forge-internal-lan-secret-2026";
+const SESSIONS_DIR = path.resolve(__dirname, "sessions");
+const FileStoreSession = FileStore(session);
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    store: new FileStoreSession({ path: SESSIONS_DIR, ttl: 30 * 24 * 60 * 60, retries: 2 }),
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 天，满足「登录尽量长」
+      httpOnly: true,
+      sameSite: "lax",
+    },
+  })
+);
+
 app.get("/api/health", (req, res) => {
   const count = db.prepare("SELECT COUNT(*) as cnt FROM projects").get();
   res.json({ ok: true, uptime: process.uptime(), projects: count.cnt });
 });
+
+// 认证路由（公开：登录/当前用户/登出）
+app.use("/api/auth", authRouter);
+
+// 认证网关：其余 /api 必须登录，注入 req.userId
+app.use("/api", requireAuth);
 
 app.use("/api", projectsRouter);
 app.use("/api", tasksRouter);

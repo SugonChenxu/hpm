@@ -315,9 +315,12 @@ function renumberSiblings(projectId, parentId) {
 router.get("/projects/:id/schedule", (req, res) => {
   try {
     const { id } = req.params;
-    const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
     if (!project) {
       return res.status(404).json({ ok: false, error: "项目不存在" });
+    }
+    if (project.owner_id !== req.userId) {
+      return res.status(403).json({ ok: false, error: "无权访问该项目" });
     }
 
     let tasks = getProjectTasksTree(id);
@@ -344,9 +347,12 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
     const { id } = req.params;
     const { template_name } = req.body;
 
-    const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
     if (!project) {
       return res.status(404).json({ ok: false, error: "项目不存在" });
+    }
+    if (project.owner_id !== req.userId) {
+      return res.status(403).json({ ok: false, error: "无权访问该项目" });
     }
 
     const templatePath = join(TEMPLATES_DIR, `${template_name}.json`);
@@ -520,6 +526,8 @@ router.put("/schedule-tasks/:id", (req, res) => {
     if (!task) {
       return res.status(404).json({ ok: false, error: "排期任务不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(task.project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     const body = req.body;
 
@@ -642,9 +650,12 @@ router.post("/projects/:id/schedule/insert", (req, res) => {
     const { id } = req.params;
     const { position, reference_id } = req.body;
 
-    const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
     if (!project) {
       return res.status(404).json({ ok: false, error: "项目不存在" });
+    }
+    if (project.owner_id !== req.userId) {
+      return res.status(403).json({ ok: false, error: "无权访问该项目" });
     }
 
     const refTask = db.prepare("SELECT * FROM schedule_tasks WHERE id = ? AND project_id = ?")
@@ -703,6 +714,8 @@ router.delete("/schedule-tasks/:id", (req, res) => {
     if (!task) {
       return res.status(404).json({ ok: false, error: "排期任务不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(task.project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     const projectId = task.project_id;
 
@@ -758,6 +771,8 @@ router.put("/projects/:id/schedule/:taskId/indent", (req, res) => {
     if (!task) {
       return res.status(404).json({ ok: false, error: "排期任务不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(task.project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     const siblings = task.parent_id === null
       ? db.prepare(
@@ -822,6 +837,8 @@ router.put("/projects/:id/schedule/:taskId/outdent", (req, res) => {
     if (!task) {
       return res.status(404).json({ ok: false, error: "排期任务不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(task.project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     if (task.parent_id === null) {
       return res.status(400).json({
@@ -885,6 +902,8 @@ router.put("/schedule-tasks/:id/predecessors", (req, res) => {
     if (!task) {
       return res.status(404).json({ ok: false, error: "排期任务不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(task.project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     const allTasks = getProjectTasks(task.project_id);
 
@@ -989,9 +1008,12 @@ router.get("/templates/schedule", (req, res) => {
 router.post("/projects/:id/schedule/save", (req, res) => {
   try {
     const { id } = req.params;
-    const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
     if (!project) {
       return res.status(404).json({ ok: false, error: "项目不存在" });
+    }
+    if (project.owner_id !== req.userId) {
+      return res.status(403).json({ ok: false, error: "无权访问该项目" });
     }
 
     const tasks = getProjectTasks(id);
@@ -1033,9 +1055,12 @@ router.post("/projects/:id/schedule/save", (req, res) => {
 router.get("/projects/:id/schedule/versions", (req, res) => {
   try {
     const { id } = req.params;
-    const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
     if (!project) {
       return res.status(404).json({ ok: false, error: "项目不存在" });
+    }
+    if (project.owner_id !== req.userId) {
+      return res.status(403).json({ ok: false, error: "无权访问该项目" });
     }
 
     const versions = db.prepare(
@@ -1062,6 +1087,8 @@ router.get("/projects/:id/schedule/versions/:vid", (req, res) => {
     if (!version) {
       return res.status(404).json({ ok: false, error: "版本不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     res.json({ ok: true, data: version });
   } catch (err) {
@@ -1083,6 +1110,8 @@ router.post("/projects/:id/schedule/versions/:vid/restore", (req, res) => {
     if (!version) {
       return res.status(404).json({ ok: false, error: "版本不存在" });
     }
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
     let snapshotTasks;
     try {
@@ -1132,6 +1161,9 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
     const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(id);
     if (!project) {
       return res.status(404).json({ ok: false, error: "项目不存在" });
+    }
+    if (project.owner_id !== req.userId) {
+      return res.status(403).json({ ok: false, error: "无权访问该项目" });
     }
 
     let tasks = getProjectTasksTree(id);

@@ -15,12 +15,15 @@ router.get("/tasks", (req, res) => {
       (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.deleted_at IS NULL) AS subtask_count
       FROM tasks t WHERE t.deleted_at IS NULL AND t.project_id = ?`;
     params.push(project_id);
+    sql += " AND t.owner_id = ?";
+    params.push(req.userId);
     sql += " ORDER BY t.sort_order ASC";
   } else {
     // 全局看板：保持原有排序
     sql = `SELECT t.*, 
       (SELECT COUNT(*) FROM subtasks s WHERE s.task_id = t.id AND s.deleted_at IS NULL) AS subtask_count
-      FROM tasks t WHERE t.deleted_at IS NULL`;
+      FROM tasks t WHERE t.deleted_at IS NULL AND t.owner_id = ?`;
+    params.push(req.userId);
   }
 
   if (phase_id) { sql += " AND t.phase_id = ?"; params.push(phase_id); }
@@ -42,6 +45,8 @@ router.post("/tasks", (req, res) => {
   // 自动计算 sort_order = MAX(sort_order) + 1（同项目内）
   let sortOrder = 0;
   if (project_id) {
+    const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+    if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
     const max = db.prepare(
       "SELECT COALESCE(MAX(sort_order), 0) AS max_sort FROM tasks WHERE project_id = ? AND deleted_at IS NULL"
     ).get(project_id);
@@ -49,7 +54,7 @@ router.post("/tasks", (req, res) => {
   }
 
   const result = db.prepare(
-    "INSERT INTO tasks (project_id, phase_id, title, description, priority, assignee, kanban_column, due_date, status, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO tasks (project_id, phase_id, title, description, priority, assignee, kanban_column, due_date, status, sort_order, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(
     project_id || null,
     phase_id || null,
@@ -60,7 +65,8 @@ router.post("/tasks", (req, res) => {
     kanban_column || "待开始",
     due_date || null,
     status || "待开始",
-    sortOrder
+    sortOrder,
+    req.userId
   );
   res.status(201).json({
     ok: true,
@@ -72,20 +78,20 @@ router.get("/tasks/overdue", (req, res) => {
   res.json({
     ok: true,
     data: db.prepare(
-      "SELECT * FROM tasks WHERE deleted_at IS NULL AND due_date IS NOT NULL AND due_date < date('now','localtime') AND status NOT IN ('已完成') ORDER BY due_date ASC"
-    ).all(),
+      "SELECT * FROM tasks WHERE deleted_at IS NULL AND due_date IS NOT NULL AND due_date < date('now','localtime') AND status NOT IN ('已完成') AND owner_id = ? ORDER BY due_date ASC"
+    ).all(req.userId),
   });
 });
 
 router.get("/tasks/:id", (req, res) => {
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL AND owner_id = ?").get(req.params.id, req.userId);
   if (!task) return res.status(404).json({ ok: false, error: "任务不存在" });
   res.json({ ok: true, data: task });
 });
 
 router.put("/tasks/:id", (req, res) => {
   const { title, description, priority, assignee, kanban_column, due_date, status, sort_order } = req.body;
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!task) return res.status(404).json({ ok: false, error: "任务不存在" });
 
   db.prepare(
@@ -99,13 +105,13 @@ router.put("/tasks/:id", (req, res) => {
       status=COALESCE(?,status),
       sort_order=COALESCE(?,sort_order),
       updated_at=datetime('now','localtime') 
-    WHERE id=?`
-  ).run(title, description, priority, assignee, kanban_column, due_date, status, sort_order ?? null, req.params.id);
+    WHERE id=? AND owner_id = ?`
+  ).run(title, description, priority, assignee, kanban_column, due_date, status, sort_order ?? null, req.params.id, req.userId);
   res.json({ ok: true, data: db.prepare("SELECT * FROM tasks WHERE id = ?").get(req.params.id) });
 });
 
 router.delete("/tasks/:id", (req, res) => {
-  db.prepare("UPDATE tasks SET deleted_at=datetime('now','localtime') WHERE id = ?").run(req.params.id);
+  db.prepare("UPDATE tasks SET deleted_at=datetime('now','localtime') WHERE id = ? AND owner_id = ?").run(req.params.id, req.userId);
   res.json({ ok: true });
 });
 
@@ -120,8 +126,9 @@ router.put("/tasks/batch", (req, res) => {
   if (updates.kanban_column) { sets.push("kanban_column = ?"); params.push(updates.kanban_column); }
   if (sets.length === 0) return res.status(400).json({ ok: false, error: "无更新字段" });
   params.push(...ids);
+  params.push(req.userId);
   db.prepare(
-    `UPDATE tasks SET ${sets.join(", ")}, updated_at=datetime('now','localtime') WHERE id IN (${ids.map(() => "?").join(",")})`
+    `UPDATE tasks SET ${sets.join(", ")}, updated_at=datetime('now','localtime') WHERE id IN (${ids.map(() => "?").join(",")}) AND owner_id = ?`
   ).run(...params);
   res.json({ ok: true });
 });
@@ -147,8 +154,9 @@ router.put("/kanban-columns", (req, res) => {
 
 // 获取某任务的子任务列表
 router.get("/tasks/:id/subtasks", (req, res) => {
-  const task = db.prepare("SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
+  const task = db.prepare("SELECT id, owner_id FROM tasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
   if (!task) return res.status(404).json({ ok: false, error: "任务不存在" });
+  if (task.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   const subtasks = db.prepare(
     "SELECT * FROM subtasks WHERE task_id = ? AND deleted_at IS NULL ORDER BY sort_order ASC"
@@ -161,8 +169,9 @@ router.post("/tasks/:id/subtasks", (req, res) => {
   const { title } = req.body;
   if (!title || !title.trim()) return res.status(400).json({ ok: false, error: "title 必填" });
 
-  const task = db.prepare("SELECT id FROM tasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
+  const task = db.prepare("SELECT id, owner_id FROM tasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
   if (!task) return res.status(404).json({ ok: false, error: "任务不存在" });
+  if (task.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   // 计算 sort_order = MAX(sort_order) + 1
   const max = db.prepare(
@@ -183,6 +192,8 @@ router.put("/subtasks/:id", (req, res) => {
   const { title, is_completed } = req.body;
   const subtask = db.prepare("SELECT * FROM subtasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
   if (!subtask) return res.status(404).json({ ok: false, error: "子任务不存在" });
+  const parent = db.prepare("SELECT owner_id FROM tasks WHERE id = ? AND deleted_at IS NULL").get(subtask.task_id);
+  if (!parent || parent.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   if (title !== undefined) {
     db.prepare(
@@ -203,6 +214,8 @@ router.put("/subtasks/:id", (req, res) => {
 router.delete("/subtasks/:id", (req, res) => {
   const subtask = db.prepare("SELECT * FROM subtasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
   if (!subtask) return res.status(404).json({ ok: false, error: "子任务不存在" });
+  const parent = db.prepare("SELECT owner_id FROM tasks WHERE id = ? AND deleted_at IS NULL").get(subtask.task_id);
+  if (!parent || parent.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   db.prepare("UPDATE subtasks SET deleted_at = datetime('now','localtime') WHERE id = ?").run(req.params.id);
   res.json({ ok: true });
@@ -215,7 +228,7 @@ router.put("/tasks/:id/reorder", (req, res) => {
   const { sort_order, project_id } = req.body;
   const taskId = Number(req.params.id);
 
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL").get(taskId);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL AND owner_id = ?").get(taskId, req.userId);
   if (!task) return res.status(404).json({ ok: false, error: "任务不存在" });
 
   const pid = project_id || task.project_id;
@@ -248,7 +261,7 @@ router.put("/tasks/:id/reorder", (req, res) => {
 
 // 切换任务完成状态
 router.put("/tasks/:id/toggle-complete", (req, res) => {
-  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL").get(req.params.id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ? AND deleted_at IS NULL AND owner_id = ?").get(req.params.id, req.userId);
   if (!task) return res.status(404).json({ ok: false, error: "任务不存在" });
 
   if (task.completed_at) {

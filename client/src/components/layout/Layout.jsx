@@ -5,11 +5,31 @@ import {
   Toolbar,
   Typography,
   IconButton,
+  Button,
+  SvgIcon,
+  Avatar,
 } from "@mui/material";
-import { Menu as MenuIcon } from "@mui/icons-material";
 import { useState, useCallback } from "react";
 import Sidebar from "./Sidebar";
 import CreateProjectDialog from "../common/CreateProjectDialog";
+import { useAuth } from "../../context/AuthContext";
+
+// 内联菜单图标（避免 @mui/icons-material）
+function MenuIcon(props) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" />
+    </SvgIcon>
+  );
+}
+
+function LogoutIcon(props) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
+    </SvgIcon>
+  );
+}
 
 /**
  * Root layout: AppBar + Sidebar + page content outlet.
@@ -20,6 +40,7 @@ export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
+  const { user, logout } = useAuth();
 
   // Support ?create=true in URL to trigger the dialog
   const createParam = searchParams.get("create") === "true";
@@ -76,6 +97,29 @@ export default function Layout() {
             >
               硬件项目管理工具
             </Typography>
+          </Box>
+
+          {/* 当前用户 + 退出登录 */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexShrink: 0 }}>
+            {user && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mr: 0.5 }}>
+                <Avatar sx={{ width: 30, height: 30, bgcolor: "primary.main", fontSize: 14 }}>
+                  {user.username.slice(0, 1).toUpperCase()}
+                </Avatar>
+                <Typography variant="body2" sx={{ color: "text.primary", fontWeight: 600, display: { xs: "none", sm: "block" } }}>
+                  {user.username}
+                </Typography>
+              </Box>
+            )}
+            <Button
+              color="inherit"
+              size="small"
+              onClick={logout}
+              startIcon={<LogoutIcon />}
+              sx={{ textTransform: "none" }}
+            >
+              退出
+            </Button>
           </Box>
         </Toolbar>
       </AppBar>

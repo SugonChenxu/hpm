@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { Box, CircularProgress } from "@mui/material";
 import { ProjectProvider } from "./context/ProjectContext";
+import { useAuth } from "./context/AuthContext";
 import Layout from "./components/layout/Layout";
 import DashboardPage from "./pages/DashboardPage";
 import SchedulePage from "./pages/SchedulePage";
@@ -11,8 +13,30 @@ import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
 import RedirectLegacyRoutes from "./components/layout/RedirectLegacyRoutes";
 import WeekMeetingPage from "./pages/WeekMeetingPage";
+import LoginPage from "./pages/LoginPage";
 
-export default function App() {
+function FullScreenLoader() {
+  return (
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "background.default",
+      }}
+    >
+      <CircularProgress />
+    </Box>
+  );
+}
+
+function AppInner() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <FullScreenLoader />;
+  if (!user) return <LoginPage />;
+
   return (
     <ProjectProvider>
       <Routes>
@@ -32,4 +56,8 @@ export default function App() {
       </Routes>
     </ProjectProvider>
   );
+}
+
+export default function App() {
+  return <AppInner />;
 }

@@ -37,6 +37,8 @@ router.get("/issues", (req, res) => {
   const { project_id, phase_id, severity, status, source, search } = req.query;
   let sql = "SELECT * FROM issues WHERE 1=1";
   const params = [];
+  sql += " AND owner_id = ?";
+  params.push(req.userId);
   if (project_id) { sql += " AND project_id = ?"; params.push(project_id); }
   if (phase_id) { sql += " AND phase_id = ?"; params.push(phase_id); }
   if (severity) { sql += " AND severity = ?"; params.push(severity); }
@@ -50,16 +52,20 @@ router.get("/issues", (req, res) => {
 router.post("/issues", (req, res) => {
   const { project_id, phase_id, title, description, severity, assignee } = req.body;
   if (!title || !project_id) return res.status(400).json({ ok: false, error: "title 和 project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const di_weight = DI_WEIGHTS[severity] || 1;
   const count = db.prepare("SELECT COUNT(*) as cnt FROM issues WHERE source='local'").get().cnt;
   const code = `HPM-${String(count + 1).padStart(4, "0")}`;
-  const result = db.prepare("INSERT INTO issues (project_id, phase_id, code, title, description, severity, assignee, di_weight, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'local')").run(project_id, phase_id || null, code, title, description || "", severity || "Minor", assignee || "", di_weight);
+  const result = db.prepare("INSERT INTO issues (project_id, phase_id, code, title, description, severity, assignee, di_weight, source, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'local', ?)").run(project_id, phase_id || null, code, title, description || "", severity || "Minor", assignee || "", di_weight, req.userId);
   res.status(201).json({ ok: true, data: db.prepare("SELECT * FROM issues WHERE id = ?").get(result.lastInsertRowid) });
 });
 
 router.get("/issues/di-summary", (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const byPhase = db.prepare("SELECT phase_id, SUM(di_weight) as current_di, COUNT(*) as count FROM issues WHERE project_id=? AND status NOT IN ('已关闭') GROUP BY phase_id").all(project_id);
   const total = db.prepare("SELECT SUM(di_weight) as total_di, COUNT(*) as total_count FROM issues WHERE project_id=? AND status NOT IN ('已关闭')").get(project_id);
   res.json({ ok: true, data: { byPhase, total } });
@@ -73,6 +79,8 @@ router.get("/issues/di-summary", (req, res) => {
 router.get("/issues/di-trend", async (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   const cached = getCache(project_id, "di_trend");
   if (cached !== null) return res.json({ ok: true, data: cached });
@@ -90,6 +98,8 @@ router.get("/issues/di-trend", async (req, res) => {
 router.get("/issues/category-stats", async (req, res) => {
   const { project_id, type } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   const cacheKey = type === "di" ? "category_di_stats" : "category_stats";
   const cached = getCache(project_id, cacheKey);
@@ -110,6 +120,8 @@ router.get("/issues/category-stats", async (req, res) => {
 router.get("/issues/summary", async (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   const cached = getCache(project_id, "summary");
   if (cached !== null) return res.json({ ok: true, data: cached });
@@ -127,6 +139,8 @@ router.get("/issues/summary", async (req, res) => {
 router.get("/issues/report", async (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
 
   const cached = getCache(project_id, "report");
   if (cached !== null) return res.json({ ok: true, data: cached });
@@ -141,18 +155,18 @@ router.get("/issues/report", async (req, res) => {
 });
 
 router.get("/issues/:id", (req, res) => {
-  const issue = db.prepare("SELECT * FROM issues WHERE id = ?").get(req.params.id);
+  const issue = db.prepare("SELECT * FROM issues WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!issue) return res.status(404).json({ ok: false, error: "缺陷不存在" });
   res.json({ ok: true, data: issue });
 });
 
 router.put("/issues/:id", (req, res) => {
   const { title, description, severity, status, assignee } = req.body;
-  const issue = db.prepare("SELECT * FROM issues WHERE id = ?").get(req.params.id);
+  const issue = db.prepare("SELECT * FROM issues WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!issue) return res.status(404).json({ ok: false, error: "缺陷不存在" });
   const newSeverity = severity || issue.severity;
   const di_weight = DI_WEIGHTS[newSeverity] || issue.di_weight;
-  db.prepare("UPDATE issues SET title=COALESCE(?,title), description=COALESCE(?,description), severity=COALESCE(?,severity), status=COALESCE(?,status), assignee=COALESCE(?,assignee), di_weight=?, updated_at=datetime('now','localtime') WHERE id=?").run(title, description, severity, status, assignee, di_weight, req.params.id);
+  db.prepare("UPDATE issues SET title=COALESCE(?,title), description=COALESCE(?,description), severity=COALESCE(?,severity), status=COALESCE(?,status), assignee=COALESCE(?,assignee), di_weight=?, updated_at=datetime('now','localtime') WHERE id=? AND owner_id = ?").run(title, description, severity, status, assignee, di_weight, req.params.id, req.userId);
   res.json({ ok: true, data: db.prepare("SELECT * FROM issues WHERE id = ?").get(req.params.id) });
 });
 

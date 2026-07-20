@@ -32,13 +32,13 @@ function mapMantisError(error, fallbackMsg) {
   }
 }
 
-// ── 辅助：更新 mantis_connection 最后同步信息 ────────────────
-function updateLastSync(status) {
-  const conn = db.prepare("SELECT id FROM mantis_connection LIMIT 1").get();
+// ── 辅助：更新 mantis_connection 最后同步信息（按用户） ────────────────
+function updateLastSync(status, ownerId) {
+  const conn = db.prepare("SELECT id FROM mantis_connection WHERE owner_id = ? LIMIT 1").get(ownerId);
   if (conn) {
     db.prepare(
-      "UPDATE mantis_connection SET last_sync_at=datetime('now','localtime'), last_sync_status=? WHERE id=?"
-    ).run(status, conn.id);
+      "UPDATE mantis_connection SET last_sync_at=datetime('now','localtime'), last_sync_status=? WHERE id=? AND owner_id=?"
+    ).run(status, conn.id, ownerId);
   }
 }
 
@@ -63,11 +63,15 @@ router.post("/mantis/sync", async (req, res) => {
   const { project_id } = req.body;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
 
+  // 校验项目归属（仅当前用户可同步自己的项目）
+  const proj = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(project_id, req.userId);
+  if (!proj) return res.status(403).json({ ok: false, error: "无权访问该项目" });
+
   try {
     const issues = await adapter.fetchIssues(project_id);
 
     // 单个 issue 的 upsert（通过 mantis_id 查找已有记录）
-    const find = db.prepare("SELECT id FROM issues WHERE mantis_id=?");
+    const find = db.prepare("SELECT id FROM issues WHERE mantis_id=? AND owner_id=?");
     const update = db.prepare(`
       UPDATE issues SET
         title=?, description=?, severity=?, status=?,
@@ -75,16 +79,16 @@ router.post("/mantis/sync", async (req, res) => {
         synced_at=datetime('now','localtime'),
         mantis_updated_at=?,
         updated_at=datetime('now','localtime')
-      WHERE mantis_id=?
+      WHERE mantis_id=? AND owner_id=?
     `);
     const insert = db.prepare(`
       INSERT INTO issues
         (project_id, mantis_id, code, title, description, severity, status,
          assignee, di_weight, source, category, resolution,
-         synced_at, mantis_updated_at)
+         owner_id, synced_at, mantis_updated_at)
       VALUES
         (?, ?, ?, ?, ?, ?, ?, ?, ?, 'mantis', ?, ?,
-         datetime('now','localtime'), ?)
+         ?, datetime('now','localtime'), ?)
     `);
 
     const syncCount = db.transaction(() => {
@@ -101,30 +105,30 @@ router.post("/mantis/sync", async (req, res) => {
         const resolution = issue.resolution || null;
         const mantisUpdatedAt = issue.updated_at || null;
 
-        const existing = find.get(mantisId);
+        const existing = find.get(mantisId, req.userId);
         if (existing) {
           update.run(title, description, severity, status, assignee,
-            di_weight, category, resolution, mantisUpdatedAt, mantisId);
+            di_weight, category, resolution, mantisUpdatedAt, mantisId, req.userId);
         } else {
           const code = `MNT-${mantisId}`;
           insert.run(project_id, mantisId, code, title, description,
             severity, status, assignee, di_weight, category, resolution,
-            mantisUpdatedAt);
+            req.userId, mantisUpdatedAt);
         }
         count++;
       }
       return count;
     })(issues);
 
-    // 清除该项目的所有缓存
-    db.prepare("DELETE FROM sync_cache WHERE project_id=?").run(project_id);
+    // 清除该项目的所有缓存（仅当前用户）
+    db.prepare("DELETE FROM sync_cache WHERE project_id=? AND owner_id=?").run(project_id, req.userId);
 
     // 更新最后同步状态
-    updateLastSync("success");
+    updateLastSync("success", req.userId);
 
     res.json({ ok: true, data: { sync_count: syncCount } });
   } catch (error) {
-    updateLastSync(error.code || "error");
+    updateLastSync(error.code || "error", req.userId);
 
     const { status, message } = mapMantisError(error, "同步失败");
     res.status(status).json({ ok: false, error: message });
@@ -135,7 +139,7 @@ router.post("/mantis/sync", async (req, res) => {
 // GET /mantis/connection — 读取 Mantis 连接配置
 // ═══════════════════════════════════════════════════════════
 router.get("/mantis/connection", (req, res) => {
-  const conn = db.prepare("SELECT * FROM mantis_connection LIMIT 1").get();
+  const conn = db.prepare("SELECT * FROM mantis_connection WHERE owner_id = ? LIMIT 1").get(req.userId);
   res.json({ ok: true, data: conn || {} });
 });
 
@@ -144,7 +148,7 @@ router.get("/mantis/connection", (req, res) => {
 // ═══════════════════════════════════════════════════════════
 router.put("/mantis/connection", (req, res) => {
   const { server_url, api_token, project_mapping, sync_interval_min } = req.body;
-  const existing = db.prepare("SELECT id FROM mantis_connection LIMIT 1").get();
+  const existing = db.prepare("SELECT id FROM mantis_connection WHERE owner_id = ? LIMIT 1").get(req.userId);
 
   if (existing) {
     db.prepare(`
@@ -153,23 +157,25 @@ router.put("/mantis/connection", (req, res) => {
         api_token=COALESCE(?,api_token),
         project_mapping=COALESCE(?,project_mapping),
         sync_interval_min=COALESCE(?,sync_interval_min)
-      WHERE id=?
+      WHERE id=? AND owner_id=?
     `).run(
       server_url,
       api_token,
       project_mapping ? JSON.stringify(project_mapping) : null,
       sync_interval_min,
-      existing.id
+      existing.id,
+      req.userId
     );
   } else {
     db.prepare(`
-      INSERT INTO mantis_connection (server_url, api_token, project_mapping, sync_interval_min)
-      VALUES (?,?,?,?)
+      INSERT INTO mantis_connection (server_url, api_token, project_mapping, sync_interval_min, owner_id)
+      VALUES (?,?,?,?,?)
     `).run(
       server_url || "",
       api_token || "",
       project_mapping ? JSON.stringify(project_mapping) : "[]",
-      sync_interval_min || 30
+      sync_interval_min || 30,
+      req.userId
     );
   }
 

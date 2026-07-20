@@ -3,11 +3,11 @@ import db from "../db.js";
 
 const router = Router();
 
-// 项目列表
+// 项目列表（仅当前用户）
 router.get("/projects", (req, res) => {
   const { status, category, search } = req.query;
-  let sql = `SELECT p.* FROM projects p WHERE 1=1`;
-  const params = [];
+  let sql = `SELECT p.* FROM projects p WHERE p.owner_id = ?`;
+  const params = [req.userId];
   if (status) { sql += " AND p.status = ?"; params.push(status); }
   if (category) { sql += " AND p.category = ?"; params.push(category); }
   if (search) { sql += " AND (p.code LIKE ? OR p.name LIKE ?)"; params.push(`%${search}%`, `%${search}%`); }
@@ -15,19 +15,20 @@ router.get("/projects", (req, res) => {
   res.json({ ok: true, data: db.prepare(sql).all(...params) });
 });
 
-// 创建项目
+// 创建项目（归属当前用户）
 router.post("/projects", (req, res) => {
   const { code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time, current_phase } = req.body;
   if (!code || !name) return res.status(400).json({ ok: false, error: "code 和 name 必填" });
 
   const result = db.prepare(
-    `INSERT INTO projects (code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time, current_phase) 
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO projects (code, name, category, template_id, theme_color, department, order_number, storage_location, meeting_time, current_phase, owner_id) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     code, name, category || "新品", template_id || null,
     theme_color || "#1565C0",
     department || "", order_number || "", storage_location || "", meeting_time || "",
-    current_phase || "pre_research"
+    current_phase || "pre_research",
+    req.userId
   );
   const projectId = result.lastInsertRowid;
 
@@ -55,26 +56,26 @@ router.post("/projects", (req, res) => {
 router.put("/projects/reorder", (req, res) => {
   const { orderedIds } = req.body;
   if (!Array.isArray(orderedIds)) return res.status(400).json({ ok: false, error: "orderedIds 必须是数组" });
-  const update = db.prepare("UPDATE projects SET sort_order = ? WHERE id = ?");
+  const update = db.prepare("UPDATE projects SET sort_order = ? WHERE id = ? AND owner_id = ?");
   const tx = db.transaction(() => {
-    orderedIds.forEach((id, index) => update.run(index, id));
+    orderedIds.forEach((id, index) => update.run(index, id, req.userId));
   });
   tx();
   res.json({ ok: true });
 });
 
-// 项目详情
+// 项目详情（仅当前用户）
 router.get("/projects/:id", (req, res) => {
-  const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id);
+  const project = db.prepare("SELECT * FROM projects WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
   const phases = db.prepare("SELECT * FROM phases WHERE project_id = ? ORDER BY phase_order").all(req.params.id);
   res.json({ ok: true, data: { ...project, phases } });
 });
 
-// 更新项目
+// 更新项目（仅当前用户）
 router.put("/projects/:id", (req, res) => {
   const { code, name, category, status, theme_color, department, order_number, storage_location, meeting_time, current_phase } = req.body;
-  const project = db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id);
+  const project = db.prepare("SELECT * FROM projects WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
 
   db.prepare(
@@ -101,13 +102,13 @@ router.put("/projects/:id", (req, res) => {
     current_phase !== undefined ? current_phase : project.current_phase,
     req.params.id
   );
-  res.json({ ok: true, data: db.prepare("SELECT * FROM projects WHERE id = ?").get(req.params.id) });
+  res.json({ ok: true, data: db.prepare("SELECT * FROM projects WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId) });
 });
 
-// 删除项目（级联清除所有关联数据）
+// 删除项目（级联清除所有关联数据，仅当前用户）
 router.delete("/projects/:id", (req, res) => {
   const { id } = req.params;
-  const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(id);
+  const project = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(id, req.userId);
   if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
 
   const tx = db.transaction(() => {
@@ -141,7 +142,7 @@ router.delete("/projects/:id", (req, res) => {
 router.get("/projects/:id/kanban-stats", (req, res) => {
   const projectId = req.params.id;
 
-  const project = db.prepare("SELECT id FROM projects WHERE id = ?").get(projectId);
+  const project = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(projectId, req.userId);
   if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
 
   const total = db.prepare(
@@ -187,6 +188,8 @@ router.get("/templates", (req, res) => {
 
 // 阶段列表
 router.get("/projects/:id/phases", (req, res) => {
+  const project = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
+  if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
   res.json({
     ok: true,
     data: db.prepare("SELECT * FROM phases WHERE project_id = ? ORDER BY phase_order").all(req.params.id),
@@ -196,6 +199,8 @@ router.get("/projects/:id/phases", (req, res) => {
 // 更新阶段
 router.put("/projects/:id/phases/:phaseId", (req, res) => {
   const { name, planned_start, planned_end, actual_start, actual_end, status } = req.body;
+  const project = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
+  if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
   db.prepare(
     `UPDATE phases SET 
       name=COALESCE(?,name), 
@@ -211,6 +216,8 @@ router.put("/projects/:id/phases/:phaseId", (req, res) => {
 
 // 门禁检查
 router.post("/projects/:id/gates/:gateId/pass", (req, res) => {
+  const project = db.prepare("SELECT id FROM projects WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
+  if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
   db.prepare(
     "UPDATE gates SET is_passed=1, passed_at=datetime('now','localtime') WHERE id=? AND phase_id IN (SELECT id FROM phases WHERE project_id=?)"
   ).run(req.params.gateId, req.params.id);

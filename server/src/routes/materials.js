@@ -79,6 +79,8 @@ function normalize(item = {}) {
 router.get("/materials", (req, res) => {
   const { project_id, status, search } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   let sql = "SELECT * FROM materials WHERE project_id = ?";
   const params = [Number(project_id)];
   if (status) {
@@ -99,12 +101,14 @@ router.get("/materials", (req, res) => {
 router.post("/materials", (req, res) => {
   const { project_id } = req.body;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const n = normalize(req.body);
   const seq = nextSeq(Number(project_id));
   const result = db
     .prepare(
-      `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       Number(project_id),
@@ -119,7 +123,8 @@ router.post("/materials", (req, res) => {
       n.purchase_date,
       n.lead_time,
       n.expected_delivery,
-      n.notes
+      n.notes,
+      req.userId
     );
   res.status(201).json({
     ok: true,
@@ -131,12 +136,14 @@ router.post("/materials", (req, res) => {
 router.post("/materials/batch", (req, res) => {
   const { project_id, items } = req.body;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   if (!Array.isArray(items) || items.length === 0)
     return res.status(400).json({ ok: false, error: "items 必填且非空" });
   let seq = nextSeq(Number(project_id));
   const insert = db.prepare(
-    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -155,7 +162,8 @@ router.post("/materials/batch", (req, res) => {
         n.purchase_date,
         n.lead_time,
         n.expected_delivery,
-        n.notes
+        n.notes,
+        req.userId
       );
       insertedIds.push(r.lastInsertRowid);
     });
@@ -171,6 +179,8 @@ router.post("/materials/batch", (req, res) => {
 router.get("/materials/import-snapshot", (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const row = db
     .prepare(
       "SELECT id, ids_json, created_at FROM material_import_snapshots WHERE project_id = ? ORDER BY id DESC LIMIT 1"
@@ -190,6 +200,8 @@ router.get("/materials/import-snapshot", (req, res) => {
 router.post("/materials/import-undo", (req, res) => {
   const { project_id } = req.body;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const row = db
     .prepare(
       "SELECT id, ids_json, created_at FROM material_import_snapshots WHERE project_id = ? ORDER BY id DESC LIMIT 1"
@@ -222,6 +234,8 @@ router.delete("/materials/batch", (req, res) => {
   const { project_id, ids } = req.body;
   if (!project_id || !Array.isArray(ids) || ids.length === 0)
     return res.status(400).json({ ok: false, error: "project_id 与 ids 必填" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   db.transaction(() => {
     const del = db.prepare("DELETE FROM materials WHERE id = ? AND project_id = ?");
     ids.forEach((id) => del.run(id, Number(project_id)));
@@ -237,6 +251,12 @@ router.put("/materials/batch-status", (req, res) => {
     return res.status(400).json({ ok: false, error: "ids 必填" });
   if (!MATERIAL_STATUSES.includes(material_status))
     return res.status(400).json({ ok: false, error: "非法物料状态" });
+  // 校验归属：所有受影响物料必须属于当前用户拥有的项目
+  const rows = db.prepare(`SELECT DISTINCT project_id FROM materials WHERE id IN (${ids.map(() => "?").join(",")})`).all(...ids);
+  if (rows.length === 0) return res.status(404).json({ ok: false, error: "物料不存在" });
+  const projectIds = rows.map((r) => r.project_id);
+  const owned = db.prepare(`SELECT COUNT(*) as cnt FROM projects WHERE id IN (${projectIds.map(() => "?").join(",")}) AND owner_id = ?`).get(...projectIds, req.userId);
+  if (owned.cnt !== projectIds.length) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const update = db.prepare(
     "UPDATE materials SET material_status = ?, updated_at = datetime('now','localtime') WHERE id = ?"
   );
@@ -250,6 +270,8 @@ router.put("/materials/batch-status", (req, res) => {
 router.get("/materials/:id", (req, res) => {
   const m = db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id);
   if (!m) return res.status(404).json({ ok: false, error: "物料不存在" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(m.project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   res.json({ ok: true, data: m });
 });
 
@@ -257,6 +279,8 @@ router.get("/materials/:id", (req, res) => {
 router.put("/materials/:id", (req, res) => {
   const m = db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id);
   if (!m) return res.status(404).json({ ok: false, error: "物料不存在" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(m.project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   const n = normalize({ ...m, ...req.body });
   // seq / project_id 不可经此接口变更
   db.prepare(
@@ -286,6 +310,8 @@ router.put("/materials/:id", (req, res) => {
 router.delete("/materials/:id", (req, res) => {
   const m = db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id);
   if (!m) return res.status(404).json({ ok: false, error: "物料不存在" });
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(m.project_id));
+  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
   db.prepare("DELETE FROM materials WHERE id = ?").run(req.params.id);
   renumberSeq(m.project_id);
   res.json({ ok: true });
@@ -406,10 +432,13 @@ router.post("/materials/oa-import", (req, res) => {
   if (!project_id || !Array.isArray(items) || !items.length)
     return res.json({ ok: false, error: "project_id 与 items 必填" });
 
+  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
+  const ownerId = proj ? proj.owner_id : 0;
+
   let seq = nextSeq(Number(project_id));
   const insert = db.prepare(
-    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?)`
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -420,7 +449,8 @@ router.post("/materials/oa-import", (req, res) => {
         it.material_status || "已下单",
         parseFloat(it.quantity) || 0,
         it.purchase_date || null,
-        it.notes || ""
+        it.notes || "",
+        ownerId
       );
       insertedIds.push(r.lastInsertRowid);
     });

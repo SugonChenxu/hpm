@@ -662,4 +662,48 @@ db.exec(`CREATE TABLE IF NOT EXISTS plm_task_map (
 
 console.log("Migration plm_connection + plm_task_map: done");
 
+// =====================================================
+// 多用户：users 表 + 业务表 owner_id 列
+// 设计：每个业务表带 owner_id，登录用户只能读写自己的数据。
+// 老数据（owner_id=0）由 scripts/bind-legacy-data.js 绑定到专属账号。
+// =====================================================
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+`);
+
+// 需要直接按 owner_id 过滤的业务表（含无 project_id 的全局表）
+const OWNER_TABLES = [
+  "projects",
+  "tasks",
+  "issues",
+  "meetings",
+  "weekly_reports",
+  "week_meetings",
+  "meeting_outputs",
+  "mantis_connection",
+  "plm_connection",
+  "material_import_snapshots",
+  "sync_cache",
+  "smart_minutes",
+  "materials",
+];
+
+for (const t of OWNER_TABLES) {
+  try {
+    db.exec(`ALTER TABLE ${t} ADD COLUMN owner_id INTEGER DEFAULT 0`);
+  } catch (e) {
+    if (!e.message.includes("duplicate column")) {
+      console.warn(`Migration owner_id ${t}:`, e.message);
+    }
+  }
+}
+
+console.log("Migration multi-user (users + owner_id columns): done");
+
 export default db;

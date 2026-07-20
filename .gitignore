@@ -51,6 +51,13 @@ coverage/
 # Cache
 .cache/
 *.tsbuildinfo
+
+# Forge runtime data (session store + DB safety backups — regenerated at runtime)
+server/src/sessions/
+server/backups/
+
+# Forge portable package build artifact (one-off zip, not source)
+forge-package.zip
 *.db
 *.db-shm
 *.db-wal

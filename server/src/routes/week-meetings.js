@@ -29,18 +29,18 @@ router.get("/week-meetings", (req, res) => {
   if (!weekKey) return res.status(400).json({ ok: false, error: "缺少 week 参数" });
 
   const meetings = db.prepare(
-    "SELECT * FROM week_meetings WHERE week_key = ? ORDER BY weekday, start_time"
-  ).all(weekKey);
+    "SELECT * FROM week_meetings WHERE week_key = ? AND owner_id = ? ORDER BY weekday, start_time"
+  ).all(weekKey, req.userId);
 
   // 本周实际展示输出物：普通一次性条目 + 已生成的「每周实例」（is_template=0）；周期模板(is_template=1)不直接展示
   const outputs = db.prepare(
-    "SELECT * FROM meeting_outputs WHERE week_key = ? AND is_template = 0 ORDER BY weekday, sort_order, id"
-  ).all(weekKey);
+    "SELECT * FROM meeting_outputs WHERE week_key = ? AND is_template = 0 AND owner_id = ? ORDER BY weekday, sort_order, id"
+  ).all(weekKey, req.userId);
 
   // ===== 周期性输出物：周期模板（is_template=1），按周期规则判断本周是否生成虚拟项 =====
   const cycleTemplates = db.prepare(
-    "SELECT * FROM meeting_outputs WHERE is_template = 1"
-  ).all();
+    "SELECT * FROM meeting_outputs WHERE is_template = 1 AND owner_id = ?"
+  ).all(req.userId);
 
   // 计算两个周 key 之间的周数差
   function weeksBetween(a, b) {
@@ -87,10 +87,10 @@ router.get("/week-meetings", (req, res) => {
 
   const allOutputs = [...outputs, ...recurringOutputs];
 
-  // 从 projects 表拉取例会
+  // 从 projects 表拉取例会（仅当前用户）
   const projects = db.prepare(
-    "SELECT id, code, name, theme_color, meeting_time FROM projects WHERE meeting_time != ''"
-  ).all();
+    "SELECT id, code, name, theme_color, meeting_time FROM projects WHERE meeting_time != '' AND owner_id = ?"
+  ).all(req.userId);
   const recurring = projects
     .map((p) => {
       const parsed = parseMeetingTime(p.meeting_time);
@@ -118,14 +118,14 @@ router.post("/week-meetings", (req, res) => {
     return res.status(400).json({ ok: false, error: "缺少必填字段" });
   }
   const insert = db.prepare(
-    "INSERT INTO week_meetings (week_key, weekday, start_time, end_time, title) VALUES (?, ?, ?, ?, ?)"
+    "INSERT INTO week_meetings (week_key, weekday, start_time, end_time, title, owner_id) VALUES (?, ?, ?, ?, ?, ?)"
   );
   const getOne = db.prepare("SELECT * FROM week_meetings WHERE id = ?");
   const created = [];
   const tx = db.transaction(() => {
     for (let i = 0; i < weeks; i++) {
       const wk = addDaysToWeekKey(week_key, i * 7);
-      const info = insert.run(wk, weekday, start_time, end_time, title);
+      const info = insert.run(wk, weekday, start_time, end_time, title, req.userId);
       created.push(getOne.get(info.lastInsertRowid));
     }
   });
@@ -136,16 +136,20 @@ router.post("/week-meetings", (req, res) => {
 // PUT /week-meetings/:id
 router.put("/week-meetings/:id", (req, res) => {
   const { weekday, start_time, end_time, title } = req.body;
+  const existing = db.prepare("SELECT id FROM week_meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
+  if (!existing) return res.status(404).json({ ok: false, error: "周例会不存在" });
   db.prepare(
-    "UPDATE week_meetings SET weekday=?, start_time=?, end_time=?, title=?, updated_at=datetime('now','localtime') WHERE id=?"
-  ).run(weekday, start_time, end_time, title, req.params.id);
-  const meeting = db.prepare("SELECT * FROM week_meetings WHERE id = ?").get(req.params.id);
+    "UPDATE week_meetings SET weekday=?, start_time=?, end_time=?, title=?, updated_at=datetime('now','localtime') WHERE id=? AND owner_id=?"
+  ).run(weekday, start_time, end_time, title, req.params.id, req.userId);
+  const meeting = db.prepare("SELECT * FROM week_meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   res.json({ ok: true, data: meeting });
 });
 
 // DELETE /week-meetings/:id
 router.delete("/week-meetings/:id", (req, res) => {
-  db.prepare("DELETE FROM week_meetings WHERE id = ?").run(req.params.id);
+  const existing = db.prepare("SELECT id FROM week_meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
+  if (!existing) return res.status(404).json({ ok: false, error: "周例会不存在" });
+  db.prepare("DELETE FROM week_meetings WHERE id = ? AND owner_id = ?").run(req.params.id, req.userId);
   res.json({ ok: true });
 });
 
@@ -159,10 +163,10 @@ router.post("/week-meetings/outputs", (req, res) => {
     "SELECT COALESCE(MAX(sort_order), -1) as m FROM meeting_outputs WHERE week_key = ? AND weekday = ?"
   ).get(week_key, weekday);
   const info = db.prepare(
-    "INSERT INTO meeting_outputs (week_key, weekday, title, is_done, sort_order, cycle, is_template, source_id, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))"
+    "INSERT INTO meeting_outputs (week_key, weekday, title, is_done, sort_order, cycle, is_template, source_id, owner_id, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))"
   ).run(
     week_key, weekday, title.trim(), maxSort.m + 1,
-    cycle || "", is_template ? 1 : 0, source_id || 0
+    cycle || "", is_template ? 1 : 0, source_id || 0, req.userId
   );
   const item = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(info.lastInsertRowid);
   res.json({ ok: true, data: item });
@@ -189,10 +193,10 @@ router.post("/week-meetings/outputs/cycle-instance", (req, res) => {
       "SELECT COALESCE(MAX(sort_order), -1) as m FROM meeting_outputs WHERE week_key = ? AND weekday = ?"
     ).get(week_key, weekday);
     const info = db.prepare(
-      "INSERT INTO meeting_outputs (week_key, weekday, title, is_done, sort_order, cycle, is_template, source_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, datetime('now','localtime'), datetime('now','localtime'))"
+      "INSERT INTO meeting_outputs (week_key, weekday, title, is_done, sort_order, cycle, is_template, source_id, owner_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, datetime('now','localtime'), datetime('now','localtime'))"
     ).run(
       week_key, weekday, title.trim(), is_done ? 1 : 0, maxSort.m + 1,
-      cycle || "", source_id || 0
+      cycle || "", source_id || 0, req.userId
     );
     item = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(info.lastInsertRowid);
   }
@@ -202,7 +206,7 @@ router.post("/week-meetings/outputs/cycle-instance", (req, res) => {
 // PUT /week-meetings/outputs/:id — 切换完成态 / 改标题 / 设周期 / 标记模板
 router.put("/week-meetings/outputs/:id", (req, res) => {
   const { title, is_done, cycle, is_template, source_id } = req.body;
-  const existing = db.prepare("SELECT * FROM meeting_outputs WHERE id = ?").get(req.params.id);
+  const existing = db.prepare("SELECT * FROM meeting_outputs WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!existing) return res.status(404).json({ ok: false, error: "输出物不存在" });
   const newTitle = title !== undefined ? title : existing.title;
   const newDone = is_done !== undefined ? (is_done ? 1 : 0) : existing.is_done;
@@ -218,7 +222,9 @@ router.put("/week-meetings/outputs/:id", (req, res) => {
 
 // DELETE /week-meetings/outputs/:id — 删除一条输出物
 router.delete("/week-meetings/outputs/:id", (req, res) => {
-  db.prepare("DELETE FROM meeting_outputs WHERE id = ?").run(req.params.id);
+  const existing = db.prepare("SELECT id FROM meeting_outputs WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
+  if (!existing) return res.status(404).json({ ok: false, error: "输出物不存在" });
+  db.prepare("DELETE FROM meeting_outputs WHERE id = ? AND owner_id = ?").run(req.params.id, req.userId);
   res.json({ ok: true });
 });
 

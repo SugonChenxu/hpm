@@ -1,12 +1,23 @@
 const BASE = "/api";
 
+// 未授权（会话过期）回调，由 AuthContext 注册，用于自动跳回登录页
+let unauthorizedHandler = null;
+export function setUnauthorizedHandler(fn) {
+  unauthorizedHandler = fn;
+}
+
 async function request(url, options = {}) {
   const res = await fetch(BASE + url, {
     headers: { "Content-Type": "application/json", ...options.headers },
     ...options,
   });
   const json = await res.json();
-  if (!res.ok) throw new Error(json.error || "请求失败");
+  if (!res.ok) {
+    if (res.status === 401 && json.code === "UNAUTHENTICATED" && unauthorizedHandler) {
+      unauthorizedHandler();
+    }
+    throw new Error(json.error || "请求失败");
+  }
   return json;
 }
 
@@ -170,6 +181,13 @@ export const api = {
   cache: {
     invalidate: (projectId) =>
       request("/cache/invalidate", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
+  },
+  // 认证
+  auth: {
+    login: (username, password) =>
+      request("/auth/login", { method: "POST", body: JSON.stringify({ username, password }) }),
+    me: () => request("/auth/me"),
+    logout: () => request("/auth/logout", { method: "POST" }),
   },
 };
 
