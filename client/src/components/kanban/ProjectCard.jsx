@@ -19,7 +19,6 @@ import {
   Tooltip,
 } from "recharts";
 import PriorityChip from "./PriorityChip";
-import api from "../../api/client";
 
 // 饼图配色（与故障仪表板 CategoryBarChart 保持一致）
 const PIE_COLORS = ["#7C3AED", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#14B8A6", "#F97316", "#84CC16", "#6366F1"];
@@ -80,16 +79,12 @@ function InfoRow({ label, value }) {
  *   tasks   — 该项目的任务数组（含 status / kanban_column 字段）
  *   onEdit  — (project) => void  编辑回调
  */
-export default function ProjectCard({ project, tasks = [], faults, onEdit, onPhaseChange, onTaskMutated }) {
+export default function ProjectCard({ project, tasks = [], faults, onEdit, onPhaseChange }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [phaseAnchor, setPhaseAnchor] = useState(null);
-  const [showCompleted, setShowCompleted] = useState(false);
   const themeColor = project.theme_color || "#7C3AED";
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
-  );
-  const completedTasks = tasks.filter(
-    (t) => t.completed_at && !t.deleted_at
   );
 
   /** 当前阶段（从 project.current_phase 取得，缺省为预研阶段） */
@@ -115,23 +110,6 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
   const handleEdit = () => {
     handleCloseMenu();
     if (onEdit) onEdit(project);
-  };
-
-  const fmtDate = (s) => {
-    if (!s) return "";
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return "";
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${mm}-${dd}`;
-  };
-  const handleRestoreTask = async (id) => {
-    try { await api.tasks.toggleComplete(id); onTaskMutated?.(project.id); }
-    catch (e) { console.error("还原任务失败", e); }
-  };
-  const handleDeleteTask = async (id) => {
-    try { await api.tasks.remove(id); onTaskMutated?.(project.id); }
-    catch (e) { console.error("删除任务失败", e); }
   };
 
   return (
@@ -259,82 +237,6 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
               >
                 暂无待办任务
               </Typography>
-            </>
-          )}
-
-          {/* 已完成任务（折叠，避免挤压待办高度） */}
-          {completedTasks.length > 0 && (
-            <>
-              <Divider sx={{ my: 1 }} />
-              <Box
-                onClick={() => setShowCompleted((v) => !v)}
-                sx={{ display: "flex", alignItems: "center", gap: 0.5, cursor: "pointer", userSelect: "none" }}
-              >
-                <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "text.secondary" }}>
-                  已完成 ({completedTasks.length})
-                </Typography>
-                <Box component="span" sx={{ fontSize: "0.7rem", color: "text.disabled" }}>
-                  {showCompleted ? "▾" : "▸"}
-                </Box>
-              </Box>
-              {showCompleted && (
-                <Box sx={{ mt: 0.5 }}>
-                  {completedTasks.slice(0, 6).map((t) => (
-                    <Box
-                      key={t.id}
-                      sx={{
-                        display: "flex", alignItems: "center", gap: 0.5, py: 0.15,
-                        whiteSpace: "nowrap", overflow: "hidden",
-                      }}
-                    >
-                      <Typography
-                        variant="caption"
-                        sx={{ fontSize: "0.68rem", color: "text.disabled", flexShrink: 0 }}
-                      >
-                        {fmtDate(t.completed_at)}
-                      </Typography>
-                      <Typography
-                        sx={{
-                          fontSize: "0.74rem",
-                          color: "text.secondary",
-                          textDecoration: "line-through",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          flex: 1,
-                          minWidth: 0,
-                        }}
-                      >
-                        {t.title}
-                      </Typography>
-                      <Box
-                        component="span"
-                        onClick={(e) => { e.stopPropagation(); handleRestoreTask(t.id); }}
-                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.8rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "primary.main" } }}
-                        title="还原"
-                      >
-                        ↺
-                      </Box>
-                      <Box
-                        component="span"
-                        onClick={(e) => { e.stopPropagation(); handleDeleteTask(t.id); }}
-                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.75rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "error.main" } }}
-                        title="删除"
-                      >
-                        ✕
-                      </Box>
-                    </Box>
-                  ))}
-                  {completedTasks.length > 6 && (
-                    <Typography
-                      variant="caption"
-                      sx={{ fontSize: "0.68rem", color: "text.disabled", fontStyle: "italic", mt: 0.25, display: "block" }}
-                    >
-                      还有 {completedTasks.length - 6} 条已完成任务…
-                    </Typography>
-                  )}
-                </Box>
-              )}
             </>
           )}
 

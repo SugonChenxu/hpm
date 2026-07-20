@@ -36,7 +36,7 @@ import api from "../api/client";
 import ProjectCard from "../components/kanban/ProjectCard";
 import CreateProjectDialog from "../components/common/CreateProjectDialog";
 
-function SortableProjectCard({ project, tasks, faults, onEdit, onDelete, onPhaseChange, onTaskMutated }) {
+function SortableProjectCard({ project, tasks, faults, onEdit, onDelete, onPhaseChange }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: project.id });
   const style = {
@@ -55,7 +55,7 @@ function SortableProjectCard({ project, tasks, faults, onEdit, onDelete, onPhase
         >
           <DeleteOutline sx={{ fontSize: 18, color: "text.disabled" }} />
         </IconButton>
-        <ProjectCard project={project} tasks={tasks} faults={faults} onEdit={onEdit} onPhaseChange={onPhaseChange} onTaskMutated={onTaskMutated} />
+        <ProjectCard project={project} tasks={tasks} faults={faults} onEdit={onEdit} onPhaseChange={onPhaseChange} />
       </Box>
     </div>
   );
@@ -157,23 +157,6 @@ export default function DashboardPage() {
     }
   }, [load]);
 
-  const handleTaskMutated = useCallback(async (projectId) => {
-    try {
-      const res = await api.tasks.list({});
-      const all = res.data || [];
-      const grouped = {};
-      all.forEach((t) => {
-        if (t.project_id != null) {
-          if (!grouped[t.project_id]) grouped[t.project_id] = [];
-          grouped[t.project_id].push(t);
-        }
-      });
-      setTasksByProject((prev) => ({ ...prev, [projectId]: grouped[projectId] || [] }));
-    } catch (e) {
-      console.error("刷新任务失败", e);
-    }
-  }, []);
-
   const activeCount = useMemo(
     () => projects.filter((p) => p.status === "进行中").length,
     [projects]
@@ -231,7 +214,6 @@ export default function DashboardPage() {
                   faults={faultsByProject[p.id]}
                   onEdit={handleEdit} onDelete={setDeleteTarget}
                   onPhaseChange={handlePhaseChange}
-                  onTaskMutated={handleTaskMutated}
                 />
               ))}
             </Box>
