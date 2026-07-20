@@ -9,7 +9,31 @@ import {
   Divider,
 } from "@mui/material";
 import { Edit } from "@mui/icons-material";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+} from "recharts";
 import PriorityChip from "./PriorityChip";
+
+// 饼图配色（与故障仪表板 CategoryBarChart 保持一致）
+const PIE_COLORS = ["#7C3AED", "#F59E0B", "#10B981", "#8B5CF6", "#EF4444", "#3B82F6", "#6D28D9", "#9CA3AF"];
+
+// DI 阈值配色：≤10 绿，≤20 黄，其余 红
+function diColor(di) {
+  if (di <= 10) return "#10B981";
+  if (di <= 20) return "#F59E0B";
+  return "#EF4444";
+}
+function rateColor(rate) {
+  if (rate >= 80) return "#10B981";
+  if (rate >= 50) return "#F59E0B";
+  return "#EF4444";
+}
 
 /** 项目阶段固定配置（6 个阶段，带固定配色） */
 const PROJECT_PHASES = [
@@ -55,7 +79,7 @@ function InfoRow({ label, value }) {
  *   tasks   — 该项目的任务数组（含 status / kanban_column 字段）
  *   onEdit  — (project) => void  编辑回调
  */
-export default function ProjectCard({ project, tasks = [], onEdit, onPhaseChange }) {
+export default function ProjectCard({ project, tasks = [], faults, onEdit, onPhaseChange }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [phaseAnchor, setPhaseAnchor] = useState(null);
   const themeColor = project.theme_color || "#7C3AED";
@@ -214,6 +238,127 @@ export default function ProjectCard({ project, tasks = [], onEdit, onPhaseChange
                 暂无待办任务
               </Typography>
             </>
+          )}
+
+          {/* 故障概览（关联 Mantis 故障管理模块） */}
+          {faults?.linked && (() => {
+            const s = faults.summary || {};
+            const di = Number(s.di) || 0;
+            const total = Number(s.total) || 0;
+            const rate = Number(s.rate) || 0;
+            const trendData = (faults.diTrend || [])
+              .filter((d) => d.di > 0)
+              .map((d) => ({ date: d.date, di: Math.round((d.di || 0) * 100) / 100 }));
+            const pieData = (faults.categoryStats || [])
+              .filter((d) => d.count > 0)
+              .sort((a, b) => b.count - a.count)
+              .map((d) => ({ name: d.category, value: d.count }));
+            const topModules = pieData.slice(0, 5);
+            return (
+              <>
+                <Divider sx={{ my: 1 }} />
+                <Box>
+                  {/* 标题 */}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, mb: 0.5 }}>
+                    <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: "#EF4444", flexShrink: 0 }} />
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: "text.secondary", letterSpacing: "0.02em" }}>
+                      故障概览
+                    </Typography>
+                    <Box sx={{ flexGrow: 1 }} />
+                    <Typography variant="caption" color="text.disabled">Mantis</Typography>
+                  </Box>
+
+                  {/* 指标行 */}
+                  <Box sx={{ display: "flex", gap: 1.5, mb: 0.75 }}>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>DI</Typography>
+                      <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, color: diColor(di), lineHeight: 1.1 }}>{di}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>故障</Typography>
+                      <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, lineHeight: 1.1 }}>{total}</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>解决率</Typography>
+                      <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, lineHeight: 1.1, color: rateColor(rate) }}>{rate}%</Typography>
+                    </Box>
+                  </Box>
+
+                  {/* 图表行：DI 趋势 sparkline + 缺陷分布饼图 */}
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                    <Box sx={{ flex: 1, minWidth: 0, height: 52 }}>
+                      {trendData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={52}>
+                          <AreaChart data={trendData} margin={{ top: 4, right: 2, left: 2, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id={`diGrad-${project.id}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#EF4444" stopOpacity={0.35} />
+                                <stop offset="100%" stopColor="#EF4444" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <Area type="monotone" dataKey="di" stroke="#EF4444" strokeWidth={1.5}
+                              fill={`url(#diGrad-${project.id})`} dot={false} isAnimationActive={false} />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12 }}
+                              formatter={(v) => [`DI ${v}`, ""]}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <Box sx={{ height: 52, display: "flex", alignItems: "center" }}>
+                          <Typography variant="caption" color="text.disabled">暂无 DI 趋势</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                    <Box sx={{ width: 104, height: 104, flexShrink: 0 }}>
+                      {pieData.length > 0 ? (
+                        <PieChart width={104} height={104}>
+                          <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                            innerRadius={22} outerRadius={48} paddingAngle={1} stroke="none" isAnimationActive={false}>
+                            {pieData.map((_, i) => (
+                              <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12 }}
+                            formatter={(v, n) => [`${v} 条`, n]}
+                          />
+                        </PieChart>
+                      ) : (
+                        <Box sx={{ height: 104, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Typography variant="caption" color="text.disabled">暂无分布</Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  </Box>
+
+                  {/* 模块分布图例（Top 5） */}
+                  {topModules.length > 0 && (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.25 }}>
+                      {topModules.map((m, i) => (
+                        <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+                          <Box sx={{ width: 7, height: 7, borderRadius: "50%", bgcolor: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0 }} />
+                          <Typography
+                            variant="caption"
+                            title={`${m.name} ${m.value}`}
+                            sx={{ fontSize: "0.66rem", color: "text.secondary", maxWidth: 92, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          >
+                            {m.name} {m.value}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </>
+            );
+          })()}
+
+          {/* 未关联 Mantis 故障时提示 */}
+          {!faults?.linked && faults && (
+            <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.5 }}>
+              · 未关联 Mantis 故障
+            </Typography>
           )}
         </CardContent>
       </Card>

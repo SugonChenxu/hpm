@@ -36,7 +36,7 @@ import api from "../api/client";
 import ProjectCard from "../components/kanban/ProjectCard";
 import CreateProjectDialog from "../components/common/CreateProjectDialog";
 
-function SortableProjectCard({ project, tasks, onEdit, onDelete, onPhaseChange }) {
+function SortableProjectCard({ project, tasks, faults, onEdit, onDelete, onPhaseChange }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: project.id });
   const style = {
@@ -55,7 +55,7 @@ function SortableProjectCard({ project, tasks, onEdit, onDelete, onPhaseChange }
         >
           <DeleteOutline sx={{ fontSize: 18, color: "text.disabled" }} />
         </IconButton>
-        <ProjectCard project={project} tasks={tasks} onEdit={onEdit} onPhaseChange={onPhaseChange} />
+        <ProjectCard project={project} tasks={tasks} faults={faults} onEdit={onEdit} onPhaseChange={onPhaseChange} />
       </Box>
     </div>
   );
@@ -64,6 +64,7 @@ function SortableProjectCard({ project, tasks, onEdit, onDelete, onPhaseChange }
 export default function DashboardPage() {
   const [projects, setProjects] = useState([]);
   const [tasksByProject, setTasksByProject] = useState({});
+  const [faultsByProject, setFaultsByProject] = useState({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({ status: "", search: "" });
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -94,9 +95,29 @@ export default function DashboardPage() {
         setProjects(projectList);
         setTasksByProject(grouped);
         setLoading(false);
+        // 并行拉取每个项目的故障概览（关联 Mantis）
+        loadFaults(projectList);
       })
       .catch(() => setLoading(false));
   }, [filter]);
+
+  const loadFaults = useCallback((projectList) => {
+    if (!projectList || !projectList.length) return;
+    Promise.allSettled(
+      projectList.map((p) =>
+        api.projects
+          .faults(p.id)
+          .then((r) => ({ id: p.id, data: r }))
+          .catch((e) => ({ id: p.id, data: { linked: false, error: e?.message } }))
+      )
+    ).then((results) => {
+      const map = {};
+      results.forEach((res) => {
+        if (res.status === "fulfilled") map[res.value.id] = res.value.data;
+      });
+      setFaultsByProject((prev) => ({ ...prev, ...map }));
+    });
+  }, []);
 
   useEffect(() => { load(); }, [filter]);
 
@@ -190,6 +211,7 @@ export default function DashboardPage() {
                 <SortableProjectCard
                   key={p.id} project={p}
                   tasks={tasksByProject[p.id] || []}
+                  faults={faultsByProject[p.id]}
                   onEdit={handleEdit} onDelete={setDeleteTarget}
                   onPhaseChange={handlePhaseChange}
                 />

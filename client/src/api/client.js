@@ -31,6 +31,7 @@ export const api = {
     archive: (id) => request(`/projects/${id}`, { method: "DELETE" }),
     reorder: (orderedIds) => request("/projects/reorder", { method: "PUT", body: JSON.stringify({ orderedIds }) }),
     kanbanStats: (projectId) => request(`/projects/${projectId}/kanban-stats`),
+    faults: (projectId) => request(`/projects/${projectId}/faults`),
   },
   templates: {
     list: () => request("/templates"),

@@ -1,7 +1,59 @@
 import { Router } from "express";
 import db from "../db.js";
+import { getConnection, getAdapter, resolveMantisId, mantisError } from "../mantis-resolve.js";
 
 const router = Router();
+
+// ── 项目卡片故障概览缓存（sync_cache，key=dashboard_faults，TTL 300s） ──
+function getFaultCache(ownerId, projectId) {
+  const row = db.prepare(
+    "SELECT cache_data FROM sync_cache WHERE project_id=? AND cache_key=? AND owner_id=?"
+  ).get(String(projectId), "dashboard_faults", ownerId);
+  if (!row) return null;
+  try { return JSON.parse(row.cache_data); } catch { return null; }
+}
+function setFaultCache(ownerId, projectId, data) {
+  db.prepare("DELETE FROM sync_cache WHERE project_id=? AND cache_key=? AND owner_id=?")
+    .run(String(projectId), "dashboard_faults", ownerId);
+  db.prepare(
+    "INSERT INTO sync_cache (project_id, cache_key, cache_data, ttl_seconds, owner_id) VALUES (?,?,?,300,?)"
+  ).run(String(projectId), "dashboard_faults", JSON.stringify(data), ownerId);
+}
+
+// 项目卡片故障概览（关联 Mantis 项目）
+// 返回 { linked:true, mantisProjectId, summary, diTrend, categoryStats }
+//       { linked:false, reason:"no_cookie"|"no_match" }
+router.get("/projects/:id/faults", async (req, res) => {
+  const projectId = req.params.id;
+  const ownerId = req.userId;
+  const project = db.prepare("SELECT id FROM projects WHERE id=? AND owner_id=?").get(projectId, ownerId);
+  if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
+  try {
+    const conn = getConnection(ownerId);
+    if (!conn || !conn.api_token) return res.json({ ok: true, linked: false, reason: "no_cookie" });
+    let mantisId;
+    try {
+      mantisId = await resolveMantisId(ownerId, projectId);
+    } catch (e) {
+      if (e.code === "no_match") return res.json({ ok: true, linked: false, reason: "no_match" });
+      throw e;
+    }
+    const cached = getFaultCache(ownerId, projectId);
+    if (cached) return res.json({ ok: true, linked: true, ...cached });
+    const adapter = getAdapter(ownerId);
+    const [summary, diTrend, categoryStats] = await Promise.all([
+      adapter.fetchSummary(mantisId),
+      adapter.fetchDITrend(mantisId),
+      adapter.fetchCategoryStats(mantisId),
+    ]);
+    const payload = { mantisProjectId: mantisId, summary, diTrend, categoryStats };
+    setFaultCache(ownerId, projectId, payload);
+    res.json({ ok: true, linked: true, ...payload });
+  } catch (e) {
+    const { status, message } = mantisError(e, "获取故障概览失败");
+    res.status(status).json({ ok: false, error: message });
+  }
+});
 
 // 项目列表（仅当前用户）
 router.get("/projects", (req, res) => {
