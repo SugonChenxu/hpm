@@ -131,11 +131,13 @@
 3. **表单字段**：申请日期→purchase_date（label→input_field→input.value），内部立项号→order_number（同上）；
 4. **状态**：OA 导入默认「已下单」（已提采购申请）；
 5. **项目匹配**：按 order_number 查项目表，命中→导入对应项目，未命中→入 PM「项目管理部日常工作」项目；
-6. **三种使用方式**：
+6. **三种使用方式**（⚠️ 2026-07-17 起应用内「OA 导入」按钮已移除，改为外部注入方式）：
    - Chrome 扩展：`chrome-extension/`（点击图标注入脚本，推荐）；
    - 书签浮窗：拖 `scripts/oa-bookmarklet.txt` 到书签栏；
    - Console 脚本：`scripts/oa-import-bookmarklet.js`。
-7. **后端端点**：`POST /api/materials/oa-import`（跨域 CORS，浏览器直接提交）。
+7. **后端端点**：`POST /api/materials/oa-import`（跨域 CORS，浏览器直接提交，由上述三种外部脚本调用）。
+
+> **变更说明**：原「工具栏 OA 导入按钮」已下架，避免与应用内 Excel 导入入口混淆；OA 采购数据现统一通过 Chrome 扩展 / 书签 / Console 脚本在 OA 页面内注入，后端 `oa-import` 端点与字段映射逻辑保持不变。
 
 ---
 

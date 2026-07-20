@@ -29,7 +29,7 @@
 | 多项目切换 | ✅ | URL searchParams 驱动，切换后联动刷新 |
 | 缓存机制 | ✅ | SQLite sync_cache 表，TTL 300s，手动刷新清除 |
 | 异常处理 | ✅ | 鉴权失败/超时/网络异常友好提示 |
-| 本地缺陷管理 | 待开发 | P2 后续迭代 |
+| 本地缺陷管理 | ✅ | `POST /api/issues`（source='local'）手动登记缺陷，纳入 DI 计算；原 v1.1 标注「待开发」，实际已实现 |
 
 ### 关键数据源对照
 
@@ -45,6 +45,8 @@
 - 前端图标全部使用 emoji/字符替代 @mui/icons-material（避免 MUI v5 部分 icon 解析为 object 导致白屏）
 - 后端 Node.js 进程使用 `node node_modules/vite/bin/vite.js` 直接启动（避免 npx 子进程随 shell 退出）
 - 图表库 recharts，去除了 Cell/Brush/Legend 等不常用导入
+
+> **实现备注（2026-07-20 校订）**：模块已落地，「本地缺陷管理」由「待开发」更正为已实现（`POST /api/issues` source='local'）。原「九、待确认问题」Q1–Q6 在实现时采用了务实默认值（如已解决口径取 `status∈{resolved,closed}`、分类取自 Mantis category 字段），仍可按实际 Mantis 环境再校准。
 
 ---
 

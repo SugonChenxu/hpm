@@ -2,7 +2,8 @@
 
 > **关联顶层 PRD**: `docs/PRD.md` v2.0  
 > **开发优先级**: ⑥（最后开发——数据聚合层，依赖 M1–M5）  
-> **依赖**: M1(项目进度) + M2(待办事项) + M3(故障管理) + M4(物料管理) + M5(会议纪要)
+> **依赖**: M1(项目进度) + M2(待办事项) + M3(故障管理) + M4(物料管理) + M5(会议纪要)  
+> **实现状态**: ✅ 已落地（服务端聚合接口可用；2026-07-20 校订接口清单与聚合范围）
 
 ---
 
@@ -87,6 +88,19 @@
 | 物料状态 | M4 materials | 查询 actual_delivery 在本周范围的计入「本周到货」；status=在途计入「在途」；status=已逾期计入「逾期末到货」；status=待下单计入「待下单」 |
 | 会议纪要 | M5 meetings | 查询 start_time 在本周范围的计入「本周会议」；关联的 action_items WHERE status=待处理 计入「关键决议」 |
 
+> **实际聚合范围校订（2026-07-20）**：服务端 `POST /generate` 当前返回的 `content` 为**精简聚合对象**，并非直接生成 §2.2 的完整六板块叙述文本：
+> ```json
+> {
+>   "progress":   { "total": <阶段总数>, "done": <已完成阶段数> },
+>   "tasks":      { "new": <本周新增>, "done": <本周完成>, "overdue": <逾期数> },
+>   "issues":     { "current_di": <未关闭缺陷 DI 加权合计> },
+>   "materials":  { "overdue": <交期逾期且未到货物料数> },
+>   "meetings":   { "count": <本周会议场数> },
+>   "next_plan":  ""
+> }
+> ```
+> 即：项目进度（阶段完成数）、待办（新增/完成/逾期）、故障（当前 DI）、物料（逾期数）、会议（场数）五类**量化指标**由服务端自动计算；§2.2 的「六板块结构化叙述模板」需用户在生成后于编辑器中**手动润色填充**（尤其「重点待办/重点故障/关键决议/下周会议安排」等明细列表当前未自动抽取）。`next_plan` 由用户填写。
+
 ---
 
 ## 三、数据模型
@@ -112,13 +126,12 @@
 
 | Method | Path | 说明 |
 |--------|------|------|
-| POST | /api/weekly-reports/generate | 生成周报——传入 {project_id, week_start, week_end} → 返回聚合后的 JSON |
+| POST | /api/weekly-reports/generate | 生成周报——传入 {project_id, week_start, week_end} → 服务端聚合各模块数据，返回 `{ title, week_start, week_end, content }` |
 | GET | /api/weekly-reports | 周报列表（?project_id=&status=） |
 | GET | /api/weekly-reports/:id | 查看周报详情 + 内容 |
-| PUT | /api/weekly-reports/:id | 更新周报（编辑后保存，自动递增 version） |
-| GET | /api/weekly-reports/:id/versions | 查看版本历史 |
-| GET | /api/weekly-reports/:id/versions/:version | 查看指定版本内容 |
-| GET | /api/weekly-reports/aggregate | 周报聚合数据预览接口——直接返回各板块原始数据（不生成模板文本） |
+| PUT | /api/weekly-reports/:id | 更新周报（编辑后保存，自动递增 version；若不存在则新建） |
+
+> **未实现接口（2026-07-20 校订）**：原设计的「版本历史 `/:id/versions`」「指定版本 `/:id/versions/:version`」「聚合预览 `/aggregate`」**当前均未实现**。周报保存通过 `PUT` 递增 `version` 字段记录版本号，但无历史快照回溯 UI/接口。
 
 ---
 

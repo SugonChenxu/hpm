@@ -2,7 +2,8 @@
 
 > **基于**: 顶层 PRD v2.0 + 旧版 M5 PRD（过于复杂）  
 > **性质**: 极简化 MVP，聚焦「拉取腾讯会议 → 查看 AI 纪要」唯一核心链路  
-> **技术**: tmeet CLI（child_process 调用）→ SQLite 存储 → 前端展示
+> **技术**: tmeet CLI（child_process 调用）→ SQLite 存储 → 前端展示  
+> **实现状态**: ✅ 已落地（2026-07-20 校订：决议追踪与纪要编辑实际已实现，见下方「已实现功能」）
 
 ---
 
@@ -25,22 +26,34 @@
 
 ### P0（MVP 必做）
 
-| 功能 | 描述 |
-|------|------|
-| **手动拉取会议** | 前端点按钮 → 后端调 `tmeet meeting list-ended` → 去重入库 → 返回列表 |
-| **会议列表展示** | 表格：会议标题、开始时间、时长、参会人数、会议号；按时间倒序；支持标题搜索 |
-| **查看 AI 纪要** | 点击会议 → 调 `tmeet record smart-minutes` → 前端 Markdown 渲染展示 |
-| **登录检查** | 调 tmeet 前检查 `tmeet auth status`，未登录提示用户 |
+| 功能 | 描述 | 状态 |
+|------|------|:--:|
+| **手动拉取会议** | 前端点按钮 → 后端调 `tmeet meeting list-ended` → 去重入库 → 返回列表 | ✅ |
+| **会议列表展示** | 表格：会议标题、开始时间、时长、参会人数、会议号；按时间倒序；支持标题搜索 | ✅ |
+| **查看 AI 纪要** | 点击会议 → 调 `tmeet record smart-minutes` → 前端 Markdown 渲染展示（含摘要 + 待办提取） | ✅ |
+| **登录检查** | 调 tmeet 前检查 `tmeet auth status`，未登录提示用户 | ✅ |
 
-### P1（可做，第一版不做）
+### 已实现功能（超出原 MVP 设计，代码已提供）
+
+| 功能 | 描述 | 说明 |
+|------|------|------|
+| **决议追踪** | 会议详情可添加决议项（内容/负责人/截止日期/状态），支持「一键转为 M2 待办」 | 原 P2「明确不做」→ 实际已实现（`meeting_action_items` + `convert` 端点） |
+| **纪要编辑** | 手动创建的会议可 `PUT` 更新纪要正文 / 状态 / 时间 | 原 P2「明确不做」→ 实际已实现（`PUT /api/meetings/:id`） |
+| **手动登记会议** | 线下会议手工录入（标题/时间/平台=manual），独立于 tmeet 拉取 | `POST /api/meetings` |
+| **全时会议（最小支持）** | 全时会议纪要通过 `minutes_url` 分享链接查看；无 API 拉取 | 仅链接跳转，未做 API 对接 |
+
+### P1（可做，当前未实现）
 
 - 转写全文查看（折叠面板）
 - 参会人详情弹出
 - 手动关联项目
 
-### P2（明确不做）
+### P2（明确未做）
 
-- ❌ 定时同步、决议追踪、手动创建会议、全时会议、纪要编辑、多平台配置
+- ❌ 定时自动同步（仅手动拉取）
+- ❌ 全时会议 API 拉取 / 腾讯会议 OAuth 企业应用授权（当前走 tmeet CLI 本地凭证）
+- ❌ 多平台配置管理 UI
+- ❌ 会议纪要编辑器富文本 / 历史版本
 
 ---
 
@@ -98,9 +111,16 @@ CREATE TABLE IF NOT EXISTS smart_minutes (
 
 | Method | Path | 说明 |
 |--------|------|------|
-| `GET` | `/api/meetings` | 会议列表（`?search=`） |
-| `POST` | `/api/meetings/fetch` | 触发拉取 tmeet CLI → 去重入库 |
-| `GET` | `/api/meetings/:id/minutes` | 获取纪要（缓存优先） |
+| `GET` | `/api/meetings` | 会议列表（`?project_id=&platform=&from=&to=&search=`） |
+| `POST` | `/api/meetings` | 手动登记会议（platform 默认 manual） |
+| `GET` | `/api/meetings/:id` | 单条会议详情（含决议项 action_items） |
+| `PUT` | `/api/meetings/:id` | 更新会议（纪要正文 / 状态 / 时间 / minutes_url） |
+| `POST` | `/api/meetings/fetch` | 触发拉取 tmeet CLI（腾讯会议）→ 去重入库 |
+| `GET` | `/api/meetings/:id/minutes` | 获取 AI 智能纪要（缓存优先；全时会议返回链接） |
+| `POST` | `/api/meetings/:id/action-items` | 添加决议项 |
+| `PUT` | `/api/meetings/:id/action-items/:aid` | 更新决议项（含完成态） |
+| `POST` | `/api/meetings/:id/action-items/:aid/convert` | 决议项一键转为 M2 待办 |
+| `GET` / `PUT` | `/api/meeting-config` | 查看 / 更新会议平台配置（预留，当前 tmeet 走本地凭证） |
 
 ---
 

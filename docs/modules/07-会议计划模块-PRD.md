@@ -1,9 +1,9 @@
 # M7 — 会议计划模块 PRD（2026-07-10 补充新增）
 
 > **关联顶层 PRD**: `docs/PRD.md` v2.0  
-> **当前版本**: v1.0（初版，功能已落地）  
+> **当前版本**: v2.0（初版 v1.0 补录于 2026-07-10；v2.0 于 2026-07-20 依实际实现重写输出物周期模型）  
 > **模块定位**: 扩展模块（独立于六大核心模块 M1–M6，顶层 PRD v2.0 定稿时尚未纳入）  
-> **状态**: 已落地（代码已验收，本 PRD 为补录）
+> **状态**: 已落地（代码已验收，本 PRD 自 v2.0 起与实现严格对齐）
 
 ---
 
@@ -14,7 +14,7 @@
 | 维度 | M7 会议计划（本模块） | M5 会议纪要 |
 |------|----------------------|-------------|
 | 关注点 | **事前排期**——周例会时间规划、未来周会议安排 | **事后记录**——已开会议的纪要、决议、参会人 |
-| 数据表 | `week_meetings` + `week_meeting_outputs` | `meetings` + `meeting_action_items` |
+| 数据表 | `week_meetings` + `meeting_outputs` | `meetings` + `meeting_action_items` + `smart_minutes` |
 | 外部对接 | 无（纯本地排期） | 腾讯会议 API + 全时会议 API |
 | 导航位置 | 侧边栏「协作沟通」分组，路由 `/week-meetings` | 侧边栏「协作沟通」分组，路由 `/meetings` |
 | 视图形态 | 课表式周网格（时间轴 × 工作日） | 会议列表 + 纪要编辑 |
@@ -69,13 +69,23 @@
 | 样式 | ✅ | 去除中间边框线（`borderBottom: none`），字号稍大（`0.72rem`）；左侧 3px 主题色竖条 |
 | 项目例会标记 | ✅ | 从 `projects.meeting_time` 解析的周例会以**项目主题色**显示，标题 `[代号] 名称 周例会`，只读不可删除 |
 
-### 2.5 输出物（InlineOutput）
+### 2.5 输出物（InlineOutput）—— 周期模板 / 每周实例模型
+
+> **核心设计（v2.0）**：输出物区分「周期模板」与「每周实例」两类，均存于 `meeting_outputs` 表（通过 `is_template` 区分）。周期项按周/隔周/每月规则**自动在每周生成虚拟项**，用户对其「完成」操作仅代表**当前这一周**的周期交付，不影响后续周。
 
 | 功能 | 状态 | 描述 |
 |------|------|------|
-| 行内编辑 | ✅ | 每个工作日底部一行 `InlineOutput`，点击空白区出现输入框 |
-| 保存 | ✅ | 输入后回车 / 失焦保存为文本；再次点击文本可编辑（替代原 `TextField` 多行框） |
-| 存储 | ✅ | 持久化到 `week_meeting_outputs` 表（按 `week_key + weekday` 唯一） |
+| 行内编辑 | ✅ | 每个工作日底部多行 `InlineOutput`，点击空白区出现输入框；输入回车 / 失焦保存为一条输出物 |
+| 自动编号 | ✅ | 同一周同一工作日的多条输出物按添加顺序自动编号 `1.` `2.` `3.`…（字号与文字一致，加粗） |
+| 周期标签前缀 | ✅ | 设周期的项在标题前加紧凑标签：`1W`(每周) / `2W`(隔周) / `1M`(每月)；标签带浅色底，与编号、文字同基线水平对齐 |
+| 完成框 | ✅ | 每条输出物首行最左侧一个与字号等大的勾选框（✓）；勾选代表**当前周**该条完成；换行第二行对齐到 `1W` 列，首行四要素（完成框/标签/编号/文字）始终保持水平对齐 |
+| 设置周期 | ✅ | 行尾 ▶ 展开菜单含「编辑 / 设置周期 / 删除」；设周期后该行升级为**周期模板**（`is_template=1`），后续周自动出现 |
+| 周期规则 | ✅ | `1W` 每周出现；`2W` 每隔 1 周（weekDiff%2==0）；`1M` 显示「每月」但实际**每隔 4 周**出现（weekDiff%4==0） |
+| 持续 N 周同步 | ✅ | 普通会议设 `weeks` 会在多周各插一条；周期输出物**永久按规则每周自动生成虚拟项**，无需手动铺 |
+| 删除 | ✅ | 普通项/实例删该条；周期模板删除后停止后续周生成 |
+| 存储 | ✅ | 持久化到 `meeting_outputs` 表（逐条 item，不再按 week_key+weekday 唯一） |
+
+> **虚拟周期项说明**：服务端 GET 时仅返回 `is_template=0` 的普通/实例条目 + 按 `is_template=1` 模板规则推算的虚拟项（id 形如 `recurring_<id>`，`source_id` 指向模板）。虚拟项被勾选「完成」时调用 `cycle-instance` 接口 upsert 一条当周实例（`is_template=0`），其完成态独立于其他周。
 
 ### 2.6 周次导航与未来周规划
 
@@ -113,17 +123,27 @@
 
 索引：`idx_week_meetings_key ON week_meetings(week_key)`
 
-### 3.2 `week_meeting_outputs`（新增表）
+### 3.2 `meeting_outputs`（核心表，由旧 `week_meeting_outputs` 迁移）
+
+> 原 `week_meeting_outputs`（单行 blob，UNIQUE(week_key, weekday)）已迁移为逐条 item 模型，支持每条输出物独立完成态、排序、周期模板/实例区分。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 自增 |
 | week_key | TEXT | 该周周一 `YYYY-MM-DD` |
 | weekday | TEXT | 周一 / … / 周六 |
-| content | TEXT | 输出物文本，默认 `''` |
+| title | TEXT | 输出物内容文本 |
+| is_done | INTEGER | 0/1，当前周完成态 |
+| sort_order | INTEGER | 同周同工作日排序（自动编号依据） |
+| cycle | TEXT | 周期类型：`''`(一次性) / `weekly`(1W) / `biweekly`(2W) / `monthly`(1M) |
+| is_template | INTEGER | 0=普通/每周实例（直接展示）；1=周期模板（定义，不直接展示，由 GET 推算虚拟项） |
+| source_id | INTEGER | 实例指向其模板 id（`is_template=1` 行的 id）；模板行该值为 0 |
+| created_at | TEXT | `datetime('now','localtime')` |
 | updated_at | TEXT | `datetime('now','localtime')` |
 
-约束：`UNIQUE(week_key, weekday)`（每周每工作日唯一）
+索引：`idx_meeting_outputs` 建议建在 `(week_key, weekday, sort_order)`。
+
+> **月度语义**：`cycle='monthly'` 在 UI 显示「每月」，但服务端按 **每隔 4 周**（weekDiff%4==0）推算出现周，避免自然月边界歧义。
 
 ### 3.3 `projects` 关联字段（例会来源）
 
@@ -139,13 +159,18 @@
 
 | Method | Path | 说明 |
 |--------|------|------|
-| GET | `/api/week-meetings?week=YYYY-MM-DD` | 参数化查询当周；返回 `{ ok, data: { meetings, outputs, recurring } }` |
-| POST | `/api/week-meetings` | 创建会议；`weeks` 参数支持持续多周（事务内批量插入） |
+| GET | `/api/week-meetings?week=YYYY-MM-DD` | 参数化查询当周；返回 `{ ok, data: { meetings, outputs, recurring } }`；`outputs` 含 `is_template=0` 的普通/实例条目 + 按模板推算的虚拟周期项（`id` 形如 `recurring_<id>`，带 `source_id`） |
+| POST | `/api/week-meetings` | 创建会议；`weeks` 参数支持持续多周（事务内批量插入，`clamp 1–52`） |
 | PUT | `/api/week-meetings/:id` | 更新单条会议（weekday / 起止时间 / 名称） |
 | DELETE | `/api/week-meetings/:id` | 删除单条会议 |
-| PUT | `/api/week-meetings/outputs` | 批量保存输出物（body: `{ week_key, outputs: [{ weekday, content }] }`） |
+| POST | `/api/week-meetings/outputs` | 新增一条输出物（普通或显式周期/模板）；body: `{ week_key, weekday, title, cycle?, is_template?, source_id? }` |
+| POST | `/api/week-meetings/outputs/cycle-instance` | 周期项「完成」：按 `(week_key, weekday, title)` upsert 当周实例（`is_template=0`，保留 `cycle` 与 `source_id`）；已存在则仅更新 `is_done` |
+| PUT | `/api/week-meetings/outputs/:id` | 更新输出物：`title` / `is_done` / `cycle` / `is_template` / `source_id` 任一字段 |
+| DELETE | `/api/week-meetings/outputs/:id` | 删除一条输出物（周期模板删除后停止后续周生成） |
 
 **`recurring` 字段说明**：服务端从 `projects` 表读取 `meeting_time` 非空项目，解析为 `{ weekday, start_time, end_time, title: '[代号] 名称 周例会', project_id, theme_color, source: 'project' }`，前端按主题色展示且不可删除。
+
+**输出物周期推算（GET）**：服务端读取 `is_template=1` 的模板，按其与查询周 `week_key` 的周数差 `weekDiff` 决定本周是否出现——`weekly` 恒出现、`biweekly` 取 `weekDiff%2==0`、`monthly` 取 `weekDiff%4==0`；已存在一致实例（`weekday|title`）的周去重，不重复生成。
 
 ---
 
@@ -166,5 +191,9 @@
 - 会议卡片**不支持拖拽移动 / 改时间**（仅能删除后重建）
 - 项目例会**只读**（来自 `projects.meeting_time`，不支持在会议计划页直接编辑）
 - 无会议提醒 / 通知 / 日历导出（如 `.ics`）
-- 输出物为纯文本，无结构化字段、无附件
+- 输出物为纯文本条目，无结构化字段、无附件
 - 未与 M5 会议纪要、M6 周报打通（例会与纪要 / 周报暂无自动关联）
+
+---
+
+> **v2.0 变更（2026-07-20）**：依据实际实现重写「2.5 输出物」——由旧版「单行文本 blob」升级为「逐条 item + 周期模板/每周实例模型」，新增自动编号、1W/2W/1M 周期标签、与字号等大的完成框、周期项按周/隔周/每4周自动生成虚拟项；「3.2 数据模型」由 `week_meeting_outputs` 更正为 `meeting_outputs`（含 `title/is_done/sort_order/cycle/is_template/source_id`）；「四、API」补充 `cycle-instance` 与按字段更新的 `outputs/:id` 端点，移除旧版批量 `PUT /outputs`。
