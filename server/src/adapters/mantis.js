@@ -63,6 +63,25 @@ class MantisAdapter {
     return (data?.data?.simple_filters?.projects || []).map((p) => ({ id: p.id, name: p.name }));
   }
 
+  /**
+   * 拉取当前用户「最近使用的项目」（Sugon 定制接口）。
+   * 真实端点：GET /projects?action=get_recent_projects
+   * 响应结构：{ data: [ { id, projects: [{ id, name }, ...] }, ... ] }
+   * 每个集合通常含 1 个项目，这里扁平化并去重，返回 [{ id, name }]。
+   */
+  async fetchRecentProjects() {
+    if (!this.cookie) { const e = new Error("未配置 Mantis cookie"); e.code = "auth_failed"; throw e; }
+    const data = await this._get("/projects", { action: "get_recent_projects" });
+    const collections = data?.data || [];
+    const map = new Map();
+    for (const col of collections) {
+      for (const p of (col.projects || [])) {
+        if (p?.id && !map.has(p.id)) map.set(p.id, { id: p.id, name: p.name || p.id });
+      }
+    }
+    return [...map.values()];
+  }
+
   /** DI 趋势：index 0 的时序数据 */
   async fetchDITrend(projectId) {
     const data = await this._get("/analysis/", {

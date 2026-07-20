@@ -480,7 +480,7 @@ if (!priorityMigrationDone) {
 db.exec(`
 CREATE TABLE IF NOT EXISTS sync_cache (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id INTEGER,
+    project_id TEXT,
     cache_key TEXT,
     cache_data TEXT,
     cached_at TEXT DEFAULT (datetime('now','localtime')),
@@ -547,6 +547,33 @@ try {
   if (!e.message.includes("duplicate column name")) {
     console.warn("Migration sync_cache.owner_id:", e.message);
   }
+}
+
+// sync_cache.project_id 改为 TEXT（需同时支持 Forge 数字 id 与 Mantis hex id）
+try {
+  const colInfo = db.prepare("PRAGMA table_info(sync_cache)").all();
+  const pidType = (colInfo.find((c) => c.name === "project_id") || {}).type || "";
+  if (pidType.toUpperCase() !== "TEXT") {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_cache_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT NOT NULL DEFAULT '',
+        cache_key TEXT NOT NULL,
+        cache_data TEXT NOT NULL,
+        cached_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+        ttl_seconds INTEGER NOT NULL DEFAULT 300,
+        owner_id INTEGER
+      )
+    `);
+    db.exec(`INSERT INTO sync_cache_new (project_id, cache_key, cache_data, cached_at, ttl_seconds, owner_id)
+             SELECT CAST(project_id AS TEXT), cache_key, cache_data, cached_at, ttl_seconds, owner_id FROM sync_cache`);
+    db.exec(`DROP TABLE sync_cache`);
+    db.exec(`ALTER TABLE sync_cache_new RENAME TO sync_cache`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_sync_cache_project_key ON sync_cache(project_id, cache_key, owner_id)`);
+    console.log("Migration sync_cache.project_id -> TEXT");
+  }
+} catch (e) {
+  console.warn("Migration sync_cache.project_id TEXT:", e.message);
 }
 
 // =====================================================

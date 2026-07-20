@@ -151,6 +151,7 @@ export const api = {
   mantis: {
     projects: () => request("/mantis/projects"),
     watchedProjects: () => request("/mantis/watched-projects"),
+    recentProjects: () => request("/mantis/recent-projects"),
     sync: (projectId) =>
       request("/mantis/sync", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
     connection: () => request("/mantis/connection"),

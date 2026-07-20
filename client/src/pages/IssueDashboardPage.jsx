@@ -15,7 +15,7 @@ import MantisConnectionCard from "../components/issue/MantisConnectionCard";
 export default function IssueDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const projectId = searchParams.get("projectId") || "";
-  const [watchedProjects, setWatchedProjects] = useState([]); // [{mantis_id, mantis_name, ...}]
+  const [recentProjects, setRecentProjects] = useState([]); // [{id, name}] 来自 Mantis 真实「最近使用」接口
   const [showSettings, setShowSettings] = useState(false);
   const [stats, setStats] = useState(null);
   const [diTrend, setDiTrend] = useState([]);
@@ -24,9 +24,9 @@ export default function IssueDashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // 下拉只显示用户关注/最近使用的 Mantis 项目
+  // 下拉只显示 Mantis「最近使用」的项目（真实接口，非全量）
   const reloadProjects = useCallback(() => {
-    api.mantis.watchedProjects().then((r) => setWatchedProjects(r.data || [])).catch(() => {});
+    api.mantis.recentProjects().then((r) => setRecentProjects(r.data || [])).catch(() => {});
   }, []);
   useEffect(() => { reloadProjects(); }, [reloadProjects]);
 
@@ -48,14 +48,8 @@ export default function IssueDashboardPage() {
     if (!pid) return;
     setLoading(true); setError(null);
     try {
-      const s = await fetchAll(pid);
-      // 本地暂无数据则自动同步一次（首次关注的项目）
-      if ((s?.total || 0) === 0) {
-        try {
-          await api.mantis.sync(pid);
-          await fetchAll(pid);
-        } catch { /* 同步失败不影响展示已缓存数据 */ }
-      }
+      // 仪表盘为 Mantis 原生实时数据，无需同步到 Forge issues 表
+      await fetchAll(pid);
     } catch (e) {
       setError(e?.message || "加载失败");
     } finally {
@@ -70,16 +64,15 @@ export default function IssueDashboardPage() {
     setLoading(true);
     try {
       await api.cache.invalidate(projectId).catch(() => {});
-      await api.mantis.sync(projectId).catch(() => {});
       await load(projectId);
     } finally {
       setLoading(false);
     }
   };
 
-  const dropdownProjects = watchedProjects.map((w) => ({
-    id: w.mantis_id,
-    name: w.mantis_name || w.mantis_id,
+  const dropdownProjects = recentProjects.map((p) => ({
+    id: p.id,
+    name: p.name || p.id,
   }));
 
   return (
@@ -98,11 +91,11 @@ export default function IssueDashboardPage() {
       {!projectId && (
         <Box sx={{ textAlign: "center", py: 8 }}>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            {watchedProjects.length ? "请选择一个 Mantis 项目" : "尚未关注任何 Mantis 项目"}
+            {recentProjects.length ? "请选择一个 Mantis 项目" : "暂无最近使用的 Mantis 项目"}
           </Typography>
-          {!watchedProjects.length && (
+          {!recentProjects.length && (
             <Typography variant="body2" color="text.secondary">
-              点击右上角「⚙ Mantis 设置」，勾选你最近使用的项目并关联 Forge 项目。
+              下拉展示的是你在 Mantis 中「最近使用的项目」。若为空，请先在 Mantis 中打开过项目，或点右上角「⚙ Mantis 设置」确认 Cookie 有效。
             </Typography>
           )}
           <Box sx={{ mt: 2 }}>

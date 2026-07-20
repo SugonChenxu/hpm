@@ -20,6 +20,16 @@ export function getConnection(ownerId) {
 }
 
 /**
+ * 读取当前用户「最近使用」的 Mantis 项目列表（直接来自 Mantis 真实接口
+ * GET /projects?action=get_recent_projects，无需本地维护）。
+ * 返回扁平去重后的 [{ id, name }]。
+ */
+export async function getRecentProjects(ownerId) {
+  const adapter = getAdapter(ownerId);
+  return await adapter.fetchRecentProjects();
+}
+
+/**
  * 读取当前用户「关注/最近使用」的 Mantis 项目列表。
  * 结构：[{ mantis_id, mantis_name, forge_id, forge_name }]
  *

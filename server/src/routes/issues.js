@@ -1,6 +1,6 @@
 import { Router } from "express";
 import db from "../db.js";
-import { getAdapter, resolveForgeId, mantisError } from "../mantis-resolve.js";
+import { getAdapter, mantisError } from "../mantis-resolve.js";
 const router = Router();
 
 const DI_WEIGHTS = { Critical: 10, Major: 3, Minor: 1, Trivial: 0.1 };
@@ -71,33 +71,20 @@ router.get("/issues/di-summary", (req, res) => {
 });
 
 // ──────────────────────────────────────────────────────────
-// M3 增量：聚合分析端点
+// M3 增量：聚合分析端点（Mantis 原生，project_id 即 Mantis hex id）
+//   不强制关联 Forge 项目，按当前用户 Cookie 拉取对应 Mantis 项目数据。
 // ──────────────────────────────────────────────────────────
 
 // A. DI 趋势（折线图数据）— 从 Mantis 实时拉取
 router.get("/issues/di-trend", async (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
-
-  // 前端传入 Mantis hex id，先解析为 Forge 数字 id 用于归属校验与缓存
-  let forgeId, mantisId;
   try {
-    forgeId = await resolveForgeId(req.userId, project_id);
-    mantisId = project_id;
-  } catch (e) {
-    const { status, message } = mantisError(e, "解析项目失败");
-    return res.status(status).json({ ok: false, error: message });
-  }
-  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(forgeId));
-  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
-
-  const cached = getCache(req.userId, forgeId,"di_trend");
-  if (cached !== null) return res.json({ ok: true, data: cached });
-
-  try {
-    const adapter = getAdapter(req.userId);
-    const data = await adapter.fetchDITrend(mantisId);
-    setCache(req.userId, forgeId,"di_trend", data);
+    const adapter = getAdapter(req.userId); // 无 Cookie 抛 auth_failed
+    const cached = getCache(req.userId, project_id, "di_trend");
+    if (cached !== null) return res.json({ ok: true, data: cached });
+    const data = await adapter.fetchDITrend(project_id);
+    setCache(req.userId, project_id, "di_trend", data);
     res.json({ ok: true, data });
   } catch (e) {
     const { status, message } = mantisError(e, "获取 DI 趋势失败");
@@ -109,28 +96,15 @@ router.get("/issues/di-trend", async (req, res) => {
 router.get("/issues/category-stats", async (req, res) => {
   const { project_id, type } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
-
-  let forgeId, mantisId;
-  try {
-    forgeId = await resolveForgeId(req.userId, project_id);
-    mantisId = project_id;
-  } catch (e) {
-    const { status, message } = mantisError(e, "解析项目失败");
-    return res.status(status).json({ ok: false, error: message });
-  }
-  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(forgeId));
-  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
-
-  const cacheKey = type === "di" ? "category_di_stats" : "category_stats";
-  const cached = getCache(req.userId, forgeId,cacheKey);
-  if (cached !== null) return res.json({ ok: true, data: cached });
-
   try {
     const adapter = getAdapter(req.userId);
+    const cacheKey = type === "di" ? "category_di_stats" : "category_stats";
+    const cached = getCache(req.userId, project_id, cacheKey);
+    if (cached !== null) return res.json({ ok: true, data: cached });
     const data = type === "di"
-      ? await adapter.fetchCategoryDIStats(mantisId)
-      : await adapter.fetchCategoryStats(mantisId);
-    setCache(req.userId, forgeId,cacheKey, data);
+      ? await adapter.fetchCategoryDIStats(project_id)
+      : await adapter.fetchCategoryStats(project_id);
+    setCache(req.userId, project_id, cacheKey, data);
     res.json({ ok: true, data });
   } catch (e) {
     const { status, message } = mantisError(e, "获取分类统计失败");
@@ -142,25 +116,12 @@ router.get("/issues/category-stats", async (req, res) => {
 router.get("/issues/summary", async (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
-
-  let forgeId, mantisId;
-  try {
-    forgeId = await resolveForgeId(req.userId, project_id);
-    mantisId = project_id;
-  } catch (e) {
-    const { status, message } = mantisError(e, "解析项目失败");
-    return res.status(status).json({ ok: false, error: message });
-  }
-  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(forgeId));
-  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
-
-  const cached = getCache(req.userId, forgeId,"summary");
-  if (cached !== null) return res.json({ ok: true, data: cached });
-
   try {
     const adapter = getAdapter(req.userId);
-    const data = await adapter.fetchSummary(mantisId);
-    setCache(req.userId, forgeId,"summary", data);
+    const cached = getCache(req.userId, project_id, "summary");
+    if (cached !== null) return res.json({ ok: true, data: cached });
+    const data = await adapter.fetchSummary(project_id);
+    setCache(req.userId, project_id, "summary", data);
     res.json({ ok: true, data });
   } catch (e) {
     const { status, message } = mantisError(e, "获取全局统计失败");
@@ -172,25 +133,12 @@ router.get("/issues/summary", async (req, res) => {
 router.get("/issues/report", async (req, res) => {
   const { project_id } = req.query;
   if (!project_id) return res.status(400).json({ ok: false, error: "project_id 必填" });
-
-  let forgeId, mantisId;
-  try {
-    forgeId = await resolveForgeId(req.userId, project_id);
-    mantisId = project_id;
-  } catch (e) {
-    const { status, message } = mantisError(e, "解析项目失败");
-    return res.status(status).json({ ok: false, error: message });
-  }
-  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(forgeId));
-  if (!proj || proj.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
-
-  const cached = getCache(req.userId, forgeId,"report");
-  if (cached !== null) return res.json({ ok: true, data: cached });
-
   try {
     const adapter = getAdapter(req.userId);
-    const report = await adapter.fetchReport(mantisId);
-    setCache(req.userId, forgeId,"report", report);
+    const cached = getCache(req.userId, project_id, "report");
+    if (cached !== null) return res.json({ ok: true, data: cached });
+    const report = await adapter.fetchReport(project_id);
+    setCache(req.userId, project_id, "report", report);
     res.json({ ok: true, data: report });
   } catch (e) {
     const { status, message } = mantisError(e, "生成故障报告失败");

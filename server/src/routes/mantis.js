@@ -11,7 +11,7 @@
 
 import { Router } from "express";
 import db from "../db.js";
-import { getAdapter, resolveMantisId, resolveForgeId, getWatchedProjects, mantisError } from "../mantis-resolve.js";
+import { getAdapter, resolveMantisId, resolveForgeId, getWatchedProjects, getRecentProjects, mantisError } from "../mantis-resolve.js";
 
 const router = Router();
 
@@ -45,7 +45,7 @@ router.get("/mantis/projects", async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// GET /mantis/watched-projects — 当前用户关注/最近使用的 Mantis 项目
+// GET /mantis/watched-projects — 当前用户关注/最近使用的 Mantis 项目（兼容旧接口）
 // ═══════════════════════════════════════════════════════════
 router.get("/mantis/watched-projects", async (req, res) => {
   try {
@@ -53,6 +53,23 @@ router.get("/mantis/watched-projects", async (req, res) => {
     res.json({ ok: true, data: watched });
   } catch (error) {
     const { status, message } = mantisError(error, "获取关注项目失败");
+    res.status(status).json({ ok: false, error: message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// GET /mantis/recent-projects — 当前用户「最近使用」的 Mantis 项目（真实接口）
+//   数据直接来自 Mantis GET /projects?action=get_recent_projects，无需本地维护
+// ═══════════════════════════════════════════════════════════
+router.get("/mantis/recent-projects", async (req, res) => {
+  try {
+    const recent = await getRecentProjects(req.userId);
+    res.json({ ok: true, data: recent });
+  } catch (error) {
+    if (error.code === "auth_failed") {
+      return res.json({ ok: true, data: [], needsConfig: true });
+    }
+    const { status, message } = mantisError(error, "获取最近使用项目失败");
     res.status(status).json({ ok: false, error: message });
   }
 });

@@ -2,13 +2,14 @@
  * MantisConnectionCard — 故障管理页的 Mantis 连接设置卡片
  *
  * - 每位用户填写自己的 Mantis Cookie（server_url + api_token），按 owner_id 隔离。
- * - 「关注的项目（最近使用）」：用户手动勾选要关注的 Mantis 项目，并逐一选择对应的
- *   Forge 项目。下拉框只显示这些关注项目，不再罗列全部 40 个。
+ * - 「关联 Forge 项目」：列出你在 Mantis 中「最近使用」的项目（真实接口），
+ *   为每个项目选择对应的 Forge 项目。该映射仅用于把 Mantis 缺陷同步进 Forge 缺陷列表，
+ *   仪表盘本身直接读取 Mantis 实时数据，无需映射。
  * - 组件默认由父页面隐藏，点击「⚙ Mantis 设置」按钮才展开。
  */
 
 import { useState, useEffect } from "react";
-import { Box, Card, CardContent, TextField, Button, Typography, Alert, Stack, Divider, Checkbox } from "@mui/material";
+import { Box, Card, CardContent, TextField, Button, Typography, Alert, Stack, Divider } from "@mui/material";
 import api from "../../api/client";
 
 export default function MantisConnectionCard({ onSaved, onClose }) {
@@ -19,77 +20,60 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
   const [msg, setMsg] = useState(null);
   const [lastSync, setLastSync] = useState(null);
 
-  const [allMantis, setAllMantis] = useState([]);
+  const [recentMantis, setRecentMantis] = useState([]); // [{id, name}] 来自真实最近使用接口
   const [forgeProjects, setForgeProjects] = useState([]);
-  const [watched, setWatched] = useState([]); // [{ mantis_id, mantis_name, forge_id, forge_name }]
-  const [search, setSearch] = useState("");
+  // 映射：{ [mantis_id]: { mantis_id, mantis_name, forge_id, forge_name } }
+  const [mapping, setMapping] = useState({});
   const [loadingMeta, setLoadingMeta] = useState(false);
 
   const loadMeta = () => {
     setLoadingMeta(true);
     Promise.all([
-      api.mantis.projects().catch(() => ({ data: [] })),
+      api.mantis.recentProjects().catch(() => ({ data: [] })),
       api.projects.list({}).catch(() => ({ data: [] })),
-      api.mantis.watchedProjects().catch(() => ({ data: [] })),
-    ]).then(([mp, fp, wp]) => {
-      setAllMantis(mp.data || []);
+      api.mantis.connection().then((r) => r.data || {}).catch(() => ({})),
+    ]).then(([rp, fp, conn]) => {
+      setRecentMantis(rp.data || []);
       setForgeProjects(fp.data || []);
-      setWatched(wp.data || []);
+      const prev = conn.project_mapping ? conn.project_mapping : (conn.watched_projects || []);
+      const m = {};
+      try {
+        (Array.isArray(prev) ? prev : JSON.parse(prev || "[]")).forEach((x) => {
+          if (x?.mantis_id) m[x.mantis_id] = x;
+        });
+      } catch {}
+      setMapping(m);
+      if (conn.server_url) setServerUrl(conn.server_url);
+      if (conn.api_token) setCookie(conn.api_token);
+      if (conn.last_sync_at) setLastSync({ at: conn.last_sync_at, st: conn.last_sync_status });
     }).finally(() => setLoadingMeta(false));
   };
 
-  useEffect(() => {
-    api.mantis.connection().then((r) => {
-      const c = r.data || {};
-      if (c.server_url) setServerUrl(c.server_url);
-      if (c.api_token) setCookie(c.api_token);
-      if (c.last_sync_at) setLastSync({ at: c.last_sync_at, st: c.last_sync_status });
-    }).catch(() => {});
-    loadMeta();
-  }, []);
+  useEffect(() => { loadMeta(); }, []);
 
-  const isWatched = (mid) => watched.some((w) => String(w.mantis_id) === String(mid));
-  const forgeOf = (mid) => watched.find((w) => String(w.mantis_id) === String(mid))?.forge_id || "";
-
-  const toggleWatch = (m) => {
-    if (isWatched(m.id)) {
-      setWatched((w) => w.filter((x) => String(x.mantis_id) !== String(m.id)));
-    } else {
-      setWatched((w) => [...w, { mantis_id: m.id, mantis_name: m.name, forge_id: "", forge_name: "" }]);
-    }
-  };
-
-  const setForge = (mid, fid) => {
-    setWatched((w) => w.map((x) =>
-      String(x.mantis_id) === String(mid)
-        ? { ...x, forge_id: fid, forge_name: forgeProjects.find((p) => String(p.id) === String(fid))?.name || "" }
-        : x
-    ));
+  const setForge = (mid, mname, fid) => {
+    setMapping((m) => ({
+      ...m,
+      [mid]: {
+        mantis_id: mid,
+        mantis_name: mname,
+        forge_id: fid,
+        forge_name: forgeProjects.find((p) => String(p.id) === String(fid))?.name || "",
+      },
+    }));
   };
 
   const save = async () => {
     setSaving(true); setMsg(null);
-    const incomplete = watched.filter((w) => !w.forge_id);
-    if (incomplete.length) {
-      setMsg({ type: "error", text: "请为每个关注项目选择对应的 Forge 项目" });
-      setSaving(false);
-      return;
-    }
+    const arr = Object.values(mapping).filter((x) => x.forge_id);
     try {
       await api.mantis.updateConnection({
         server_url: serverUrl,
         api_token: cookie,
-        watched_projects: watched,
-        project_mapping: watched,
+        project_mapping: arr,
+        watched_projects: arr, // 兼容字段，保持与旧逻辑一致
       });
-      setMsg({ type: "success", text: "已保存，关注项目已更新" });
-      // 重新载入列表（Cookie 变化可能影响 Mantis 项目清单）
-      const [mp, wp] = await Promise.all([
-        api.mantis.projects().catch(() => ({ data: [] })),
-        api.mantis.watchedProjects().catch(() => ({ data: [] })),
-      ]);
-      setAllMantis(mp.data || []);
-      setWatched(wp.data || []);
+      setMsg({ type: "success", text: "已保存，关联映射已更新" });
       if (onSaved) onSaved();
     } catch (e) {
       setMsg({ type: "error", text: e.message || "保存失败" });
@@ -97,8 +81,6 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
       setSaving(false);
     }
   };
-
-  const filtered = allMantis.filter((m) => !search || (m.name || "").toLowerCase().includes(search.toLowerCase()));
 
   return (
     <Card variant="outlined" sx={{ mb: 3 }}>
@@ -108,7 +90,7 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
           {onClose && <Button size="small" onClick={onClose}>收起</Button>}
         </Box>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          填写你的 Mantis 登录 Cookie，并勾选要关注的（最近使用的）项目，每个项目选择对应的 Forge 项目。其他同事互不影响。
+          填写你的 Mantis 登录 Cookie。下方列出你在 Mantis「最近使用」的项目，按需为每个关联对应的 Forge 项目（仅用于把缺陷同步进 Forge 缺陷列表）。仪表盘本身直接读取 Mantis 实时数据。
         </Typography>
 
         <Stack spacing={2}>
@@ -128,25 +110,25 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
         </Stack>
 
         <Divider sx={{ my: 2 }} />
-        <Typography variant="subtitle2" gutterBottom>关注的项目（最近使用）</Typography>
-        <TextField size="small" placeholder="搜索 Mantis 项目…" value={search} onChange={(e) => setSearch(e.target.value)}
-          sx={{ mb: 1, width: 280 }} />
+        <Typography variant="subtitle2" gutterBottom>关联 Forge 项目（最近使用的 Mantis 项目）</Typography>
         <Box sx={{ maxHeight: 320, overflowY: "auto", border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
           {loadingMeta && <Typography variant="body2" sx={{ p: 2 }} color="text.secondary">加载中…</Typography>}
-          {!loadingMeta && filtered.length === 0 && <Typography variant="body2" sx={{ p: 2 }} color="text.secondary">无匹配项目</Typography>}
-          {!loadingMeta && filtered.map((m) => (
+          {!loadingMeta && recentMantis.length === 0 && (
+            <Typography variant="body2" sx={{ p: 2 }} color="text.secondary">
+              暂无最近使用的 Mantis 项目。请确认 Cookie 有效，或在 Mantis 中打开过项目后再刷新。
+            </Typography>
+          )}
+          {!loadingMeta && recentMantis.map((m) => (
             <Box key={m.id} sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid", borderColor: "divider" }}>
-              <Checkbox size="small" checked={isWatched(m.id)} onChange={() => toggleWatch(m)} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="body2" noWrap title={m.name}>{m.name}</Typography>
               </Box>
-              {isWatched(m.id) && (
-                <TextField select size="small" value={forgeOf(m.id)} onChange={(e) => setForge(m.id, e.target.value)}
-                  sx={{ minWidth: 200 }} SelectProps={{ displayEmpty: true }}>
-                  <MenuItem value="">选择对应 Forge 项目</MenuItem>
-                  {forgeProjects.map((p) => (<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>))}
-                </TextField>
-              )}
+              <TextField select size="small" value={mapping[m.id]?.forge_id || ""}
+                onChange={(e) => setForge(m.id, m.name, e.target.value)}
+                sx={{ minWidth: 200 }} SelectProps={{ displayEmpty: true }}>
+                <MenuItem value="">不关联</MenuItem>
+                {forgeProjects.map((p) => (<MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>))}
+              </TextField>
             </Box>
           ))}
         </Box>
