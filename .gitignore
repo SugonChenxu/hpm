@@ -34,6 +34,9 @@ npm-debug.log*
 __pptx_extracted/
 __pptx_extracted_xml/
 
+# Forge portable distribution package (assembled by scripts/package.bat, contains bundled node + node_modules)
+forge-package/
+
 # Office temp files
 ~$*
 
