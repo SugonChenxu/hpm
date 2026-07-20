@@ -68,42 +68,13 @@ export default function Layout() {
                 filter: "drop-shadow(0 2px 4px rgba(255,107,53,0.35))",
               }}
             />
-            {/* ── Forge Brand Word (cursive art text, italic + flame metallic) ── */}
+            {/* ── Brand name ── */}
             <Typography
+              variant="h6"
               noWrap
-              sx={{
-                fontFamily: '"Pacifico", cursive',
-                fontStyle: "italic",
-                fontSize: { xs: "1.3rem", sm: "1.55rem" },
-                fontWeight: 400,
-                background:
-                  "linear-gradient(98deg, #FF5722 0%, #FF8C00 20%, #FFC400 40%, #FFF3E0 50%, #FFC400 60%, #FF7043 80%, #E53935 100%)",
-                backgroundClip: "text",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                letterSpacing: "-0.01em",
-                lineHeight: 1.25,
-                transform: "skewX(-10deg)",
-                transformOrigin: "left center",
-                filter:
-                  "drop-shadow(0 2px 5px rgba(255,107,53,0.45)) drop-shadow(0 0 2px rgba(255,184,77,0.55))",
-              }}
+              sx={{ fontWeight: 700, color: "text.primary", letterSpacing: "-0.01em" }}
             >
-              Forge
-            </Typography>
-            {/* ── Subtitle ── */}
-            <Typography
-              noWrap
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-                ml: 0.4,
-                mt: 0.2,
-                lineHeight: 1.4,
-                display: { xs: "none", sm: "block" },
-              }}
-            >
-              硬件项目管理
+              硬件项目管理工具
             </Typography>
           </Box>
         </Toolbar>
