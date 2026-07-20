@@ -53,31 +53,53 @@ export default function Layout() {
           >
             <MenuIcon />
           </IconButton>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexGrow: 1 }}>
-            {/* Logo — violet gradient rounded square with "H" monogram */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexGrow: 1 }}>
+            {/* ── Forge App Icon (flame-F) ── */}
             <Box
+              component="img"
+              src="/forge-icon-192.png"
+              alt="Forge"
               sx={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
-                background: "linear-gradient(135deg, #7C3AED, #6D28D9)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                width: 36,
+                height: 36,
+                borderRadius: "8px",
                 flexShrink: 0,
-                boxShadow: "0 4px 12px rgba(124,58,237,0.3)",
+                objectFit: "cover",
+                filter: "drop-shadow(0 2px 4px rgba(255,107,53,0.35))",
+              }}
+            />
+            {/* ── Forge Brand Word (cursive art text) ── */}
+            <Typography
+              noWrap
+              sx={{
+                fontFamily: '"Pacifico", cursive',
+                fontSize: { xs: "1.3rem", sm: "1.55rem" },
+                fontWeight: 400,
+                background:
+                  "linear-gradient(135deg, #FF4500 0%, #FF8C00 28%, #FFD700 52%, #FF6B35 78%, #DC2626 100%)",
+                backgroundClip: "text",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.25,
+                filter: "drop-shadow(0 1px 3px rgba(255,107,53,0.3))",
               }}
             >
-              <Typography sx={{ color: "#FFFFFF", fontWeight: 800, fontSize: "1rem", lineHeight: 1 }}>
-                H
-              </Typography>
-            </Box>
+              Forge
+            </Typography>
+            {/* ── Subtitle ── */}
             <Typography
-              variant="h6"
               noWrap
-              sx={{ fontWeight: 700, color: "text.primary" }}
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+                ml: 0.4,
+                mt: 0.2,
+                lineHeight: 1.4,
+                display: { xs: "none", sm: "block" },
+              }}
             >
-              HPM 硬件项目管理
+              硬件项目管理
             </Typography>
           </Box>
         </Toolbar>
