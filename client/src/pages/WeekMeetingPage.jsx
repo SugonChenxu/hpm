@@ -600,12 +600,14 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
           display: "flex", alignItems: "flex-start", gap: 0.5, px: 0.5, borderRadius: 1,
           "&:hover": { bgcolor: "action.hover" },
         }}>
-          {/* 完成框：居中于首行高度，与文字视觉水平对齐 */}
+          {/* 完成框：图标压到接近文字字号，居中于首行，保证水平对齐 */}
           <Checkbox
-            size="small"
             checked={!!it.is_done}
             onChange={() => onToggle(it)}
-            sx={{ p: 0.25, flexShrink: 0, alignSelf: "center" }}
+            sx={{
+              p: 0, flexShrink: 0, alignSelf: "center",
+              "& .MuiSvgIcon-root": { fontSize: "0.85rem" },
+            }}
           />
           {/* 内容区：1W 标签 + 编号 + 标题 同处一段文字流（inline），首行共享同一基线水平对齐；
               换行后第二行落在文字块左缘，即与 1W 列对齐 */}
