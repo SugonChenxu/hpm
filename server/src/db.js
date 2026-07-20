@@ -615,6 +615,23 @@ try {
   console.warn("Migration meeting_outputs.cycle:", e.message);
 }
 
+// 迁移：meeting_outputs 区分「周期模板」与「每周实例」
+// is_template=1 为周期模板（定义，不直接展示）；source_id 指向模板 id（实例创建后回填）
+try {
+  const cols = db.prepare("PRAGMA table_info(meeting_outputs)").all();
+  if (!cols.find((c) => c.name === "is_template")) {
+    db.exec("ALTER TABLE meeting_outputs ADD COLUMN is_template INTEGER DEFAULT 0");
+  }
+  if (!cols.find((c) => c.name === "source_id")) {
+    db.exec("ALTER TABLE meeting_outputs ADD COLUMN source_id INTEGER DEFAULT 0");
+  }
+  // 规整历史数据：带 cycle 的旧行视为模板
+  db.exec("UPDATE meeting_outputs SET is_template = 1 WHERE cycle IS NOT NULL AND cycle != '' AND (is_template IS NULL OR is_template = 0)");
+  console.log("Migration meeting_outputs.is_template/source_id: done");
+} catch (e) {
+  console.warn("Migration meeting_outputs.is_template/source_id:", e.message);
+}
+
 // =====================================================
 // P0 增量：PLM 连接与只读探针（曙光 PLM / 经典 ENOVIA v6）
 // 本次只建表 + 连接配置，不实现实际排程同步（P1 负责）

@@ -4,7 +4,7 @@ import {
   DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
   Tooltip, Snackbar, Alert, Popper, ClickAwayListener, Paper, Checkbox,
 } from "@mui/material";
-import { ChevronLeft, ChevronRight, Add, DeleteOutline } from "@mui/icons-material";
+import { ChevronLeft, ChevronRight, Add, DeleteOutline, EditOutlined } from "@mui/icons-material";
 import api from "../api/client";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
@@ -101,7 +101,7 @@ export default function WeekMeetingPage() {
   /** TextField 引用，用于延迟聚焦（替代 autoFocus） */
   const inputRef = useRef(null);
 
-  const load = useCallback(() => {
+  const loadMeetingData = useCallback(() => {
     setLoading(true);
     api.weekMeetings.list(weekKey)
       .then((res) => {
@@ -118,7 +118,7 @@ export default function WeekMeetingPage() {
       .catch(() => setLoading(false));
   }, [weekKey]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadMeetingData(); }, [loadMeetingData]);
 
   // 所有会议(自定义 + 项目例会)
   const allMeetings = useMemo(() => {
@@ -276,26 +276,32 @@ export default function WeekMeetingPage() {
   }, [weekKey]);
 
   const handleToggleOutput = useCallback(async (item) => {
-    // 周期项（虚拟ID）→ 先创建实体记录再切换
-    if (item.is_recurring || String(item.id).startsWith("recurring_")) {
+    const newDone = item.is_done ? 0 : 1;
+    // 周期项（虚拟周期项 / 带 cycle 的展示实例）：勾选仅记录「当前周期完成」，upsert 每周实例，不改动模板
+    const isRecurring = item.is_recurring || String(item.id).startsWith("recurring_") || !!item.cycle;
+    if (isRecurring) {
+      const sourceId = item.is_recurring
+        ? String(item.id).replace("recurring_", "")
+        : (item.source_id || item.id);
       try {
-        const created = await api.weekMeetings.meetingOutputs.add({
-          week_key: weekKey, weekday: item.weekday, title: item.title,
+        await api.weekMeetings.meetingOutputs.cycleInstance({
+          week_key: weekKey,
+          weekday: item.weekday,
+          title: item.title,
+          cycle: item.cycle || "weekly",
+          is_done: newDone,
+          source_id: sourceId,
         });
-        if (item.is_done) {
-          // 如果原模板已完成，新记录先创建再切换
-          await api.weekMeetings.meetingOutputs.update(created.id, { is_done: 1 });
-        }
         loadMeetingData(weekKey);
       } catch {
         setSnackbar({ open: true, message: "操作失败", severity: "error" });
       }
       return;
     }
-    const nextDone = item.is_done ? 0 : 1;
-    setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: nextDone } : o)) }));
+    // 普通一次性项：直接切换完成态
+    setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: newDone } : o)) }));
     try {
-      await api.weekMeetings.meetingOutputs.update(item.id, { is_done: nextDone });
+      await api.weekMeetings.meetingOutputs.update(item.id, { is_done: newDone });
     } catch (err) {
       setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, is_done: item.is_done } : o)) }));
       setSnackbar({ open: true, message: "更新失败", severity: "error" });
@@ -303,43 +309,50 @@ export default function WeekMeetingPage() {
   }, [weekKey]);
 
   const handleDeleteOutput = useCallback(async (item) => {
+    // 虚拟周期项 → 删除其原模板（停止后续周期）；普通实例/一次性项 → 删除该条
+    const isRecurring = item.is_recurring || String(item.id).startsWith("recurring_");
+    const targetId = isRecurring ? String(item.id).replace("recurring_", "") : item.id;
     setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).filter((o) => o.id !== item.id) }));
     try {
-      await api.weekMeetings.meetingOutputs.remove(item.id);
+      await api.weekMeetings.meetingOutputs.remove(targetId);
     } catch (err) {
-      setOutputs((prev) => ({ ...prev, [item.weekday]: [...(prev[item.weekday] || []), item] }));
+      loadMeetingData(weekKey);
       setSnackbar({ open: true, message: "删除失败", severity: "error" });
     }
-  }, []);
+  }, [weekKey]);
 
-  const handleSetCycle = useCallback(async (itemId, cycle) => {
-    // 周期项（虚拟ID）→ 先创建实体记录
-    let realId = itemId;
-    const allItems = Object.values(outputs).flat();
-    const item = allItems.find(o => o.id === itemId);
-    if (item && (item.is_recurring || String(itemId).startsWith("recurring_"))) {
-      try {
-        const created = await api.weekMeetings.meetingOutputs.add({
-          week_key: weekKey, weekday: item.weekday, title: item.title,
-        });
-        realId = created.id;
-      } catch {
-        setSnackbar({ open: true, message: "操作失败", severity: "error" });
-        return;
-      }
-    }
-    // 乐观更新
-    setOutputs((prev) => {
-      const next = { ...prev };
-      for (const d of Object.keys(next)) {
-        next[d] = next[d].map((o) => (o.id === itemId ? { ...o, id: realId, cycle, is_recurring: false } : o));
-      }
-      return next;
-    });
+  const handleEditOutput = useCallback(async (item, newTitle) => {
+    const t = (newTitle || "").trim();
+    if (!t) return;
+    // 虚拟周期项 → 更新原模板标题；周期实例 → 同步更新来源模板，保持后续周一致；一次性项 → 更新自身
+    const isRecurring = item.is_recurring || String(item.id).startsWith("recurring_");
+    const targetId = isRecurring ? String(item.id).replace("recurring_", "") : item.id;
+    setOutputs((prev) => ({ ...prev, [item.weekday]: (prev[item.weekday] || []).map((o) => (o.id === item.id ? { ...o, title: t } : o)) }));
     try {
-      await api.weekMeetings.meetingOutputs.update(realId, { cycle });
+      await api.weekMeetings.meetingOutputs.update(targetId, { title: t });
+      if (!isRecurring && item.source_id) {
+        await api.weekMeetings.meetingOutputs.update(item.source_id, { title: t });
+      }
+      loadMeetingData(weekKey);
     } catch {
       loadMeetingData(weekKey);
+      setSnackbar({ open: true, message: "修改失败", severity: "error" });
+    }
+  }, [weekKey]);
+
+  const handleSetCycle = useCallback(async (itemId, cycle) => {
+    // 虚拟周期项 → 更新其原模板；普通项 → 把自身升级为周期模板
+    const allItems = Object.values(outputs).flat();
+    const item = allItems.find(o => o.id === itemId);
+    const isRecurring = item && (item.is_recurring || String(itemId).startsWith("recurring_"));
+    const targetId = isRecurring ? String(itemId).replace("recurring_", "") : itemId;
+    try {
+      await api.weekMeetings.meetingOutputs.update(targetId, {
+        cycle: cycle || "",
+        is_template: cycle ? 1 : 0,
+      });
+      loadMeetingData(weekKey);
+    } catch {
       setSnackbar({ open: true, message: "设置周期失败", severity: "error" });
     }
   }, [weekKey, outputs]);
@@ -440,6 +453,7 @@ export default function WeekMeetingPage() {
             onToggle={handleToggleOutput}
             onDelete={handleDeleteOutput}
             onSetCycle={handleSetCycle}
+            onEdit={handleEditOutput}
           />
           </Box>
         ))}
@@ -547,12 +561,29 @@ const CYCLE_OPTIONS = [
 
 const CYCLE_COLORS = { weekly: "#237804", biweekly: "#ad6800", monthly: "#1976d2" };
 
-function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
+function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdit }) {
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");
   const addRef = useRef(null);
   const [cycleMenu, setCycleMenu] = useState({ anchor: null, itemId: null });
+  const [actionMenu, setActionMenu] = useState({ anchor: null, itemId: null });
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState("");
+  const editRef = useRef(null);
   useEffect(() => { if (adding && addRef.current) addRef.current.focus(); }, [adding]);
+  useEffect(() => { if (editingId && editRef.current) editRef.current.focus(); }, [editingId]);
+
+  const startEdit = (it) => {
+    setEditingId(it.id);
+    setEditText(it.title);
+    setActionMenu({ anchor: null, itemId: null });
+  };
+  const commitEdit = () => {
+    const it = (items || []).find(i => i.id === editingId);
+    if (it) onEdit(it, editText);
+    setEditingId(null);
+    setEditText("");
+  };
 
   const submit = () => {
     const t = text.trim();
@@ -564,11 +595,10 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, py: 0.25 }}>
-      {(items || []).map((it) => (
+      {(items || []).map((it, idx) => (
         <Box key={it.id} sx={{
           display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1,
-          "&:hover": { bgcolor: "action.hover" }, "&:hover .act-btn": { opacity: 1 },
-          ...(it.is_recurring ? { border: "1px dashed", borderColor: "divider", bgcolor: "action.hover" } : {}),
+          "&:hover": { bgcolor: "action.hover" },
         }}>
           <Checkbox
             size="small"
@@ -576,47 +606,51 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
             onChange={() => onToggle(it)}
             sx={{ p: 0.25, flexShrink: 0 }}
           />
-          <Typography sx={{ flex: 1, fontSize: "0.72rem", lineHeight: 1.3, textDecoration: it.is_done ? "line-through" : "none", color: it.is_done ? "text.disabled" : "text.primary", wordBreak: "break-all" }}>
-            {it.title}
-          </Typography>
-          {/* 周期项标识 */}
-          {it.is_recurring && (
-            <Box sx={{ fontSize: "0.55rem", color: "text.secondary", flexShrink: 0, opacity: 0.7 }}>↻周期</Box>
-          )}
-          {/* 周期标签 */}
+          {/* 周期前缀标志：与输出物连贯，不挤压文字 */}
           {it.cycle && (
-            <Box
-              className="act-btn"
-              onClick={(e) => setCycleMenu({ anchor: e.currentTarget, itemId: it.id })}
-              sx={{
-                fontSize: "0.58rem", px: 0.6, py: 0.1, borderRadius: 1,
-                bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "18",
-                color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
-                fontWeight: 600, cursor: "pointer", lineHeight: 1.8,
-                opacity: 1, transition: "opacity 0.15s", flexShrink: 0,
-                whiteSpace: "nowrap",
-              }}>
+            <Box component="span" sx={{
+              flexShrink: 0, fontSize: "0.62rem", px: 0.55, py: 0.05, borderRadius: 0.75, fontWeight: 700,
+              lineHeight: 1.5, whiteSpace: "nowrap", userSelect: "none",
+              bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "1f",
+              color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
+            }}>
               {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
             </Box>
           )}
-          {/* 周期设置按钮 */}
+          {/* 同日按添加顺序自动编号（左置前缀，字号与文字一致） */}
+          <Box component="span" sx={{
+            flexShrink: 0, fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.3,
+            color: it.is_done ? "text.disabled" : "text.secondary", userSelect: "none",
+          }}>
+            {idx + 1}.
+          </Box>
+          {editingId === it.id ? (
+            <TextField
+              inputRef={editRef}
+              size="small"
+              fullWidth
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+                if (e.key === "Escape") { setEditingId(null); setEditText(""); }
+              }}
+              sx={{ "& .MuiInputBase-root": { fontSize: "0.72rem" }, flex: 1, minWidth: 0 }}
+            />
+          ) : (
+            <Typography sx={{ flex: 1, minWidth: 0, fontSize: "0.72rem", lineHeight: 1.35, textDecoration: it.is_done ? "line-through" : "none", color: it.is_done ? "text.disabled" : "text.primary", wordBreak: "break-all" }}>
+              {it.title}
+            </Typography>
+          )}
+          {/* 最右端 ▶ 展开操作菜单 */}
           <IconButton
-            className="act-btn"
             size="small"
-            onClick={(e) => setCycleMenu({ anchor: e.currentTarget, itemId: it.id })}
-            sx={{ opacity: it.cycle ? 0 : 1, transition: "opacity 0.15s", p: 0.1, flexShrink: 0 }}
-            title="设置周期"
+            onClick={(e) => setActionMenu({ anchor: e.currentTarget, itemId: it.id })}
+            sx={{ p: 0.1, flexShrink: 0, color: "text.secondary" }}
+            title="更多操作"
           >
-            <Box component="span" sx={{ fontSize: 12, lineHeight: 1 }}>⟳</Box>
-          </IconButton>
-          {/* 删除按钮 */}
-          <IconButton
-            className="act-btn"
-            size="small"
-            onClick={() => onDelete(it)}
-            sx={{ opacity: 0, transition: "opacity 0.15s", p: 0.1, flexShrink: 0 }}
-          >
-            <DeleteOutline sx={{ fontSize: 13 }} />
+            <ChevronRight sx={{ fontSize: 16 }} />
           </IconButton>
         </Box>
       ))}
@@ -643,6 +677,31 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle }) {
           <Add sx={{ fontSize: 14 }} /> 添加
         </Box>
       )}
+      {/* 操作菜单：编辑 / 设置周期 / 删除 */}
+      <Menu
+        anchorEl={actionMenu.anchor}
+        open={!!actionMenu.anchor}
+        onClose={() => setActionMenu({ anchor: null, itemId: null })}
+      >
+        <MenuItem
+          onClick={() => { const it = (items || []).find(i => i.id === actionMenu.itemId); if (it) startEdit(it); }}
+          sx={{ fontSize: "0.78rem", gap: 1 }}
+        >
+          <EditOutlined sx={{ fontSize: 16 }} /> 编辑
+        </MenuItem>
+        <MenuItem
+          onClick={() => { const a = actionMenu; setActionMenu({ anchor: null, itemId: null }); setCycleMenu({ anchor: a.anchor, itemId: a.itemId }); }}
+          sx={{ fontSize: "0.78rem", gap: 1 }}
+        >
+          <Box component="span" sx={{ fontSize: 14, lineHeight: 1 }}>⟳</Box> 设置周期
+        </MenuItem>
+        <MenuItem
+          onClick={() => { const it = (items || []).find(i => i.id === actionMenu.itemId); if (it) onDelete(it); setActionMenu({ anchor: null, itemId: null }); }}
+          sx={{ fontSize: "0.78rem", gap: 1, color: "error.main" }}
+        >
+          <DeleteOutline sx={{ fontSize: 16 }} /> 删除
+        </MenuItem>
+      </Menu>
       {/* 周期选择菜单 */}
       <Menu
         anchorEl={cycleMenu.anchor}

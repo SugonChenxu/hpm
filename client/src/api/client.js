@@ -163,6 +163,7 @@ export const api = {
       add: (data) => request("/week-meetings/outputs", { method: "POST", body: JSON.stringify(data) }),
       update: (id, data) => request(`/week-meetings/outputs/${id}`, { method: "PUT", body: JSON.stringify(data) }),
       remove: (id) => request(`/week-meetings/outputs/${id}`, { method: "DELETE" }),
+      cycleInstance: (data) => request("/week-meetings/outputs/cycle-instance", { method: "POST", body: JSON.stringify(data) }),
     },
   },
   // 缓存管理
