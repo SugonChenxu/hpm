@@ -114,17 +114,18 @@ class MantisAdapter {
     return rows.filter((r) => r.all_status > 0).map((r) => ({ category: r.category, count: r.all_status }));
   }
 
-  /** 全局摘要 — 从"基本统计"view 获取 */
+  /**
+   * 全局摘要。
+   * 注意：Sugon Mantis 的「基本统计」汇总行（index 0）对"集合/父项目"入口返回空，
+   * 而缺陷实际挂在子项目下，导致 total/解决率 算成 0 与缺陷列表（真实条数）矛盾。
+   * 因此 total/resolved/rate 一律基于 fetchIssues 真实返回的缺陷自算（集合/子项目入口一致），
+   * DI 仍取自分析接口的 DI 趋势（该接口对集合入口有效）。
+   */
   async fetchSummary(projectId) {
-    const data = await this._get("/analysis/", {
-      action: "get_analysis_data", view_name: "基本统计", index: 0,
-      proj_id_arr: JSON.stringify([projectId]), ignore_privileged_projects: "yes",
-    });
-    const rows = data?.data?.[0]?.data?.data || [];
-    const parent = rows[0] || {};
-    const total = parent.total || 0;
-    const rate = parseFloat(parent.resolved_pct) || 0;
-    const resolved = Math.round(total * rate / 100);
+    const issues = await this.fetchIssues(projectId);
+    const total = issues.length;
+    const resolved = issues.filter((i) => (i.status || "") === "已解决").length;
+    const rate = total > 0 ? Math.round((resolved / total) * 10000) / 100 : 0;
     const trend = await this.fetchDITrend(projectId);
     const di = trend.length > 0 ? Math.round(trend[trend.length - 1].di * 100) / 100 : 0;
     return { total, resolved, rate, di };

@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Box, Card, CardContent, TextField, Button, Typography, Alert, Stack, Divider } from "@mui/material";
+import { Box, Card, CardContent, TextField, Button, Typography, Alert, Stack, Divider, MenuItem } from "@mui/material";
 import api from "../../api/client";
 
 export default function MantisConnectionCard({ onSaved, onClose }) {
