@@ -278,15 +278,18 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                 </Box>
               </Box>
               {showCompleted && (
-                <Box sx={{ maxHeight: 160, overflowY: "auto", mt: 0.5 }}>
-                  {completedTasks.map((t) => (
+                <Box sx={{ mt: 0.5 }}>
+                  {completedTasks.slice(0, 6).map((t) => (
                     <Box
                       key={t.id}
-                      sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.25 }}
+                      sx={{
+                        display: "flex", alignItems: "center", gap: 0.5, py: 0.15,
+                        whiteSpace: "nowrap", overflow: "hidden",
+                      }}
                     >
                       <Typography
                         variant="caption"
-                        sx={{ fontSize: "0.68rem", color: "text.disabled", whiteSpace: "nowrap", flexShrink: 0 }}
+                        sx={{ fontSize: "0.68rem", color: "text.disabled", flexShrink: 0 }}
                       >
                         {fmtDate(t.completed_at)}
                       </Typography>
@@ -307,7 +310,7 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                       <Box
                         component="span"
                         onClick={(e) => { e.stopPropagation(); handleRestoreTask(t.id); }}
-                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.85rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "primary.main" } }}
+                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.8rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "primary.main" } }}
                         title="还原"
                       >
                         ↺
@@ -315,13 +318,21 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                       <Box
                         component="span"
                         onClick={(e) => { e.stopPropagation(); handleDeleteTask(t.id); }}
-                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.8rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "error.main" } }}
+                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.75rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "error.main" } }}
                         title="删除"
                       >
                         ✕
                       </Box>
                     </Box>
                   ))}
+                  {completedTasks.length > 6 && (
+                    <Typography
+                      variant="caption"
+                      sx={{ fontSize: "0.68rem", color: "text.disabled", fontStyle: "italic", mt: 0.25, display: "block" }}
+                    >
+                      还有 {completedTasks.length - 6} 条已完成任务…
+                    </Typography>
+                  )}
                 </Box>
               )}
             </>
