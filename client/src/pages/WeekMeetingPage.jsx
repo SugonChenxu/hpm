@@ -554,9 +554,9 @@ export default function WeekMeetingPage() {
 
 const CYCLE_OPTIONS = [
   { value: "", label: "" },
-  { value: "weekly", label: "每周" },
-  { value: "biweekly", label: "隔周" },
-  { value: "monthly", label: "每月" },
+  { value: "weekly", label: "1W" },
+  { value: "biweekly", label: "2W" },
+  { value: "monthly", label: "1M" },
 ];
 
 const CYCLE_COLORS = { weekly: "#237804", biweekly: "#ad6800", monthly: "#1976d2" };
@@ -597,52 +597,64 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
     <Box sx={{ display: "flex", flexDirection: "column", gap: 0.25, py: 0.25 }}>
       {(items || []).map((it, idx) => (
         <Box key={it.id} sx={{
-          display: "flex", alignItems: "center", gap: 0.5, px: 0.5, borderRadius: 1,
+          display: "flex", alignItems: "flex-start", gap: 0.5, px: 0.5, borderRadius: 1,
           "&:hover": { bgcolor: "action.hover" },
         }}>
-          <Checkbox
-            size="small"
-            checked={!!it.is_done}
-            onChange={() => onToggle(it)}
-            sx={{ p: 0.25, flexShrink: 0 }}
-          />
-          {/* 周期前缀标志：与输出物连贯，不挤压文字 */}
-          {it.cycle && (
-            <Box component="span" sx={{
-              flexShrink: 0, fontSize: "0.62rem", px: 0.55, py: 0.05, borderRadius: 0.75, fontWeight: 700,
-              lineHeight: 1.5, whiteSpace: "nowrap", userSelect: "none",
-              bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "1f",
-              color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
-            }}>
-              {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
-            </Box>
-          )}
-          {/* 同日按添加顺序自动编号（左置前缀，字号与文字一致） */}
-          <Box component="span" sx={{
-            flexShrink: 0, fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.3,
-            color: it.is_done ? "text.disabled" : "text.secondary", userSelect: "none",
-          }}>
-            {idx + 1}.
-          </Box>
-          {editingId === it.id ? (
-            <TextField
-              inputRef={editRef}
+          {/* 固定前缀区：checkbox + 周期标签 + 编号 */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, flexShrink: 0 }}>
+            <Checkbox
               size="small"
-              fullWidth
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
-                if (e.key === "Escape") { setEditingId(null); setEditText(""); }
-              }}
-              sx={{ "& .MuiInputBase-root": { fontSize: "0.72rem" }, flex: 1, minWidth: 0 }}
+              checked={!!it.is_done}
+              onChange={() => onToggle(it)}
+              sx={{ p: 0.25 }}
             />
-          ) : (
-            <Typography sx={{ flex: 1, minWidth: 0, fontSize: "0.72rem", lineHeight: 1.35, textDecoration: it.is_done ? "line-through" : "none", color: it.is_done ? "text.disabled" : "text.primary", wordBreak: "break-all" }}>
-              {it.title}
-            </Typography>
-          )}
+            {it.cycle && (
+              <Box component="span" sx={{
+                fontSize: "0.6rem", px: 0.5, py: 0.05, borderRadius: 0.75, fontWeight: 700,
+                lineHeight: 1.5, whiteSpace: "nowrap", userSelect: "none",
+                bgcolor: (CYCLE_COLORS[it.cycle] || "#8c8c8c") + "1f",
+                color: CYCLE_COLORS[it.cycle] || "#8c8c8c",
+              }}>
+                {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
+              </Box>
+            )}
+            <Box component="span" sx={{
+              fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.3,
+              color: it.is_done ? "text.disabled" : "text.secondary", userSelect: "none",
+            }}>
+              {idx + 1}.
+            </Box>
+          </Box>
+          {/* 文字区：flex:1 占满剩余宽度，多行换行后左对齐与前缀右边缘对齐 */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            {editingId === it.id ? (
+              <TextField
+                inputRef={editRef}
+                size="small"
+                fullWidth
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") { e.preventDefault(); commitEdit(); }
+                  if (e.key === "Escape") { setEditingId(null); setEditText(""); }
+                }}
+                sx={{ "& .MuiInputBase-root": { fontSize: "0.72rem" } }}
+              />
+            ) : (
+              <Typography
+                onClick={() => startEdit(it)}
+                sx={{
+                  fontSize: "0.72rem", lineHeight: 1.45, cursor: "pointer",
+                  textDecoration: it.is_done ? "line-through" : "none",
+                  color: it.is_done ? "text.disabled" : "text.primary",
+                  wordBreak: "break-word", "&:hover": { color: "primary.main" },
+                }}
+              >
+                {it.title}
+              </Typography>
+            )}
+          </Box>
           {/* 最右端 ▶ 展开操作菜单 */}
           <IconButton
             size="small"
