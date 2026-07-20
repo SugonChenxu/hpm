@@ -524,6 +524,15 @@ try {
   }
 }
 
+// mantis_connection 表新增 watched_projects 列（用户关注/最近使用的 Mantis 项目）
+try {
+  db.exec(`ALTER TABLE mantis_connection ADD COLUMN watched_projects TEXT DEFAULT '[]'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration mantis_connection.watched_projects:", e.message);
+  }
+}
+
 // sync_cache 索引
 try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sync_cache_project_key ON sync_cache(project_id, cache_key, owner_id)`);

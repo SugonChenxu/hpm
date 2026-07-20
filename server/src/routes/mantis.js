@@ -11,7 +11,7 @@
 
 import { Router } from "express";
 import db from "../db.js";
-import { getAdapter, resolveMantisId, resolveForgeId, mantisError } from "../mantis-resolve.js";
+import { getAdapter, resolveMantisId, resolveForgeId, getWatchedProjects, mantisError } from "../mantis-resolve.js";
 
 const router = Router();
 
@@ -40,6 +40,19 @@ router.get("/mantis/projects", async (req, res) => {
       return res.json({ ok: true, data: [], needsConfig: true });
     }
     const { status, message } = mantisError(error, "获取项目列表失败");
+    res.status(status).json({ ok: false, error: message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// GET /mantis/watched-projects — 当前用户关注/最近使用的 Mantis 项目
+// ═══════════════════════════════════════════════════════════
+router.get("/mantis/watched-projects", async (req, res) => {
+  try {
+    const watched = await getWatchedProjects(req.userId);
+    res.json({ ok: true, data: watched });
+  } catch (error) {
+    const { status, message } = mantisError(error, "获取关注项目失败");
     res.status(status).json({ ok: false, error: message });
   }
 });
@@ -147,7 +160,7 @@ router.get("/mantis/connection", (req, res) => {
 // PUT /mantis/connection — 更新/创建 Mantis 连接配置（当前用户）
 // ═══════════════════════════════════════════════════════════
 router.put("/mantis/connection", (req, res) => {
-  const { server_url, api_token, project_mapping, sync_interval_min } = req.body;
+  const { server_url, api_token, project_mapping, watched_projects, sync_interval_min } = req.body;
   const existing = db.prepare("SELECT id FROM mantis_connection WHERE owner_id = ? LIMIT 1").get(req.userId);
 
   if (existing) {
@@ -156,24 +169,27 @@ router.put("/mantis/connection", (req, res) => {
         server_url=COALESCE(?,server_url),
         api_token=COALESCE(?,api_token),
         project_mapping=COALESCE(?,project_mapping),
+        watched_projects=COALESCE(?,watched_projects),
         sync_interval_min=COALESCE(?,sync_interval_min)
       WHERE id=? AND owner_id=?
     `).run(
       server_url,
       api_token,
       project_mapping ? JSON.stringify(project_mapping) : null,
+      watched_projects ? JSON.stringify(watched_projects) : null,
       sync_interval_min,
       existing.id,
       req.userId
     );
   } else {
     db.prepare(`
-      INSERT INTO mantis_connection (server_url, api_token, project_mapping, sync_interval_min, owner_id)
-      VALUES (?,?,?,?,?)
+      INSERT INTO mantis_connection (server_url, api_token, project_mapping, watched_projects, sync_interval_min, owner_id)
+      VALUES (?,?,?,?,?,?)
     `).run(
       server_url || "https://mantis.sugon.com",
       api_token || "",
       project_mapping ? JSON.stringify(project_mapping) : "[]",
+      watched_projects ? JSON.stringify(watched_projects) : "[]",
       sync_interval_min || 30,
       req.userId
     );

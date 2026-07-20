@@ -150,6 +150,7 @@ export const api = {
   // Mantis 集成
   mantis: {
     projects: () => request("/mantis/projects"),
+    watchedProjects: () => request("/mantis/watched-projects"),
     sync: (projectId) =>
       request("/mantis/sync", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
     connection: () => request("/mantis/connection"),

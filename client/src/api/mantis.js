@@ -9,6 +9,8 @@ import api from "./client";
 
 export const fetchProjects = () => api.mantis.projects();
 
+export const watchedProjects = () => api.mantis.watchedProjects();
+
 export const syncIssues = (projectId) => api.mantis.sync(projectId);
 
 export const getConnection = () => api.mantis.connection();
