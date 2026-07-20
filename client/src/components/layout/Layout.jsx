@@ -68,21 +68,25 @@ export default function Layout() {
                 filter: "drop-shadow(0 2px 4px rgba(255,107,53,0.35))",
               }}
             />
-            {/* ── Forge Brand Word (cursive art text) ── */}
+            {/* ── Forge Brand Word (cursive art text, italic + flame metallic) ── */}
             <Typography
               noWrap
               sx={{
                 fontFamily: '"Pacifico", cursive',
+                fontStyle: "italic",
                 fontSize: { xs: "1.3rem", sm: "1.55rem" },
                 fontWeight: 400,
                 background:
-                  "linear-gradient(135deg, #FF4500 0%, #FF8C00 28%, #FFD700 52%, #FF6B35 78%, #DC2626 100%)",
+                  "linear-gradient(98deg, #FF5722 0%, #FF8C00 20%, #FFC400 40%, #FFF3E0 50%, #FFC400 60%, #FF7043 80%, #E53935 100%)",
                 backgroundClip: "text",
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
-                letterSpacing: "-0.02em",
+                letterSpacing: "-0.01em",
                 lineHeight: 1.25,
-                filter: "drop-shadow(0 1px 3px rgba(255,107,53,0.3))",
+                transform: "skewX(-10deg)",
+                transformOrigin: "left center",
+                filter:
+                  "drop-shadow(0 2px 5px rgba(255,107,53,0.45)) drop-shadow(0 0 2px rgba(255,184,77,0.55))",
               }}
             >
               Forge
