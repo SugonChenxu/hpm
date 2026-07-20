@@ -443,11 +443,21 @@ export default function MaterialListPage() {
     catch { setSnack({ severity: "error", text: "撤销导入失败" }); }
   };
 
-  // ===== 全选 =====
-  const allIds = rows.map((r) => r.id);
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  // ===== 全选（仅针对当前筛选后的条目） =====
+  const filteredIds = filtered.map((r) => r.id);
+  const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
   const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(allIds));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        // 取消时仅移除筛选范围内的条目，不影响范围外的已选
+        filteredIds.forEach((id) => next.delete(id));
+      } else {
+        // 全选时仅添加筛选范围内的条目
+        filteredIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
   };
   const toggleRow = (id) => {
     setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
