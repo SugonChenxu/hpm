@@ -45,10 +45,21 @@ app.use("/api", plmRouter);
 // === 生产模式：托管前端静态文件 ===
 const clientDist = path.resolve(__dirname, "../../client/dist");
 if (process.env.NODE_ENV === "production" && fs.existsSync(clientDist)) {
-  app.use(express.static(clientDist));
-  // SPA fallback：所有非 API 路由返回 index.html
-  app.get("*", (req, res) => {
-    if (req.path.startsWith("/api")) return; // 不应该到这里，兜底
+  app.use(express.static(clientDist, {
+    // index.html 不缓存，强制每次重新校验，避免浏览器长期缓存旧的资源引用
+    setHeaders: (res, filePath) => {
+      if (path.basename(filePath) === "index.html") {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  }));
+  // SPA fallback：仅对「无扩展名的导航路径」返回 index.html。
+  // 带扩展名(如 .js/.css/.png) 的请求若缺失，不再伪装成 HTML（会触发
+  // "Expected a JavaScript module script but the server responded with text/html" 报错），
+  // 而是直接 404，让问题显性化。
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    if (path.extname(req.path)) return res.status(404).end();
     res.sendFile(path.join(clientDist, "index.html"));
   });
   console.log(`[HPM] Serving static files from ${clientDist}`);
