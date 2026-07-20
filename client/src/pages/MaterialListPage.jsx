@@ -443,22 +443,6 @@ export default function MaterialListPage() {
     catch { setSnack({ severity: "error", text: "撤销导入失败" }); }
   };
 
-  // ===== 全选（仅针对当前筛选后的条目） =====
-  const filteredIds = filtered.map((r) => r.id);
-  const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
-  const toggleAll = () => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allSelected) {
-        // 取消时仅移除筛选范围内的条目，不影响范围外的已选
-        filteredIds.forEach((id) => next.delete(id));
-      } else {
-        // 全选时仅添加筛选范围内的条目
-        filteredIds.forEach((id) => next.add(id));
-      }
-      return next;
-    });
-  };
   const toggleRow = (id) => {
     setSelected((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   };
@@ -484,6 +468,23 @@ export default function MaterialListPage() {
     }
     return list;
   }, [rows, sortKey, sortDir, search]);
+
+  // ===== 全选（仅针对当前筛选后的条目，必须放在 filtered 声明之后） =====
+  const filteredIds = filtered.map((r) => r.id);
+  const allSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.id));
+  const toggleAll = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        // 取消时仅移除筛选范围内的条目，不影响范围外的已选
+        filteredIds.forEach((id) => next.delete(id));
+      } else {
+        // 全选时仅添加筛选范围内的条目
+        filteredIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
 
   // ===== 搜索框 =====
   const searchInput = (
