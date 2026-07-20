@@ -27,12 +27,16 @@ function fmtDone(dateStr) {
  */
 export default function DoneColumn({ tasks, onUndo, onDelete }) {
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [expanded, setExpanded] = useState(false);
 
   const sorted = [...tasks].sort((a, b) => {
     if (!a.completed_at) return 1;
     if (!b.completed_at) return -1;
     return new Date(b.completed_at) - new Date(a.completed_at);
   });
+
+  // 默认仅显示最近完成的 6 条，超出折叠（展开显示全部）
+  const visible = expanded ? sorted : sorted.slice(0, 6);
 
   return (
     <>
@@ -58,7 +62,8 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
               暂无已完成任务
             </Typography>
           ) : (
-            sorted.map((task) => (
+            <>
+              {visible.map((task) => (
               <Box
                 key={task.id}
                 sx={{
@@ -141,7 +146,33 @@ export default function DoneColumn({ tasks, onUndo, onDelete }) {
                   </Tooltip>
                 </Box>
               </Box>
-            ))
+              ))}
+
+              {/* 折叠/展开切换（超过 6 条时显示） */}
+              {sorted.length > 6 && (
+                <Box
+                  onClick={() => setExpanded((v) => !v)}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 0.25,
+                    mt: 0.25,
+                    py: 0.25,
+                    cursor: "pointer",
+                    userSelect: "none",
+                    color: "text.disabled",
+                    fontSize: 11,
+                    "&:hover": { color: "primary.main" },
+                  }}
+                >
+                  {expanded ? "收起" : `展开全部 ${sorted.length} 条`}
+                  <Box component="span" sx={{ fontSize: "0.7rem", lineHeight: 1 }}>
+                    {expanded ? "▴" : "▾"}
+                  </Box>
+                </Box>
+              )}
+            </>
           )}
         </Box>
       </Box>
