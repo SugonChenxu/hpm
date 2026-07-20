@@ -442,7 +442,7 @@ export default function ScheduleTable({ tasks, projectId, onContextMenu, onTaskU
             }
           }}
           onClose={() => { setEditCell(null); window.scrollTo(0, savedScrollY.current); }}
-          dayOfWeekFormatter={(day) => day}
+          dayOfWeekFormatter={(day) => day.format("dd")}
           slotProps={{
             textField: {
               size: "small",
