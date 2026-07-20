@@ -1,7 +1,7 @@
 import { Box, Typography, Skeleton } from "@mui/material";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-const COLORS = ["#7C3AED", "#F59E0B", "#10B981", "#8B5CF6", "#EF4444", "#3B82F6", "#6D28D9", "#9CA3AF"];
+const COLORS = ["#7C3AED", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#14B8A6", "#F97316", "#84CC16", "#6366F1"];
 
 export default function CategoryBarChart({ data = [], loading = false }) {
   const filtered = data.filter((d) => d.count > 0);

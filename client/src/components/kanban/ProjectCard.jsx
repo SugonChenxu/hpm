@@ -19,9 +19,10 @@ import {
   Tooltip,
 } from "recharts";
 import PriorityChip from "./PriorityChip";
+import api from "../../api/client";
 
 // 饼图配色（与故障仪表板 CategoryBarChart 保持一致）
-const PIE_COLORS = ["#7C3AED", "#F59E0B", "#10B981", "#8B5CF6", "#EF4444", "#3B82F6", "#6D28D9", "#9CA3AF"];
+const PIE_COLORS = ["#7C3AED", "#0EA5E9", "#10B981", "#F59E0B", "#EF4444", "#EC4899", "#14B8A6", "#F97316", "#84CC16", "#6366F1"];
 
 // DI 阈值配色：≤10 绿，≤30 黄，其余 红
 function diColor(di) {
@@ -79,12 +80,16 @@ function InfoRow({ label, value }) {
  *   tasks   — 该项目的任务数组（含 status / kanban_column 字段）
  *   onEdit  — (project) => void  编辑回调
  */
-export default function ProjectCard({ project, tasks = [], faults, onEdit, onPhaseChange }) {
+export default function ProjectCard({ project, tasks = [], faults, onEdit, onPhaseChange, onTaskMutated }) {
   const [contextMenu, setContextMenu] = useState(null);
   const [phaseAnchor, setPhaseAnchor] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const themeColor = project.theme_color || "#7C3AED";
   const activeTasks = tasks.filter(
     (t) => !t.completed_at && !t.deleted_at
+  );
+  const completedTasks = tasks.filter(
+    (t) => t.completed_at && !t.deleted_at
   );
 
   /** 当前阶段（从 project.current_phase 取得，缺省为预研阶段） */
@@ -110,6 +115,23 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
   const handleEdit = () => {
     handleCloseMenu();
     if (onEdit) onEdit(project);
+  };
+
+  const fmtDate = (s) => {
+    if (!s) return "";
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return "";
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${mm}-${dd}`;
+  };
+  const handleRestoreTask = async (id) => {
+    try { await api.tasks.toggleComplete(id); onTaskMutated?.(project.id); }
+    catch (e) { console.error("还原任务失败", e); }
+  };
+  const handleDeleteTask = async (id) => {
+    try { await api.tasks.remove(id); onTaskMutated?.(project.id); }
+    catch (e) { console.error("删除任务失败", e); }
   };
 
   return (
@@ -240,6 +262,71 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
             </>
           )}
 
+          {/* 已完成任务（折叠，避免挤压待办高度） */}
+          {completedTasks.length > 0 && (
+            <>
+              <Divider sx={{ my: 1 }} />
+              <Box
+                onClick={() => setShowCompleted((v) => !v)}
+                sx={{ display: "flex", alignItems: "center", gap: 0.5, cursor: "pointer", userSelect: "none" }}
+              >
+                <Typography sx={{ fontSize: "0.75rem", fontWeight: 700, color: "text.secondary" }}>
+                  已完成 ({completedTasks.length})
+                </Typography>
+                <Box component="span" sx={{ fontSize: "0.7rem", color: "text.disabled" }}>
+                  {showCompleted ? "▾" : "▸"}
+                </Box>
+              </Box>
+              {showCompleted && (
+                <Box sx={{ maxHeight: 160, overflowY: "auto", mt: 0.5 }}>
+                  {completedTasks.map((t) => (
+                    <Box
+                      key={t.id}
+                      sx={{ display: "flex", alignItems: "center", gap: 0.5, py: 0.25 }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ fontSize: "0.68rem", color: "text.disabled", whiteSpace: "nowrap", flexShrink: 0 }}
+                      >
+                        {fmtDate(t.completed_at)}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: "0.74rem",
+                          color: "text.secondary",
+                          textDecoration: "line-through",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        {t.title}
+                      </Typography>
+                      <Box
+                        component="span"
+                        onClick={(e) => { e.stopPropagation(); handleRestoreTask(t.id); }}
+                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.85rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "primary.main" } }}
+                        title="还原"
+                      >
+                        ↺
+                      </Box>
+                      <Box
+                        component="span"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteTask(t.id); }}
+                        sx={{ cursor: "pointer", color: "text.disabled", fontSize: "0.8rem", flexShrink: 0, lineHeight: 1, "&:hover": { color: "error.main" } }}
+                        title="删除"
+                      >
+                        ✕
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </>
+          )}
+
           {/* 故障概览（关联 Mantis 故障管理模块） */}
           {faults?.linked && (() => {
             const s = faults.summary || {};
@@ -270,7 +357,7 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                   </Box>
 
                   {/* 指标行 */}
-                  <Box sx={{ display: "flex", gap: 2.5, mb: 0.75 }}>
+                  <Box sx={{ display: "flex", gap: 4, mb: 0.75 }}>
                     <Box>
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>DI</Typography>
                       <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, color: diColor(di), lineHeight: 1.1 }}>{di}</Typography>
