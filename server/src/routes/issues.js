@@ -1,8 +1,7 @@
 import { Router } from "express";
 import db from "../db.js";
-import MantisAdapter from "../adapters/mantis.js";
+import { getAdapter, resolveMantisId, mantisError } from "../mantis-resolve.js";
 const router = Router();
-const mantis = new MantisAdapter();
 
 const DI_WEIGHTS = { Critical: 10, Major: 3, Minor: 1, Trivial: 0.1 };
 
@@ -86,11 +85,14 @@ router.get("/issues/di-trend", async (req, res) => {
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
-    const data = await mantis.fetchDITrend(project_id);
+    const adapter = getAdapter(req.userId);
+    const mantisId = await resolveMantisId(req.userId, project_id);
+    const data = await adapter.fetchDITrend(mantisId);
     setCache(project_id, "di_trend", data);
     res.json({ ok: true, data });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    const { status, message } = mantisError(e, "获取 DI 趋势失败");
+    res.status(status).json({ ok: false, error: message });
   }
 });
 
@@ -106,13 +108,16 @@ router.get("/issues/category-stats", async (req, res) => {
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
+    const adapter = getAdapter(req.userId);
+    const mantisId = await resolveMantisId(req.userId, project_id);
     const data = type === "di"
-      ? await mantis.fetchCategoryDIStats(project_id)
-      : await mantis.fetchCategoryStats(project_id);
+      ? await adapter.fetchCategoryDIStats(mantisId)
+      : await adapter.fetchCategoryStats(mantisId);
     setCache(project_id, cacheKey, data);
     res.json({ ok: true, data });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    const { status, message } = mantisError(e, "获取分类统计失败");
+    res.status(status).json({ ok: false, error: message });
   }
 });
 
@@ -127,11 +132,14 @@ router.get("/issues/summary", async (req, res) => {
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
-    const data = await mantis.fetchSummary(project_id);
+    const adapter = getAdapter(req.userId);
+    const mantisId = await resolveMantisId(req.userId, project_id);
+    const data = await adapter.fetchSummary(mantisId);
     setCache(project_id, "summary", data);
     res.json({ ok: true, data });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    const { status, message } = mantisError(e, "获取全局统计失败");
+    res.status(status).json({ ok: false, error: message });
   }
 });
 
@@ -146,11 +154,14 @@ router.get("/issues/report", async (req, res) => {
   if (cached !== null) return res.json({ ok: true, data: cached });
 
   try {
-    const report = await mantis.fetchReport(project_id);
+    const adapter = getAdapter(req.userId);
+    const mantisId = await resolveMantisId(req.userId, project_id);
+    const report = await adapter.fetchReport(mantisId);
     setCache(project_id, "report", report);
     res.json({ ok: true, data: report });
   } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
+    const { status, message } = mantisError(e, "生成故障报告失败");
+    res.status(status).json({ ok: false, error: message });
   }
 });
 

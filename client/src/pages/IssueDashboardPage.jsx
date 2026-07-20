@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Box, Typography } from "@mui/material";
 import api from "../api/client";
@@ -10,6 +10,7 @@ import DITrendChart from "../components/issue/DITrendChart";
 import CategoryBarChart from "../components/issue/CategoryBarChart";
 import ReportPanel from "../components/issue/ReportPanel";
 import ErrorState from "../components/issue/ErrorState";
+import MantisConnectionCard from "../components/issue/MantisConnectionCard";
 
 export default function IssueDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -22,7 +23,11 @@ export default function IssueDashboardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => { api.mantis.projects().then(r => setMantisProjects(r.data||[])).catch(() => {}); }, []);
+  const reloadProjects = useCallback(() => {
+    api.mantis.projects().then((r) => setMantisProjects(r.data || [])).catch(() => {});
+  }, []);
+
+  useEffect(() => { reloadProjects(); }, [reloadProjects]);
 
   const load = async (pid) => {
     if (!pid) return;
@@ -47,6 +52,7 @@ export default function IssueDashboardPage() {
   if (!projectId) return (
     <Box sx={{ p: 3 }}>
       <PageHeader title="故障仪表板" subtitle="DI 趋势与分类统计" />
+      <MantisConnectionCard onSaved={reloadProjects} />
       <Box sx={{ textAlign:"center", py:8 }}>
         <Typography variant="h6" color="text.secondary" gutterBottom>请选择一个 Mantis 项目</Typography>
         <RefreshBar projectId="" projects={mantisProjects} onRefresh={()=>{}} onProjectChange={(pid)=>setSearchParams(pid?{projectId:pid}:{})} />
@@ -57,6 +63,7 @@ export default function IssueDashboardPage() {
   return (
     <Box sx={{ p: 3 }}>
       <PageHeader title="故障仪表板" subtitle="DI 趋势与分类统计" />
+      <MantisConnectionCard onSaved={reloadProjects} />
       <RefreshBar projectId={projectId} projects={mantisProjects} loading={loading} onRefresh={refresh} onProjectChange={(pid)=>setSearchParams(pid?{projectId:pid}:{})} />
       {loading ? <PageLoading /> :
        error ? <ErrorState type="unknown" message={error} onRetry={refresh} /> : (
