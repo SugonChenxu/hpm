@@ -600,8 +600,8 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
           display: "flex", alignItems: "flex-start", gap: 0.5, px: 0.5, borderRadius: 1,
           "&:hover": { bgcolor: "action.hover" },
         }}>
-          {/* 固定前缀区：checkbox + 周期标签 + 编号 */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.4, flexShrink: 0 }}>
+          {/* 左标记区：checkbox + 1W 周期标签（固定宽度，文字区紧接其后） */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, flexShrink: 0 }}>
             <Checkbox
               size="small"
               checked={!!it.is_done}
@@ -618,14 +618,8 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
                 {(CYCLE_OPTIONS.find(c => c.value === it.cycle) || {}).label || it.cycle}
               </Box>
             )}
-            <Box component="span" sx={{
-              fontSize: "0.72rem", fontWeight: 700, lineHeight: 1.3,
-              color: it.is_done ? "text.disabled" : "text.secondary", userSelect: "none",
-            }}>
-              {idx + 1}.
-            </Box>
           </Box>
-          {/* 文字区：flex:1 占满剩余宽度，多行换行后左对齐与前缀右边缘对齐 */}
+          {/* 内容区：编号与标题同字号同元素，flex:1；换行后第二行对齐到本区左缘（即 1W 列） */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             {editingId === it.id ? (
               <TextField
@@ -651,6 +645,7 @@ function MeetingOutputList({ items, onAdd, onToggle, onDelete, onSetCycle, onEdi
                   wordBreak: "break-word", "&:hover": { color: "primary.main" },
                 }}
               >
+                <Box component="span" sx={{ fontWeight: 700, color: it.is_done ? "text.disabled" : "text.secondary", mr: 0.3 }}>{idx + 1}.</Box>
                 {it.title}
               </Typography>
             )}
