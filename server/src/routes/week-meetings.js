@@ -48,11 +48,6 @@ router.get("/week-meetings", (req, res) => {
     const [yb, mb, db] = b.split("-").map(Number);
     return Math.round((new Date(yb, mb-1, db) - new Date(ya, ma-1, da)) / (7*24*60*60*1000));
   }
-  // 判断本周是否为该月第一周（周一落在 1-7 号）
-  function isFirstWeekOfMonth(wk) {
-    return parseInt(wk.split("-")[2], 10) <= 7;
-  }
-
   // 已有输出物的 key（避免重复）
   const existingKeys = new Set(outputs.map(o => o.weekday + "|" + o.title));
 
@@ -73,7 +68,8 @@ router.get("/week-meetings", (req, res) => {
     } else if (tpl.cycle === "biweekly") {
       shouldShow = weekDiff % 2 === 0;
     } else if (tpl.cycle === "monthly") {
-      shouldShow = isFirstWeekOfMonth(weekKey);
+      // 显示「每月」，实际周期=每隔4周
+      shouldShow = weekDiff % 4 === 0;
     }
 
     if (shouldShow) {
