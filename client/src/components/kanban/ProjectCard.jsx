@@ -249,7 +249,7 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
             const trendData = (faults.diTrend || [])
               .filter((d) => d.di > 0)
               .map((d) => ({ date: d.date, di: Math.round((d.di || 0) * 100) / 100 }));
-            const pieData = (faults.categoryStats || [])
+            const pieData = (faults.unresolvedCategoryStats || [])
               .filter((d) => d.count > 0)
               .sort((a, b) => b.count - a.count)
               .map((d) => ({ name: d.category, value: d.count }));
@@ -300,8 +300,16 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
                             <Area type="monotone" dataKey="di" stroke="#EF4444" strokeWidth={1.5}
                               fill={`url(#diGrad-${project.id})`} dot={false} isAnimationActive={false} />
                             <Tooltip
-                              contentStyle={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 8, fontSize: 12 }}
-                              formatter={(v) => [`DI ${v}`, ""]}
+                              content={({ active, payload }) => {
+                                if (!active || !payload || !payload.length) return null;
+                                const p = payload[0].payload;
+                                return (
+                                  <Box sx={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: 1, px: 1, py: 0.5, fontSize: 12, lineHeight: 1.4 }}>
+                                    <div style={{ color: "#6B7280" }}>{p.date}</div>
+                                    <div style={{ fontWeight: 700 }}>DI {p.di}</div>
+                                  </Box>
+                                );
+                              }}
                             />
                           </AreaChart>
                         </ResponsiveContainer>

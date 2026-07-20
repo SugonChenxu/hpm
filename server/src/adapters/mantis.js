@@ -104,6 +104,26 @@ class MantisAdapter {
     return rows.filter((r) => r.total > 0).map((r) => ({ category: r.category, count: r.total }));
   }
 
+  /**
+   * 未解决分类分布 — 基于真实缺陷列表，过滤 status != 已解决，按 category 数组分组计数。
+   * 与 fetchCategoryStats（全部问题）不同，这里只统计未解决问题，用于项目概览饼图。
+   */
+  async fetchUnresolvedCategoryStats(projectId) {
+    const issues = await this.fetchIssues(projectId);
+    const counts = {};
+    for (const i of issues) {
+      if ((i.status || "") === "已解决") continue;
+      let cats = i.category;
+      if (!Array.isArray(cats)) cats = cats ? [cats] : [];
+      if (cats.length === 0) cats = ["其他"];
+      for (const c of cats) counts[c] = (counts[c] || 0) + 1;
+    }
+    return Object.entries(counts)
+      .map(([category, count]) => ({ category, count }))
+      .filter((r) => r.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }
+
   /** 分类 DI 加权值 — 从"Defect Index" index 1 获取（用于柱状图） */
   async fetchCategoryDIStats(projectId) {
     const data = await this._get("/analysis/", {

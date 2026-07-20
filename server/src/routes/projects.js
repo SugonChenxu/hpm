@@ -41,12 +41,13 @@ router.get("/projects/:id/faults", async (req, res) => {
     const cached = getFaultCache(ownerId, projectId);
     if (cached) return res.json({ ok: true, linked: true, ...cached });
     const adapter = getAdapter(ownerId);
-    const [summary, diTrend, categoryStats] = await Promise.all([
+    const [summary, diTrend, categoryStats, unresolvedCategoryStats] = await Promise.all([
       adapter.fetchSummary(mantisId),
       adapter.fetchDITrend(mantisId),
       adapter.fetchCategoryStats(mantisId),
+      adapter.fetchUnresolvedCategoryStats(mantisId),
     ]);
-    const payload = { mantisProjectId: mantisId, summary, diTrend, categoryStats };
+    const payload = { mantisProjectId: mantisId, summary, diTrend, categoryStats, unresolvedCategoryStats };
     setFaultCache(ownerId, projectId, payload);
     res.json({ ok: true, linked: true, ...payload });
   } catch (e) {
