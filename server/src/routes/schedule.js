@@ -174,11 +174,14 @@ function collectDescendantDates(taskId, childrenMap, visited) {
   let maxEnd = null;
 
   for (const child of children) {
-    if (child.planned_start && (!minStart || child.planned_start < minStart)) {
-      minStart = child.planned_start;
-    }
-    if (child.planned_end && (!maxEnd || child.planned_end > maxEnd)) {
-      maxEnd = child.planned_end;
+    // 阶段任务自身日期可能为 fallback 值（如今天），应由子孙聚合，不取自身
+    if (child.task_type !== "阶段任务") {
+      if (child.planned_start && (!minStart || child.planned_start < minStart)) {
+        minStart = child.planned_start;
+      }
+      if (child.planned_end && (!maxEnd || child.planned_end > maxEnd)) {
+        maxEnd = child.planned_end;
+      }
     }
 
     const sub = collectDescendantDates(child.id, childrenMap, visited);
