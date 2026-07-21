@@ -1458,12 +1458,38 @@ router.post("/projects/:id/schedule/import-from-url", async (req, res) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     let buf;
+    let contentType = "";
     try {
       const resp = await fetch(url, { signal: controller.signal, redirect: "follow" });
       if (!resp.ok) throw new Error(`远程获取失败 HTTP ${resp.status}`);
+      contentType = resp.headers.get("content-type") || "";
       buf = Buffer.from(await resp.arrayBuffer());
     } finally {
       clearTimeout(timer);
+    }
+
+    // 校验返回内容是否真是 Excel 文件。腾讯文档的「浏览页链接」返回的是 HTML 网页
+    // （且导出接口需登录鉴权，后端无法直连抓取），必须识别并给出清晰、可执行的指引。
+    const isZip = buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x50 && buf[2] === 0x03 && buf[3] === 0x04; // PK\x03\x04
+    const looksExcel = /excel|spreadsheet|sheet|openxmlformats|octet-stream/i.test(contentType) || /\.xlsx?($|\?)/i.test(url);
+    if (!isZip && !looksExcel) {
+      let host = "";
+      try {
+        host = new URL(url).host || "";
+      } catch {
+        host = "";
+      }
+      if (/docs\.qq\.com|doc\.weixin\.qq\.com/i.test(host)) {
+        return res.status(400).json({
+          ok: false,
+          error:
+            "这是腾讯文档的【浏览页链接】，不是可下载的 Excel 文件。腾讯文档需登录才能导出，系统后端无法直接抓取。\n请任选一种方式导入：\n1）在腾讯文档中点「文件 → 下载为 → 本地 Excel(.xlsx)」，再用本系统的「导入 Excel」上传；\n2）在「分享」设置里开启「允许下载」后，复制「下载链接」（不是浏览链接）粘贴到这里。",
+        });
+      }
+      return res.status(400).json({
+        ok: false,
+        error: "链接返回的不是 Excel 文件（可能是网页）。请确认粘贴的是 .xlsx 下载链接，或改用「导入 Excel」上传本地文件。",
+      });
     }
 
     const wb = new ExcelJS.Workbook();

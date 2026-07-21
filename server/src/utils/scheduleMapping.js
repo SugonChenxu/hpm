@@ -36,6 +36,9 @@ const CONTAINS_RULES = [
   ["name", ["任务", "事项", "工作", "活动"]],
 ];
 
+// 分组列（多级分组：大阶段/小阶段/阶段/分组…），用于识别「大阶段/小阶段/任务」这类结构
+const GROUPING_TOKENS = ["大阶段", "中阶段", "小阶段", "阶段", "分组", "组别", "group", "phase", "stage"];
+
 function norm(s) {
   let t = String(s == null ? "" : s).trim().toLowerCase();
   // 全角 → 半角（括号、短横、空格），避免「工期（天）」「计划开始时间」等匹配失败
@@ -50,26 +53,44 @@ function norm(s) {
 export function buildFieldMap(headers) {
   const map = {};
   const unmatched = [];
+  const groupCols = [];
+  let phaseSet = false;
   headers.forEach((h, i) => {
     const hn = norm(h);
     if (!hn) return;
     // 1) 精确别名匹配
     for (const [field, aliases] of FIELD_ALIASES) {
       if (aliases.map(norm).includes(hn)) {
-        if (field !== "seq_ignore") map[field] = i;
-        return;
+        if (field !== "seq_ignore") {
+          if (field === "phase") {
+            if (!phaseSet) {
+              map.phase = i;
+              phaseSet = true;
+            }
+          } else {
+            map[field] = i;
+          }
+        }
+        break;
       }
     }
-    // 2) 包含关键字兜底
-    for (const [field, tokens] of CONTAINS_RULES) {
-      if (tokens.some((tok) => hn.includes(norm(tok)))) {
-        if (field !== "seq_ignore") map[field] = i;
-        return;
+    // 2) 分组列判定（排除任务名列本身）
+    if (i !== map.name && !groupCols.includes(i) && GROUPING_TOKENS.some((tok) => hn.includes(norm(tok)))) {
+      groupCols.push(i);
+    }
+    // 3) 未匹配表头收集（分组列已识别，不计入未匹配）
+    let matched = false;
+    for (const [, aliases] of FIELD_ALIASES) {
+      if (aliases.map(norm).includes(hn)) {
+        matched = true;
+        break;
       }
     }
-    unmatched.push(h);
+    if (!matched && !groupCols.includes(i)) unmatched.push(h);
   });
-  return { map, unmatched };
+  // 向下兼容：未显式映射 phase 但有分组列时，取首个分组列作为单阶段列
+  if (map.phase == null && groupCols.length) map.phase = groupCols[0];
+  return { map, unmatched, groupCols };
 }
 
 const TYPE_KEYWORDS = {
@@ -111,7 +132,9 @@ function calcIndent(name, indentColVal) {
 }
 
 const DATE_RE = /(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/;
-export function toDateStr(v) {
+const MD_RE = /(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/; // 中文「X月X日 / X月X号」
+
+export function toDateStr(v, assumeYear) {
   if (v == null || v === "") return null;
   if (typeof v === "number" && v > 20000 && v < 80000) {
     // Excel 日期序列号（1900 系统，现代日期偏移量 25569 已吸收闰年 bug）
@@ -124,8 +147,13 @@ export function toDateStr(v) {
     return `${y}-${m}-${d}`;
   }
   const s = String(v).trim();
-  const m = s.match(DATE_RE);
+  const m = s.match(DATE_RE); // 已含年份：2025/12/23、2025-12-23
   if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
+  const md = s.match(MD_RE); // 仅月日：12月23日、1月6号
+  if (md) {
+    const y = assumeYear || new Date().getFullYear();
+    return `${y}-${String(md[1]).padStart(2, "0")}-${String(md[2]).padStart(2, "0")}`;
+  }
   return s.slice(0, 10) || s;
 }
 
@@ -189,12 +217,14 @@ function deriveDates(start, end, duration, taskType) {
 export function mapScheduleMatrix(matrix) {
   if (!matrix || !matrix.length) return { tasks: [], unmatched: [], warnings: [] };
   const headers = matrix[0].map((h) => (h == null ? "" : String(h)));
-  const { map, unmatched } = buildFieldMap(headers);
+  const { map, unmatched, groupCols } = buildFieldMap(headers);
   const warnings = [];
   const tasks = [];
-  let currentPhase = null; // 跟踪当前阶段分组（阶段列连续空白表示归属上一阶段）
+  const get = (row, f) => (map[f] != null ? row[map[f]] : undefined);
 
-  const pushTask = (name, taskType, start, end, dur, predecessor, notes, indent) => {
+  const pushPhase = (name, indent) =>
+    tasks.push({ name, task_type: "阶段任务", planned_start: null, planned_end: null, duration_days: null, predecessor: null, notes: "", indentLevel: indent });
+  const pushTask = (name, taskType, start, end, dur, predecessor, notes, indent) =>
     tasks.push({
       name,
       task_type: taskType,
@@ -205,20 +235,109 @@ export function mapScheduleMatrix(matrix) {
       notes: notes != null ? String(notes) : "",
       indentLevel: indent,
     });
-  };
+
+  // ---------- 年份推断（针对「X月X日」无年日期） ----------
+  // 收集所有「仅月日」的日期单元格，按行顺序推断跨年（如 12月 → 次年1月）。
+  const baseYear = new Date().getFullYear();
+  const unknownEntries = [];
+  for (let r = 1; r < matrix.length; r++) {
+    for (const f of ["planned_start", "planned_end"]) {
+      const raw = get(matrix[r], f);
+      if (raw == null || String(raw).trim() === "") continue;
+      const s = String(raw).trim();
+      if (DATE_RE.test(s)) continue; // 已含年份
+      const md = s.match(MD_RE);
+      if (md) unknownEntries.push({ r, field: f, month: Number(md[1]), day: Number(md[2]) });
+    }
+  }
+  if (unknownEntries.length) {
+    // 年份推断规则：以首个日期所在月为「计划起点月」。
+    // - 月份 ≥ 起点月 → 起始年 Y0
+    // - 月份 < 起点月 → 次年 Y0+1
+    // 这样「多子阶段都从 12月 起步」的并行结构会被正确归到同一起始年，
+    // 且仅在跨年边界（如 12月→1月）切换，不会逐行累加年份。
+    // Y0 默认当年；若起点月在 11/12 月且计划跨年至次年中（末月 < 起点月），
+    // 则取前一年作为起始年，使整段计划连续且不超长。
+    const fm = unknownEntries[0].month;
+    const lm = unknownEntries[unknownEntries.length - 1].month;
+    const startMonth = fm;
+    let y0 = baseYear;
+    if (startMonth >= 11 && lm < startMonth) y0 = baseYear - 1;
+    for (const e of unknownEntries) {
+      e.year = e.month >= startMonth ? y0 : y0 + 1;
+    }
+  }
+  const yearMap = new Map();
+  for (const e of unknownEntries) yearMap.set(`${e.r}:${e.field}`, e.year);
+
+  const toDur = (raw) =>
+    raw !== undefined && raw !== null && raw !== "" ? Number(String(raw).replace(/[, ]/g, "")) || null : null;
+
+  const hasMultiGroup = groupCols.length >= 2; // 大阶段/小阶段/任务 这类多级分组
+  let currentPhase = null; // 单阶段列模式：跟踪当前阶段
+  const lastGroups = new Array(groupCols.length).fill(""); // 多分组模式：各级当前值（空白沿用上级）
+  const emittedPhaseKeys = new Set(); // 避免重复发射阶段节点
 
   for (let r = 1; r < matrix.length; r++) {
     const row = matrix[r];
     if (!row || row.every((c) => c === "" || c == null)) continue; // 跳过空行
-    const get = (f) => (map[f] != null ? row[map[f]] : undefined);
-    const phaseVal = get("phase") != null ? String(get("phase")).trim() : "";
+    const nameRaw = get(row, "name");
+    const name = nameRaw != null ? String(nameRaw).trim() : "";
+    const phaseVal = get(row, "phase") != null ? String(get(row, "phase")).trim() : "";
 
-    // 阶段列：有值 → 新阶段（生成阶段任务父节点）；空 → 沿用上一阶段
+    // ============ 多分组模式（大阶段 / 小阶段 / 任务） ============
+    if (hasMultiGroup) {
+      // 更新各级当前值：本格有值则更新；空白且上级本行变化则重置，否则沿用（含顶级 g=0）
+      const prevLastGroups = lastGroups.slice(); // 上一行快照，用于判断更高级是否本行变化
+      for (let g = 0; g < groupCols.length; g++) {
+        const cv = row[groupCols[g]] != null ? String(row[groupCols[g]]).trim() : "";
+        if (cv !== "") {
+          lastGroups[g] = cv;
+        } else {
+          // 空白单元格：默认沿用上一级（合并单元格/续行写法）；仅当更高级本行发生变化才重置
+          let higherChanged = false;
+          if (g > 0) {
+            for (let h = 0; h < g; h++) {
+              const hv = row[groupCols[h]] != null ? String(row[groupCols[h]]).trim() : "";
+              if (hv !== "" && hv !== prevLastGroups[h]) {
+                higherChanged = true;
+                break;
+              }
+            }
+          }
+          if (higherChanged) lastGroups[g] = "";
+        }
+      }
+      const curVals = lastGroups.slice();
+      let maxLevel = -1;
+      for (let g = 0; g < groupCols.length; g++) {
+        const gv = curVals[g];
+        if (!gv) continue;
+        maxLevel = g;
+        const key = `${g}:${gv}`;
+        if (!emittedPhaseKeys.has(key)) {
+          pushPhase(gv, g); // 阶段任务父节点，indent = 层级
+          emittedPhaseKeys.add(key);
+        }
+      }
+      if (!name) continue; // 纯分组标题行
+      const leafIndent = maxLevel + 1;
+      const taskType = detectTaskType(get(row, "task_type"), name);
+      const { start: dStart, end: dEnd, duration: dDur } = deriveDates(
+        toDateStr(get(row, "planned_start"), yearMap.get(`${r}:planned_start`)),
+        toDateStr(get(row, "planned_end"), yearMap.get(`${r}:planned_end`)),
+        toDur(get(row, "duration_days")),
+        taskType
+      );
+      pushTask(name, taskType, dStart, dEnd, dDur, get(row, "predecessor"), get(row, "notes"), leafIndent);
+      continue;
+    }
+
+    // ============ 单阶段列模式（模板：阶段列 + 任务列） ============
     let underPhase = false;
     if (phaseVal) {
       if (phaseVal !== currentPhase) {
-        // 合成一条「阶段任务」父节点（时间由后端按子任务聚合）
-        pushTask(phaseVal, "阶段任务", null, null, null, null, "", 0);
+        pushPhase(phaseVal, 0);
         currentPhase = phaseVal;
       }
       underPhase = true;
@@ -226,26 +345,17 @@ export function mapScheduleMatrix(matrix) {
       underPhase = true;
     }
 
-    const name = (get("name") != null ? String(get("name")) : "").trim();
-    if (!name) {
-      // 阶段已登记，但本行无任务名（纯阶段标题行）→ 跳过任务本身
-      continue;
-    }
+    if (!name) continue; // 阶段已登记但本行无任务名（纯阶段标题行）→ 跳过任务本身
 
-    const indent = underPhase ? 1 : calcIndent(name, get("indentLevel"));
-    const durationRaw = get("duration_days");
-    const duration =
-      durationRaw !== undefined && durationRaw !== null && durationRaw !== ""
-        ? Number(String(durationRaw).replace(/[, ]/g, "")) || null
-        : null;
-    const taskType = detectTaskType(get("task_type"), name);
+    const indent = underPhase ? 1 : calcIndent(name, get(row, "indentLevel"));
+    const taskType = detectTaskType(get(row, "task_type"), name);
     const { start: dStart, end: dEnd, duration: dDur } = deriveDates(
-      toDateStr(get("planned_start")),
-      toDateStr(get("planned_end")),
-      duration,
+      toDateStr(get(row, "planned_start"), yearMap.get(`${r}:planned_start`)),
+      toDateStr(get(row, "planned_end"), yearMap.get(`${r}:planned_end`)),
+      toDur(get(row, "duration_days")),
       taskType
     );
-    pushTask(name, taskType, dStart, dEnd, dDur, get("predecessor"), get("notes"), indent);
+    pushTask(name, taskType, dStart, dEnd, dDur, get(row, "predecessor"), get(row, "notes"), indent);
   }
   return { tasks, unmatched, warnings };
 }

@@ -85,6 +85,7 @@ export default function SchedulePage() {
   const [importing, setImporting] = useState(false);
   const [tencentOpen, setTencentOpen] = useState(false);
   const [tencentUrl, setTencentUrl] = useState("");
+  const [tencentError, setTencentError] = useState("");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   // 甘特图时间轴单位
@@ -297,6 +298,7 @@ export default function SchedulePage() {
   const handleTencentImport = async () => {
     if (!tencentUrl.trim()) return;
     setImporting(true);
+    setTencentError("");
     try {
       const res = await api.schedule.importFromUrl(Number(projectId), tencentUrl.trim());
       const n = res.data?.imported ?? 0;
@@ -305,7 +307,7 @@ export default function SchedulePage() {
       setTencentUrl("");
       await loadSchedule();
     } catch (err) {
-      setSnackbar({ open: true, message: err.message || "导入失败", severity: "error" });
+      setTencentError(err.message || "导入失败");
     } finally {
       setImporting(false);
     }
@@ -682,21 +684,30 @@ export default function SchedulePage() {
         <DialogTitle>从腾讯文档导入</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
-            将腾讯文档表格的「分享 / 下载链接」粘贴到下方。文档需设为「任何人可阅读或下载」，
-            Forge 会拉取表格并自动识别「任务 / 任务类型 / 开始 / 结束 / 工期」等列，
-            按「任务类型」列值或名称关键字（阶段 / 里程碑 / 节点）区分阶段任务、节点任务与普通任务。
+            粘贴腾讯文档表格的<strong>「下载链接」</strong>（不是浏览页链接）。获取方式二选一：
+            ① 文档中点「文件 → 下载为 → 本地 Excel(.xlsx)」，再用本系统的「导入 Excel」上传；
+            ② 在「分享」设置开启「允许下载」后，复制系统提供的<strong>下载链接</strong>粘贴到这里。
+            Forge 会自动识别「任务 / 任务类型 / 开始 / 结束 / 工期」等列，并按层级区分阶段任务与普通任务。
           </Alert>
+          {tencentError && (
+            <Alert severity="error" sx={{ mb: 2, whiteSpace: "pre-line" }}>
+              {tencentError}
+            </Alert>
+          )}
           <TextField
             label="腾讯文档下载链接"
-            placeholder="https://docs.qq.com/.../"
+            placeholder="https://docs.qq.com/.../ 或 .xlsx 下载链接"
             fullWidth
             value={tencentUrl}
-            onChange={(e) => setTencentUrl(e.target.value)}
+            onChange={(e) => {
+              setTencentUrl(e.target.value);
+              if (tencentError) setTencentError("");
+            }}
             autoFocus
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setTencentOpen(false)}>取消</Button>
+          <Button onClick={() => { setTencentOpen(false); setTencentError(""); }}>取消</Button>
           <Button
             onClick={handleTencentImport}
             variant="contained"
