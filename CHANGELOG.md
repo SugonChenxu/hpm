@@ -2,6 +2,23 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-21（补）— M8 权限模型升级：owner / admin / member 三级
+
+- **新增功能**
+  - 用户三级角色模型：owner（不可撼动的最高权限）/ admin（可管成员）/ member（仅改自己密码）
+  - 用户管理页「分配角色」（仅 owner）：将用户设为管理员或成员
+  - 侧边栏「用户管理」菜单按角色显示（仅 owner/admin 可见）
+- **接口调整**
+  - 新增 `PUT /api/users/:id/role`（仅 owner 可调用；禁改 owner 角色、禁设为 owner）
+  - `GET/POST/PUT(:id/password)/DELETE /api/users` 套 `requireAdmin`；新增 `requireOwner` 中间件
+  - `POST /api/auth/login` 与 `GET /api/auth/me` 返回 `role` 字段
+- **缺陷修复**
+  - 修正原「人人可管」越权设计：member 不再能进入用户管理页或重置他人密码；admin 不能碰其他 admin 与 owner
+- **参数变动 / 约束**
+  - `users` 表新增 `role` 列（`TEXT NOT NULL DEFAULT 'member'`）；`chenxu` 在 db 迁移时升为 owner（② bootstrap）
+  - 权限矩阵：owner 不可被删/降级/重置密码；admin 不可删/重置其他 admin、不可改角色、不可碰 owner；任何人不可删自己
+  - 前端 `api.users` 新增 `setRole`
+
 ## 2026-07-21 — 新增 M8 用户管理模块（网页加用户 / 改密码）
 
 - **新增功能**

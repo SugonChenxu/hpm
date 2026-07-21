@@ -749,6 +749,24 @@ for (const t of OWNER_TABLES) {
   }
 }
 
+// 迁移：users.role（owner / admin / member 三级权限模型）
+// ② bootstrap：指定主账号 chenxu 为不可撼动的 owner（最高权限）。
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'member'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column")) {
+    console.warn("Migration users.role:", e.message);
+  }
+}
+try {
+  db.prepare(
+    "UPDATE users SET role = 'owner' WHERE username = 'chenxu' AND (role IS NULL OR role = 'member')"
+  ).run();
+  console.log("Migration users.role: done (chenxu -> owner)");
+} catch (e) {
+  console.warn("Migration users.role bootstrap:", e.message);
+}
+
 console.log("Migration multi-user (users + owner_id columns): done");
 
 export default db;

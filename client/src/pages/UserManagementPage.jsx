@@ -3,28 +3,38 @@ import { useAuth } from "../context/AuthContext";
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Button, TextField, Dialog, DialogTitle,
-  DialogContent, DialogContentText, DialogActions, Snackbar, Alert, Tooltip,
+  DialogContent, DialogContentText, DialogActions, Snackbar, Alert, Tooltip, Chip,
 } from "@mui/material";
 import api from "../api/client";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
 import ChangePasswordDialog from "../components/common/ChangePasswordDialog";
 
+// 角色中文 + 配色
+const ROLE_META = {
+  owner: { label: "👑 所有者", color: "warning" },
+  admin: { label: "管理员", color: "primary" },
+  member: { label: "成员", color: "default" },
+};
+
 export default function UserManagementPage() {
   const { user } = useAuth();
+  const isOwner = user?.role === "owner";
+  const isAdmin = isOwner || user?.role === "admin";
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [snack, setSnack] = useState(null);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ username: "", password: "", confirm: "" });
+  const [createForm, setCreateForm] = useState({ username: "", password: "", confirm: "", makeAdmin: false });
 
   const [resetTarget, setResetTarget] = useState(null);
   const [resetForm, setResetForm] = useState({ password: "", confirm: "" });
 
   const [changeOwnOpen, setChangeOwnOpen] = useState(false);
   const [confirmDlg, setConfirmDlg] = useState(null);
+  const [roleTarget, setRoleTarget] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,17 +49,44 @@ export default function UserManagementPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // 非管理员：入口守卫（侧边栏已隐藏菜单，此处防御直接访问 URL）
+  if (loading) return <PageLoading />;
+  if (!isAdmin) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <PageHeader title="用户管理" subtitle="账号与权限管理" />
+        <Alert severity="warning">你没有访问此页面的权限。如需管理账号，请联系系统所有者。</Alert>
+      </Box>
+    );
+  }
+
+  // ===== 操作可用性判断（三级权限矩阵） =====
+  const canReset = (u) => {
+    if (u.role === "owner") return false;                 // 不能重置所有者
+    if (!isOwner && u.role === "admin") return false;     // admin 不能重置 admin
+    return true;
+  };
+  const canDelete = (u) => {
+    if (u.id === user.id) return false;                   // 不能删自己
+    if (u.role === "owner") return false;                 // 不能删所有者
+    if (!isOwner && u.role === "admin") return false;     // admin 不能删 admin
+    return true;
+  };
+  const canChangeRole = (u) => isOwner && u.role !== "owner";
+
   // ===== 新增用户 =====
   const submitCreate = async () => {
-    const { username, password, confirm } = createForm;
+    const { username, password, confirm, makeAdmin } = createForm;
     if (!username.trim()) { setSnack({ severity: "error", text: "用户名必填" }); return; }
     if (!password || password.length < 6) { setSnack({ severity: "error", text: "密码至少 6 位" }); return; }
     if (password !== confirm) { setSnack({ severity: "error", text: "两次密码不一致" }); return; }
     try {
-      await api.users.create({ username: username.trim(), password });
+      const payload = { username: username.trim(), password };
+      if (makeAdmin && isOwner) payload.role = "admin"; // 仅 owner 可创建管理员
+      await api.users.create(payload);
       setSnack({ severity: "success", text: `已创建用户 ${username.trim()}` });
       setCreateOpen(false);
-      setCreateForm({ username: "", password: "", confirm: "" });
+      setCreateForm({ username: "", password: "", confirm: "", makeAdmin: false });
       load();
     } catch (e) {
       setSnack({ severity: "error", text: e.message || "创建失败" });
@@ -72,6 +109,19 @@ export default function UserManagementPage() {
     }
   };
 
+  // ===== 修改角色 =====
+  const submitRole = async (role) => {
+    if (!roleTarget) return;
+    try {
+      await api.users.setRole(roleTarget.id, role);
+      setSnack({ severity: "success", text: `已将 ${roleTarget.username} 设为${ROLE_META[role].label}` });
+      setRoleTarget(null);
+      load();
+    } catch (e) {
+      setSnack({ severity: "error", text: e.message || "修改失败" });
+    }
+  };
+
   // ===== 删除 =====
   const handleDelete = (u) => {
     setConfirmDlg({
@@ -90,11 +140,9 @@ export default function UserManagementPage() {
     });
   };
 
-  if (loading) return <PageLoading />;
-
   return (
     <Box sx={{ p: 2 }}>
-      <PageHeader title="用户管理" subtitle="新增同事账号、重置密码、修改自己的密码">
+      <PageHeader title="用户管理" subtitle="新增同事账号、分配角色、重置密码、修改自己的密码">
         <Button variant="outlined" onClick={() => setChangeOwnOpen(true)} sx={{ gap: 0.5 }}>
           🔑 修改我的密码
         </Button>
@@ -107,16 +155,17 @@ export default function UserManagementPage() {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50", width: 60 }}>#</TableCell>
+              <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50", width: 50 }}>#</TableCell>
               <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50" }}>用户名</TableCell>
+              <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50", width: 110 }}>角色</TableCell>
               <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50" }}>创建时间</TableCell>
-              <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50", width: 220 }}>操作</TableCell>
+              <TableCell sx={{ fontWeight: 700, bgcolor: "grey.50", width: 320 }}>操作</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} sx={{ textAlign: "center", py: 6 }}>
+                <TableCell colSpan={5} sx={{ textAlign: "center", py: 6 }}>
                   <Typography color="text.secondary">暂无用户</Typography>
                 </TableCell>
               </TableRow>
@@ -136,23 +185,44 @@ export default function UserManagementPage() {
                         )}
                       </Box>
                     </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={ROLE_META[u.role]?.label || u.role}
+                        size="small"
+                        color={ROLE_META[u.role]?.color || "default"}
+                        variant={u.role === "member" ? "outlined" : "filled"}
+                      />
+                    </TableCell>
                     <TableCell sx={{ color: "text.secondary" }}>{u.created_at || "-"}</TableCell>
                     <TableCell>
-                      <Box sx={{ display: "flex", gap: 1 }}>
-                        <Button
-                          size="small" variant="outlined"
-                          onClick={() => {
-                            setResetTarget(u);
-                            setResetForm({ password: "", confirm: "" });
-                          }}
-                        >
-                          重置密码
-                        </Button>
-                        <Tooltip title={isSelf ? "不能删除当前登录账号" : ""}>
+                      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                        <Tooltip title={!canReset(u) ? "无权重置该用户密码" : ""}>
+                          <span>
+                            <Button
+                              size="small" variant="outlined"
+                              disabled={!canReset(u)}
+                              onClick={() => {
+                                setResetTarget(u);
+                                setResetForm({ password: "", confirm: "" });
+                              }}
+                            >
+                              重置密码
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        {canChangeRole(u) && (
+                          <Button
+                            size="small" variant="outlined" color="secondary"
+                            onClick={() => setRoleTarget(u)}
+                          >
+                            修改角色
+                          </Button>
+                        )}
+                        <Tooltip title={!canDelete(u) ? (isSelf ? "不能删除当前登录账号" : "无权删除该用户") : ""}>
                           <span>
                             <Button
                               size="small" color="error" variant="outlined"
-                              disabled={isSelf} onClick={() => handleDelete(u)}
+                              disabled={!canDelete(u)} onClick={() => handleDelete(u)}
                             >
                               删除
                             </Button>
@@ -182,6 +252,16 @@ export default function UserManagementPage() {
             <TextField label="确认密码" type="password" size="small" fullWidth
               value={createForm.confirm}
               onChange={(e) => setCreateForm((f) => ({ ...f, confirm: e.target.value }))} />
+            {isOwner && (
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 14 }}>
+                <input
+                  type="checkbox"
+                  checked={createForm.makeAdmin}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, makeAdmin: e.target.checked }))}
+                />
+                设为管理员（可管理其他成员账号）
+              </label>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -206,6 +286,33 @@ export default function UserManagementPage() {
         <DialogActions>
           <Button onClick={() => setResetTarget(null)}>取消</Button>
           <Button onClick={submitReset} variant="contained">确认重置</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 修改角色对话框（仅 owner） */}
+      <Dialog open={!!roleTarget} onClose={() => setRoleTarget(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>修改角色 — {roleTarget?.username}</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <DialogContentText>
+            将该用户设为以下角色之一。所有者的角色不可更改。
+          </DialogContentText>
+          <Box sx={{ display: "flex", gap: 1, mt: 2 }}>
+            <Button
+              variant={roleTarget?.role === "admin" ? "contained" : "outlined"}
+              onClick={() => submitRole("admin")}
+            >
+              管理员
+            </Button>
+            <Button
+              variant={roleTarget?.role === "member" ? "contained" : "outlined"}
+              onClick={() => submitRole("member")}
+            >
+              成员
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRoleTarget(null)}>取消</Button>
         </DialogActions>
       </Dialog>
 

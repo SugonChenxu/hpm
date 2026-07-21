@@ -24,15 +24,19 @@ router.post("/login", (req, res) => {
   }
   req.session.userId = user.id;
   req.session.username = user.username;
-  res.json({ ok: true, data: { id: user.id, username: user.username } });
+  res.json({ ok: true, data: { id: user.id, username: user.username, role: user.role } });
 });
 
-// GET /api/auth/me  — 返回当前登录用户
+// GET /api/auth/me  — 返回当前登录用户（含角色）
 router.get("/me", (req, res) => {
   if (!req.session || !req.session.userId) {
     return res.status(401).json({ ok: false, error: "未登录", code: "UNAUTHENTICATED" });
   }
-  res.json({ ok: true, data: { id: req.session.userId, username: req.session.username } });
+  const u = db.prepare("SELECT username, role FROM users WHERE id = ?").get(req.session.userId);
+  if (!u) {
+    return res.status(401).json({ ok: false, error: "用户不存在", code: "UNAUTHENTICATED" });
+  }
+  res.json({ ok: true, data: { id: req.session.userId, username: u.username, role: u.role } });
 });
 
 // POST /api/auth/logout

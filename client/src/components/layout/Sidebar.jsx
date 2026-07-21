@@ -21,6 +21,7 @@ import {
   Add,
   EventNote,
 } from "@mui/icons-material";
+import { useAuth } from "../../context/AuthContext";
 
 const DRAWER_WIDTH = 240;
 
@@ -85,6 +86,9 @@ export default function Sidebar({
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
+  // 仅 owner / admin 可见「系统设置 → 用户管理」
+  const isAdmin = user && (user.role === "owner" || user.role === "admin");
 
   // Highlight current route using prefix matching
   const isSelected = (path) => {
@@ -106,7 +110,10 @@ export default function Sidebar({
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Grouped navigation items */}
       <Box sx={{ flexGrow: 1, overflowY: "auto", py: 1 }}>
-        {NAV_GROUPS.map((group) => (
+        {NAV_GROUPS.map((group) => {
+          // 非管理员隐藏「系统设置」整组（含用户管理）
+          if (group.title === "系统设置" && !isAdmin) return null;
+          return (
           <Box key={group.title}>
             {/* Group header */}
             <Typography
@@ -177,7 +184,8 @@ export default function Sidebar({
               })}
             </List>
           </Box>
-        ))}
+          );
+        })}
       </Box>
 
       {/* Bottom "New Project" button */}
