@@ -1,6 +1,6 @@
-// HPM Service Worker - 基础离线缓存
-const CACHE_NAME = "hpm-v1";
-const ASSETS = ["/", "/manifest.json"];
+// Forge Service Worker — 离线缓存静态资源，HTML 始终走网络避免过期
+const CACHE_NAME = "forge-v2";
+const ASSETS = ["/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -12,7 +12,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -20,12 +20,23 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  // API 请求走网络，静态资源缓存优先
+
+  // API 请求直接走网络
   if (event.request.url.includes("/api/")) {
     event.respondWith(fetch(event.request));
-  } else {
-    event.respondWith(
-      caches.match(event.request).then((cached) => cached || fetch(event.request))
-    );
+    return;
   }
+
+  // HTML 导航请求：网络优先（确保 index.html 总是最新）
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // 静态资源（JS/CSS/图片等）：缓存优先
+  event.respondWith(
+    caches.match(event.request).then((cached) => cached || fetch(event.request))
+  );
 });
