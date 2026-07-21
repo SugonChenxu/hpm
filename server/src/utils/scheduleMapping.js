@@ -13,17 +13,38 @@ const TASK_TYPE_ALIASES = [
 const FIELD_ALIASES = [
   ["name", ["任务", "任务名", "任务名称", "名称", "事项", "工作", "工作项", "工作事项", "活动", "name", "task", "title"]],
   ["task_type", ["任务类型", "任务类别", "类型", "类别", "分类", "类型列", "tasktype", "type"]],
-  ["planned_start", ["开始", "开始时间", "开始日期", "开始日", "起始", "起始时间", "起始日期", "开工", "开工日期", "计划开始", "计划开始日期", "plannedstart", "start", "startdate"]],
-  ["planned_end", ["结束", "结束时间", "结束日期", "完成", "完成时间", "完成日期", "截止", "截止日期", "截止时间", "完工", "完工日期", "竣工", "交付日期", "计划结束", "计划结束日期", "plannedend", "end", "enddate"]],
-  ["duration_days", ["工期", "工期天", "工期(天)", "天数", "历时", "持续天数", "工作天数", "所需天数", "duration", "durationdays"]],
+  ["phase", ["阶段", "所属阶段", "阶段分组", "阶段名称", "phase", "group"]],
+  ["planned_start", ["开始", "开始时间", "计划开始", "计划开始时间", "计划开始日期", "开始日期", "开始日", "起始", "起始时间", "起始日期", "开工", "开工日期", "开工时间", "计划开工", "plannedstart", "start", "startdate"]],
+  ["planned_end", ["结束", "结束时间", "计划完成", "计划完成时间", "计划完成日期", "完成", "完成时间", "完成日期", "截止", "截止日期", "截止时间", "完工", "完工日期", "竣工", "交付日期", "计划结束", "计划结束时间", "计划结束日期", "plannedend", "end", "enddate"]],
+  ["duration_days", ["工期", "工期天", "工期(天)", "工期（天）", "天数", "历时", "持续天数", "工作天数", "所需天数", "计划工期", "工作日", "工作日数", "duration", "durationdays"]],
   ["predecessor", ["前置", "前置任务", "前置条件", "前置依赖", "前置工序", "紧前", "紧前任务", "先行任务", "依赖", "predecessor", "depends"]],
   ["notes", ["备注", "备注说明", "说明", "说明信息", "备注信息", "描述", "注释", "notes", "remark"]],
   ["indentLevel", ["层级", "层次", "缩进", "级别", "等级", "深度", "level", "indent"]],
   ["seq_ignore", ["序号", "seq", "no", "行号"]], // 序号由系统重排，忽略但允许存在
 ];
 
+// 二次容错：精确别名未命中时，按"包含关键字"兜底（优先级自上而下）
+const CONTAINS_RULES = [
+  ["duration_days", ["工期"]],
+  ["planned_start", ["开始", "起始", "开工"]],
+  ["planned_end", ["结束", "完成", "截止", "完工", "竣工", "交付"]],
+  ["predecessor", ["前置", "依赖", "紧前", "先行"]],
+  ["notes", ["备注", "说明", "注释", "描述"]],
+  ["indentLevel", ["层级", "缩进", "级别", "等级", "深度"]],
+  ["task_type", ["类型", "类别", "分类"]],
+  ["phase", ["阶段"]],
+  ["name", ["任务", "事项", "工作", "活动"]],
+];
+
 function norm(s) {
-  return String(s == null ? "" : s).trim().toLowerCase().replace(/\s+/g, "");
+  let t = String(s == null ? "" : s).trim().toLowerCase();
+  // 全角 → 半角（括号、短横、空格），避免「工期（天）」「计划开始时间」等匹配失败
+  t = t
+    .replace(/[（]/g, "(")
+    .replace(/[）]/g, ")")
+    .replace(/[－﹣—–―]/g, "-")
+    .replace(/[　]/g, " ");
+  return t.replace(/\s+/g, "");
 }
 
 export function buildFieldMap(headers) {
@@ -32,8 +53,16 @@ export function buildFieldMap(headers) {
   headers.forEach((h, i) => {
     const hn = norm(h);
     if (!hn) return;
+    // 1) 精确别名匹配
     for (const [field, aliases] of FIELD_ALIASES) {
       if (aliases.map(norm).includes(hn)) {
+        if (field !== "seq_ignore") map[field] = i;
+        return;
+      }
+    }
+    // 2) 包含关键字兜底
+    for (const [field, tokens] of CONTAINS_RULES) {
+      if (tokens.some((tok) => hn.includes(norm(tok)))) {
         if (field !== "seq_ignore") map[field] = i;
         return;
       }
@@ -85,8 +114,14 @@ const DATE_RE = /(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/;
 export function toDateStr(v) {
   if (v == null || v === "") return null;
   if (typeof v === "number" && v > 20000 && v < 80000) {
-    // Excel 日期序列号（1900 系统）
+    // Excel 日期序列号（1900 系统，现代日期偏移量 25569 已吸收闰年 bug）
     return new Date((v - 25569) * 86400 * 1000).toISOString().slice(0, 10);
+  }
+  if (v instanceof Date) {
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, "0");
+    const d = String(v.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
   }
   const s = String(v).trim();
   const m = s.match(DATE_RE);
@@ -157,16 +192,47 @@ export function mapScheduleMatrix(matrix) {
   const { map, unmatched } = buildFieldMap(headers);
   const warnings = [];
   const tasks = [];
+  let currentPhase = null; // 跟踪当前阶段分组（阶段列连续空白表示归属上一阶段）
+
+  const pushTask = (name, taskType, start, end, dur, predecessor, notes, indent) => {
+    tasks.push({
+      name,
+      task_type: taskType,
+      planned_start: start,
+      planned_end: end,
+      duration_days: dur,
+      predecessor: predecessor != null ? String(predecessor) : null,
+      notes: notes != null ? String(notes) : "",
+      indentLevel: indent,
+    });
+  };
+
   for (let r = 1; r < matrix.length; r++) {
     const row = matrix[r];
     if (!row || row.every((c) => c === "" || c == null)) continue; // 跳过空行
     const get = (f) => (map[f] != null ? row[map[f]] : undefined);
+    const phaseVal = get("phase") != null ? String(get("phase")).trim() : "";
+
+    // 阶段列：有值 → 新阶段（生成阶段任务父节点）；空 → 沿用上一阶段
+    let underPhase = false;
+    if (phaseVal) {
+      if (phaseVal !== currentPhase) {
+        // 合成一条「阶段任务」父节点（时间由后端按子任务聚合）
+        pushTask(phaseVal, "阶段任务", null, null, null, null, "", 0);
+        currentPhase = phaseVal;
+      }
+      underPhase = true;
+    } else if (currentPhase) {
+      underPhase = true;
+    }
+
     const name = (get("name") != null ? String(get("name")) : "").trim();
     if (!name) {
-      warnings.push(`第 ${r + 1} 行缺少任务名称，已跳过`);
+      // 阶段已登记，但本行无任务名（纯阶段标题行）→ 跳过任务本身
       continue;
     }
-    const indent = calcIndent(name, get("indentLevel"));
+
+    const indent = underPhase ? 1 : calcIndent(name, get("indentLevel"));
     const durationRaw = get("duration_days");
     const duration =
       durationRaw !== undefined && durationRaw !== null && durationRaw !== ""
@@ -179,16 +245,7 @@ export function mapScheduleMatrix(matrix) {
       duration,
       taskType
     );
-    tasks.push({
-      name,
-      task_type: taskType,
-      planned_start: dStart,
-      planned_end: dEnd,
-      duration_days: dDur,
-      predecessor: get("predecessor") != null ? String(get("predecessor")) : null,
-      notes: get("notes") != null ? String(get("notes")) : "",
-      indentLevel: indent,
-    });
+    pushTask(name, taskType, dStart, dEnd, dDur, get("predecessor"), get("notes"), indent);
   }
   return { tasks, unmatched, warnings };
 }

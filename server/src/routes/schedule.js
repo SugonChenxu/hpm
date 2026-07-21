@@ -17,6 +17,32 @@ const router = Router();
 const TEMPLATES_DIR = join(__dirname, "..", "templates");
 
 /**
+ * 将 ExcelJS 单元格转为字符串（修正日期单元格被吞成空串的问题）
+ * - Date 对象 → 本地时区 YYYY-MM-DD（避免 UTC 偏移导致跨天）
+ * - 富文本 / 公式结果 → 取文本
+ */
+function cellValueToStr(cell) {
+  const v = cell.value;
+  if (v == null) return "";
+  if (typeof v === "object") {
+    if (v instanceof Date) {
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, "0");
+      const d = String(v.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+    if (typeof v.text === "string" && v.text) return v.text;
+    if (v.richText && Array.isArray(v.richText)) {
+      return v.richText.map((t) => t.text || "").join("");
+    }
+    if (v.result != null) return String(v.result);
+    if (v.formula != null) return "";
+    return "";
+  }
+  return String(v);
+}
+
+/**
  * 格式化日期为本地时区的 YYYY-MM-DD 字符串
  * 避免 toISOString() 将日期转为 UTC 导致跨时区偏移
  */
@@ -1448,13 +1474,7 @@ router.post("/projects/:id/schedule/import-from-url", async (req, res) => {
     ws.eachRow((row) => {
       const arr = [];
       row.eachCell({ includeEmpty: true }, (cell) => {
-        arr.push(
-          cell.value == null
-            ? ""
-            : typeof cell.value === "object"
-            ? cell.value.text || cell.value.result || ""
-            : String(cell.value)
-        );
+        arr.push(cellValueToStr(cell));
       });
       matrix.push(arr);
     });
