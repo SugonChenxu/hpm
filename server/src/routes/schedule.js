@@ -1325,18 +1325,26 @@ function insertScheduleTasks(projectId, taskList) {
         : taskType === "阶段任务"
         ? 0
         : 1;
+    // 经 mapScheduleMatrix 的 deriveDates 处理后通常已补全；此处再做防御性兜底，
+    // 确保任何调用方（含未来非前端来源）传入欠指定任务时也能正确推导出缺失日期。
     let start = t.planned_start || null;
     let end = t.planned_end || null;
-    if (!start && !end && taskType !== "阶段任务") {
+    if (taskType === "节点任务") {
+      const s = start || end || baseDate;
+      start = s;
+      end = s;
+    } else if (!start && !end) {
+      // 仅给出工期（或三者皆空）的情况：锚定到项目起始日，保证可渲染
       start = baseDate;
-      end = addDays(baseDate, Math.max(0, duration - 1));
-    } else if (!start && end) {
-      start = end;
+      end = addDays(baseDate, Math.max(0, (duration || 1) - 1));
+    } else if (start && !end && duration) {
+      end = addDays(start, Math.max(0, duration - 1));
+    } else if (end && !start && duration) {
+      start = addDays(end, -(duration - 1));
     } else if (start && !end) {
-      end = taskType === "阶段任务" ? start : addDays(start, Math.max(0, duration - 1));
-    } else if (taskType === "阶段任务" && !start && !end) {
-      start = baseDate;
-      end = baseDate;
+      end = start;
+    } else if (end && !start) {
+      start = end;
     }
 
     const result = insertStmt.run(
