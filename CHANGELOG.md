@@ -2,6 +2,16 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-21 — M1 项目计划：批量导入（本地 Excel / 腾讯文档）+ 一键清空；删除 PLM 功能
+
+- **新增功能（导入）**：项目计划页工具栏新增「导入 Excel」「腾讯文档导入」入口。
+  - 本地导入：前端 `xlsx` 解析 `.xlsx/.xls` → `mapScheduleMatrix` 模糊识别表头（任务/类型/开始/结束/工期/前置/备注/层级）→ 自动区分阶段/节点/普通任务（类型列优先，回退名称关键字）→ `POST /api/projects/:id/schedule/import` 批量追加。
+  - 腾讯文档导入：`POST /api/projects/:id/schedule/import-from-url` 接收分享/下载链接，后端 `fetch` + `exceljs` 解析后复用同一映射逻辑（链接需设为可公开下载）。
+  - 层级用 `indentLevel`/`parent_id` 栈还原，前置依赖按行号或任务名映射。
+- **新增功能（清空）**：工具栏「清空计划」→ 确认弹窗 → `DELETE /api/projects/:id/schedule` 物理删除全部计划（owner 校验，不可恢复）。
+- **精简**：移除 PLM 连接与只读探针功能（无业务价值，仅 P0 探针）——删除 `routes/plm.js`、`adapters/plm.js`、前端 `PlmConnectionDialog`、API `plm` 块、`db.js` 中 `plm_connection`/`plm_task_map` 两表（运行期 DROP 清理）。
+- **文档**：`docs/modules/01-项目进度模块-PRD.md` 新增 2.6.11 文件导入、2.6.12 一键清空；归档删除 `docs/plm-schedule-sync-assessment.md`（功能已移除）。
+
 ## 2026-07-21（补）— M4 易用性：物料管理页内置「？OA 导入说明（Chrome 扩展）」弹窗
 
 - **新增功能**：`client/src/pages/MaterialListPage.jsx` 工具栏新增「？OA 导入说明」按钮，弹出 Dialog 图文说明 Chrome/Edge 扩展「Forge OA 物料导入」的安装（chrome://extensions → 开发者模式 → 加载已解压的扩展程序 / 拖入 .crx）、使用（OA 页点图标 → 提取 → 发送到 Forge → 按内部立项号归项目）、更新后需重载扩展、以及仅支持 Chromium 内核浏览器等关键提示。

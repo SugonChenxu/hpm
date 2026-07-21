@@ -136,3 +136,5 @@
 > **2026-07-21 新增 M8 用户管理模块**：将「加用户 / 改密码」从命令行直连数据库迁移为网页界面操作——新建用户管理页（侧边栏入口，列表/新增/重置密码/删除，禁删自己）、AppBar「修改密码」入口（改自己密码，需校验原密码）。后端新增 `/api/users` 路由（GET 列表 / POST 新增 / POST me/password 改自己 / PUT :id/password 重置他人 / DELETE :id 删除），bcrypt 哈希，受 `requireAuth` 保护。详见 `docs/modules/08-用户管理模块-PRD.md`。
 
 > **2026-07-21（补）M8 权限模型升级**：由「人人平等无角色」升级为 owner/admin/member 三级——`users` 表新增 `role` 列，`chenxu` 在 db 迁移时升为 owner（② bootstrap）；member 仅可改自己密码，admin 可管成员但不能碰其他 admin/owner，owner 不可被删/降级/重置且独家可分配角色；后端新增 `requireAdmin`/`requireOwner` 中间件与 `PUT /api/users/:id/role` 接口，登录/`me` 返回 `role`；侧边栏菜单按角色显示。详见 `docs/modules/08-用户管理模块-PRD.md`。
+
+> **2026-07-21 项目计划增强 + 删除 PLM**：M1 项目计划页新增「导入 Excel」「腾讯文档导入」「清空计划」——支持本地 `.xlsx/.xls` 与腾讯文档链接批量导入，模糊识别表头并按「任务类型」列值/名称关键字自动区分阶段任务、节点任务与普通任务，按层级与前置列还原父子与依赖关系，导入为追加模式；「清空计划」经确认后 `DELETE` 删除全部计划。同步移除 PLM 连接/探针功能（路由、适配器、前端对话框、数据库两表一并清理）。详见 `docs/modules/01-项目进度模块-PRD.md` 2.6.11 / 2.6.12。

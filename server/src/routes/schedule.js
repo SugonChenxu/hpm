@@ -2,7 +2,9 @@ import { Router } from "express";
 import { readdirSync, readFileSync, existsSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import ExcelJS from "exceljs";
 import db from "../db.js";
+import { mapScheduleMatrix } from "../utils/scheduleMapping.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
@@ -1273,6 +1275,190 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
     res.end();
   } catch (err) {
     console.error("GET export:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
+// 端点：DELETE /projects/:id/schedule — 一键清空所有计划
+// ============================================================
+router.delete("/projects/:id/schedule", (req, res) => {
+  try {
+    const { id } = req.params;
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
+    if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
+    if (project.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
+    const info = db.prepare("SELECT COUNT(*) c FROM schedule_tasks WHERE project_id = ?").get(id);
+    db.prepare("DELETE FROM schedule_tasks WHERE project_id = ?").run(id);
+    res.json({ ok: true, data: { deleted: info.c } });
+  } catch (err) {
+    console.error("DELETE schedule:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// 批量插入任务（被 import 与 import-from-url 复用）
+// tasks: [{ name, task_type, planned_start, planned_end, duration_days, predecessor, notes, indentLevel }]
+function insertScheduleTasks(projectId, taskList) {
+  const insertStmt = db.prepare(`
+    INSERT INTO schedule_tasks (project_id, name, task_order, task_type, planned_start, planned_end, duration_days, predecessor_ids, parent_id, is_locked, notes, bg_color)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?, '')
+  `);
+  const updateParentStmt = db.prepare("UPDATE schedule_tasks SET parent_id = ? WHERE id = ?");
+  const updatePredsStmt = db.prepare("UPDATE schedule_tasks SET predecessor_ids = ? WHERE id = ?");
+
+  const baseDate = todayStr();
+  const indexToId = new Map();
+  const nameToId = new Map();
+  const stack = []; // indentLevel -> taskId
+  let order = db.prepare("SELECT COALESCE(MAX(task_order),0) m FROM schedule_tasks WHERE project_id = ?").get(projectId).m;
+
+  for (let i = 0; i < taskList.length; i++) {
+    const t = taskList[i];
+    const taskType = t.task_type || "普通任务";
+    const indent = Number(t.indentLevel) || 0;
+    const duration =
+      taskType === "节点任务"
+        ? 1
+        : t.duration_days != null
+        ? Number(t.duration_days)
+        : taskType === "阶段任务"
+        ? 0
+        : 1;
+    let start = t.planned_start || null;
+    let end = t.planned_end || null;
+    if (!start && !end && taskType !== "阶段任务") {
+      start = baseDate;
+      end = addDays(baseDate, Math.max(0, duration - 1));
+    } else if (!start && end) {
+      start = end;
+    } else if (start && !end) {
+      end = taskType === "阶段任务" ? start : addDays(start, Math.max(0, duration - 1));
+    } else if (taskType === "阶段任务" && !start && !end) {
+      start = baseDate;
+      end = baseDate;
+    }
+
+    const result = insertStmt.run(
+      projectId,
+      t.name || `任务${i + 1}`,
+      ++order,
+      taskType,
+      start,
+      end,
+      duration,
+      "[]",
+      t.notes || ""
+    );
+    const tid = result.lastInsertRowid;
+    indexToId.set(i, tid);
+    nameToId.set(t.name, tid);
+
+    stack[indent] = tid;
+    stack.length = indent + 1; // 截断更深层级，避免跨级
+    const parentId = indent > 0 ? stack[indent - 1] : null;
+    if (parentId) updateParentStmt.run(parentId, tid);
+
+    if (t.predecessor) {
+      const predIds = resolvePredecessors(t.predecessor, indexToId, nameToId, i);
+      if (predIds.length) updatePredsStmt.run(JSON.stringify(predIds), tid);
+    }
+  }
+  return taskList.length;
+}
+
+// 前置依赖解析：全数字 → 视为 1-based 行号映射同批任务；否则按任务名匹配
+function resolvePredecessors(raw, indexToId, nameToId, selfIdx) {
+  const parts = String(raw)
+    .split(/[,，、;；]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const ids = [];
+  const allNumeric = parts.length > 0 && parts.every((p) => /^\d+$/.test(p));
+  for (const p of parts) {
+    if (allNumeric) {
+      const idx = Number(p) - 1;
+      if (indexToId.has(idx) && idx !== selfIdx) ids.push(indexToId.get(idx));
+    } else if (nameToId.has(p)) {
+      ids.push(nameToId.get(p));
+    }
+  }
+  return ids;
+}
+
+// ============================================================
+// 端点：POST /projects/:id/schedule/import — 批量导入（前端解析后提交）
+// ============================================================
+router.post("/projects/:id/schedule/import", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tasks } = req.body;
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
+    if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
+    if (project.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
+    if (!Array.isArray(tasks) || !tasks.length) {
+      return res.status(400).json({ ok: false, error: "tasks 不能为空" });
+    }
+    const count = db.transaction((pid, list) => insertScheduleTasks(pid, list))(Number(id), tasks);
+    res.json({ ok: true, data: { imported: count } });
+  } catch (err) {
+    console.error("POST import:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
+// 端点：POST /projects/:id/schedule/import-from-url — 腾讯文档链接导入
+// ============================================================
+router.post("/projects/:id/schedule/import-from-url", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { url } = req.body;
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
+    if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
+    if (project.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ ok: false, error: "请提供有效的腾讯文档下载链接" });
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    let buf;
+    try {
+      const resp = await fetch(url, { signal: controller.signal, redirect: "follow" });
+      if (!resp.ok) throw new Error(`远程获取失败 HTTP ${resp.status}`);
+      buf = Buffer.from(await resp.arrayBuffer());
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0];
+    if (!ws) throw new Error("文档无工作表");
+    const matrix = [];
+    ws.eachRow((row) => {
+      const arr = [];
+      row.eachCell({ includeEmpty: true }, (cell) => {
+        arr.push(
+          cell.value == null
+            ? ""
+            : typeof cell.value === "object"
+            ? cell.value.text || cell.value.result || ""
+            : String(cell.value)
+        );
+      });
+      matrix.push(arr);
+    });
+
+    const { tasks, warnings } = mapScheduleMatrix(matrix);
+    if (!tasks.length) {
+      return res.status(400).json({ ok: false, error: "未能从文档解析出任何任务", warnings });
+    }
+    const count = db.transaction((pid, list) => insertScheduleTasks(pid, list))(Number(id), tasks);
+    res.json({ ok: true, data: { imported: count, warnings } });
+  } catch (err) {
+    console.error("POST import-from-url:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

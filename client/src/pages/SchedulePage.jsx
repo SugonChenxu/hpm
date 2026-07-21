@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Box,
@@ -16,13 +16,14 @@ import {
   Card,
   ToggleButtonGroup,
   ToggleButton,
+  SvgIcon,
+  TextField,
 } from "@mui/material";
 import {
   Save,
   FileDownload,
   AutoAwesome,
   History,
-  Hub,
 } from "@mui/icons-material";
 import api from "../api/client";
 import { useProjectContext } from "../context/ProjectContext";
@@ -33,8 +34,24 @@ import ScheduleTable from "../components/schedule/ScheduleTable";
 import GanttChart from "../components/schedule/GanttChart";
 import ContextMenu from "../components/schedule/ContextMenu";
 import VersionHistoryDialog from "../components/schedule/VersionHistoryDialog";
-import PlmConnectionDialog from "../components/plm/PlmConnectionDialog";
+import { parseScheduleExcel } from "../utils/scheduleExcel";
 import { calcCompletionStatus } from "../utils/schedule-date";
+
+const ImportIcon = (props) => (
+  <SvgIcon {...props}>
+    <path d="M5 20h14v-2H5v2zM12 2L5 9h4v6h6V9h4l-7-7z" />
+  </SvgIcon>
+);
+const TrashIcon = (props) => (
+  <SvgIcon {...props}>
+    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+  </SvgIcon>
+);
+const CloudIcon = (props) => (
+  <SvgIcon {...props}>
+    <path d="M19 9h-1.4c.3-1-.2-2.2-1.2-2.5l-1 .4.9 1.9c.2.4.1.9-.3 1.1-.4.2-.9.1-1.1-.3L13.7 7c1.7-.3 2.3-1.2 2.3-2 0-1.1-1-1.9-2.3-1.7C12.7 3 11.7 3.8 11.4 5H11c-4.4 0-8 3.6-8 8 0 4.4 3.6 8 8 8h8c2.8 0 5-2.2 5-5 0-2.6-2-4.8-4.7-5z" />
+  </SvgIcon>
+);
 
 export default function SchedulePage() {
   const [searchParams] = useSearchParams();
@@ -63,8 +80,12 @@ export default function SchedulePage() {
   // Predecessor trigger
   const [predTriggerTaskId, setPredTriggerTaskId] = useState(null);
 
-  // PLM 连接/探针对话框
-  const [plmDialogOpen, setPlmDialogOpen] = useState(false);
+  // 导入 / 腾讯文档 / 清空
+  const fileInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [tencentOpen, setTencentOpen] = useState(false);
+  const [tencentUrl, setTencentUrl] = useState("");
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   // 甘特图时间轴单位
   const [ganttUnit, setGanttUnit] = useState("day");
@@ -245,6 +266,59 @@ export default function SchedulePage() {
         message: err.message || "修改失败",
         severity: "error",
       });
+    }
+  };
+
+  // ===== 导入 / 腾讯文档 / 清空 =====
+  const handleFileImportClick = () => fileInputRef.current?.click();
+
+  const handleFileImport = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const { tasks, warnings } = await parseScheduleExcel(file);
+      const res = await api.schedule.importTasks(Number(projectId), tasks);
+      const n = res.data?.imported ?? tasks.length;
+      setSnackbar({
+        open: true,
+        message: `已导入 ${n} 条计划${warnings?.length ? `（${warnings.length} 条提示）` : ""}`,
+        severity: "success",
+      });
+      await loadSchedule();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "导入失败", severity: "error" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleTencentImport = async () => {
+    if (!tencentUrl.trim()) return;
+    setImporting(true);
+    try {
+      const res = await api.schedule.importFromUrl(Number(projectId), tencentUrl.trim());
+      const n = res.data?.imported ?? 0;
+      setSnackbar({ open: true, message: `已从腾讯文档导入 ${n} 条计划`, severity: "success" });
+      setTencentOpen(false);
+      setTencentUrl("");
+      await loadSchedule();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "导入失败", severity: "error" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    setClearConfirmOpen(false);
+    try {
+      const res = await api.schedule.clearAll(Number(projectId));
+      setSnackbar({ open: true, message: `已清空 ${res.data?.deleted ?? 0} 条计划`, severity: "success" });
+      await loadSchedule();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "清空失败", severity: "error" });
     }
   };
 
@@ -460,10 +534,30 @@ export default function SchedulePage() {
         <Button
           size="small"
           variant="outlined"
-          startIcon={<Hub />}
-          onClick={() => setPlmDialogOpen(true)}
+          startIcon={<ImportIcon />}
+          onClick={handleFileImportClick}
+          disabled={importing}
         >
-          PLM 连接/探针
+          {importing ? "导入中…" : "导入 Excel"}
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<CloudIcon />}
+          onClick={() => setTencentOpen(true)}
+          disabled={importing}
+        >
+          腾讯文档导入
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          color="error"
+          startIcon={<TrashIcon />}
+          onClick={() => setClearConfirmOpen(true)}
+          disabled={tasks.length === 0 || importing}
+        >
+          清空计划
         </Button>
       </PageHeader>
 
@@ -574,11 +668,60 @@ export default function SchedulePage() {
         </DialogActions>
       </Dialog>
 
-      {/* PLM 连接/探针对话框 */}
-      <PlmConnectionDialog
-        open={plmDialogOpen}
-        onClose={() => setPlmDialogOpen(false)}
+      {/* 隐藏文件选择（本地导入） */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: "none" }}
+        onChange={handleFileImport}
       />
+
+      {/* 腾讯文档导入对话框 */}
+      <Dialog open={tencentOpen} onClose={() => setTencentOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>从腾讯文档导入</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            将腾讯文档表格的「分享 / 下载链接」粘贴到下方。文档需设为「任何人可阅读或下载」，
+            Forge 会拉取表格并自动识别「任务 / 任务类型 / 开始 / 结束 / 工期」等列，
+            按「任务类型」列值或名称关键字（阶段 / 里程碑 / 节点）区分阶段任务、节点任务与普通任务。
+          </Alert>
+          <TextField
+            label="腾讯文档下载链接"
+            placeholder="https://docs.qq.com/.../"
+            fullWidth
+            value={tencentUrl}
+            onChange={(e) => setTencentUrl(e.target.value)}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTencentOpen(false)}>取消</Button>
+          <Button
+            onClick={handleTencentImport}
+            variant="contained"
+            disabled={importing || !tencentUrl.trim()}
+          >
+            {importing ? "导入中…" : "导入"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 清空确认 */}
+      <Dialog open={clearConfirmOpen} onClose={() => setClearConfirmOpen(false)} maxWidth="xs">
+        <DialogTitle>确认清空计划</DialogTitle>
+        <DialogContent>
+          <Typography>
+            将删除当前项目的全部 {tasks.length} 条计划，此操作不可恢复。是否继续？
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setClearConfirmOpen(false)}>取消</Button>
+          <Button onClick={handleClearAll} color="error" variant="contained">
+            清空
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar */}
       <Snackbar

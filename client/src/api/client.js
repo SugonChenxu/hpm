@@ -147,6 +147,21 @@ export const api = {
     restoreVersion: (projectId, vid) =>
       request(`/projects/${projectId}/schedule/versions/${vid}/restore`, { method: "POST" }),
     exportUrl: (projectId) => `${BASE}/projects/${projectId}/schedule/export`,
+    // 一键清空当前项目所有计划
+    clearAll: (projectId) =>
+      request(`/projects/${projectId}/schedule`, { method: "DELETE" }),
+    // 本地/解析后批量导入
+    importTasks: (projectId, tasks) =>
+      request(`/projects/${projectId}/schedule/import`, {
+        method: "POST",
+        body: JSON.stringify({ tasks }),
+      }),
+    // 腾讯文档链接导入
+    importFromUrl: (projectId, url) =>
+      request(`/projects/${projectId}/schedule/import-from-url`, {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      }),
   },
   // Mantis 集成
   mantis: {
@@ -158,14 +173,6 @@ export const api = {
     connection: () => request("/mantis/connection"),
     updateConnection: (data) =>
       request("/mantis/connection", { method: "PUT", body: JSON.stringify(data) }),
-  },
-  // PLM 连接与只读探针（P0）
-  plm: {
-    getConnection: () => request("/plm/connection"),
-    saveConnection: (data) =>
-      request("/plm/connection", { method: "PUT", body: JSON.stringify(data) }),
-    probe: (url) =>
-      request("/plm/probe", { method: "POST", body: JSON.stringify({ url }) }),
   },
   // 会议计划
   weekMeetings: {
