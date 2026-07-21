@@ -30,6 +30,8 @@
 | 缓存机制 | ✅ | SQLite sync_cache 表，TTL 300s，手动刷新清除 |
 | 异常处理 | ✅ | 鉴权失败/超时/网络异常友好提示 |
 | 本地缺陷管理 | ✅ | `POST /api/issues`（source='local'）手动登记缺陷，纳入 DI 计算；原 v1.1 标注「待开发」，实际已实现 |
+| 图表配色去重 | ✅ | 缺陷分布柱状图 + 项目概览饼图统一采用 10 色高区分度调色板（紫/天蓝/翠绿/琥珀/红/粉/青/橙/黄绿/靛），去除旧版 #7C3AED/#8B5CF6/#6D28D9 三紫撞色 |
+| 未解决分类分布 | ✅ | 新增 `fetchUnresolvedCategoryStats`：拉取真实缺陷列表 → 过滤 status≠已解决 → 按 category 分组计数；M1 项目概览饼图即取此口径（与"故障总数"全量口径互补） |
 
 ### 关键数据源对照
 
@@ -200,7 +202,7 @@
 | 顶部栏 | 手动刷新按钮 | 带 loading spinner；强制清除缓存并拉取最新数据 |
 | 统计卡片 | 3 张 MetricCard | 数字 + 标签，无数据时显示 "—" |
 | DI 趋势图 | `<LineChart>` (recharts) | X=时间 Y=DI；`<Tooltip>` + `<Brush>` 缩放；过滤 DI≤0 |
-| 缺陷分布图 | `<BarChart>` (recharts) | X=分类 Y=数量；`<Tooltip>`；过滤 count=0 的 bar |
+| 缺陷分布图 | `<BarChart>` (recharts) | X=分类 Y=数量；`<Tooltip>`；过滤 count=0 的 bar；**配色采用 10 色高区分度调色板（与 M1 项目概览饼图同一套），去除了旧版 3 个紫色撞色问题** |
 | 报告区 | 预格式化文本 + 复制按钮 | 按钮调用 `navigator.clipboard.writeText()`；复制后 toast |
 
 ### 5.3 异常状态 UI

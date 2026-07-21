@@ -62,6 +62,23 @@
 | **进度百分比** | 按已完成阶段数/总阶段数，或按已完成任务数/总任务数计算 |
 | **风险色标** | 绿色(正常)、黄色(有逾期风险，距计划结束<2周)、红色(已逾期) |
 | **仪表盘摘要卡片** | 每个项目卡片上显示：进度圆环图 + 风险色标 + 当前阶段名称 |
+| **故障概览区块** | 项目卡片待办事项下方嵌入 M3 故障管理实时指标（DI/故障总数/解决率 + DI 趋势 sparkline + 未解决分类饼图），详见 2.5.1 |
+
+#### 2.5.1 项目概览卡片「故障概览」区块（关联 M3 故障管理）
+
+> **概述**：在【项目概览】页面每个项目卡片的「待办事项」区块下方，嵌入与 M3 故障管理模块联动的质量健康度区块，直接呈现该项目（经 Forge→Mantis 映射）在 Mantis 中的实时故障指标，无需进入故障管理模块即可一眼掌握项目质量状态。
+
+| 要素 | 描述 |
+|------|------|
+| 指标行 | DI 值 / 故障总数（全量） / 故障解决率，三者间距宽松（gap=4） |
+| DI 配色阈值 | ≤10 绿色 `#10B981` ／ ≤30 黄色 `#F59E0B` ／ 其余 红色 `#EF4444` |
+| 解决率配色阈值 | ≥90% 绿色 ／ ≥50% 黄色 ／ 其余 红色 |
+| DI 趋势 | 紧凑 Area 折线 sparkline（近 29 周），hover tooltip 显示「周数（ISO 周，如 2026-W02）+ DI 值」 |
+| 缺陷分布饼图 | 按「未解决问题」的模块分类分布（拉取真实缺陷列表 → 过滤 status≠已解决 → 按 category 分组计数）；10 色高区分度调色板；附 Top5 模块图例 |
+| 数据透传与缓存 | 经 Forge→Mantis 映射解析 Mantis 项目 id，并行拉取 summary / di-trend / 未解决分类统计，写入 sync_cache（key=`dashboard_faults`，TTL 300s） |
+| 未关联态 | 项目未建立 Forge→Mantis 映射时，区块显示「· 未关联 Mantis 故障」提示，不报错 |
+
+> **口径说明**：故障总数取自全量缺陷；饼图取自未解决问题，二者口径不同、互补展示（总数看规模、饼图看当下存量风险）。
 
 ---
 
@@ -144,6 +161,7 @@
 | PUT | /api/projects/:id/phases/:phaseId | 更新单个阶段 |
 | POST | /api/projects/:id/gates/:gateId/check | 触发门禁条件检查 |
 | POST | /api/projects/:id/gates/:gateId/pass | 手动通过门禁 |
+| GET | /api/projects/:id/faults | 项目概览故障概览：解析 Forge→Mantis 映射，聚合 summary / di-trend / unresolvedCategoryStats（并行拉取，sync_cache key=`dashboard_faults` 缓存 300s；未建立映射则返回 linked:false） |
 
 ---
 
