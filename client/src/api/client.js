@@ -192,6 +192,19 @@ export const api = {
     me: () => request("/auth/me"),
     logout: () => request("/auth/logout", { method: "POST" }),
   },
+  // 用户管理
+  users: {
+    list: () => request("/users"),
+    create: (data) => request("/users", { method: "POST", body: JSON.stringify(data) }),
+    resetPassword: (id, password) =>
+      request(`/users/${id}/password`, { method: "PUT", body: JSON.stringify({ password }) }),
+    remove: (id) => request(`/users/${id}`, { method: "DELETE" }),
+    changeOwnPassword: (oldPassword, newPassword) =>
+      request("/users/me/password", {
+        method: "POST",
+        body: JSON.stringify({ oldPassword, newPassword }),
+      }),
+  },
 };
 
 export default api;

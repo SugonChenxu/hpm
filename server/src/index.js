@@ -21,6 +21,7 @@ import weeklyReportsRouter from "./routes/weekly-reports.js";
 import scheduleRouter from "./routes/schedule.js";
 import weekMeetingsRouter from "./routes/week-meetings.js";
 import plmRouter from "./routes/plm.js";
+import usersRouter from "./routes/users.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -69,6 +70,7 @@ app.use("/api", weeklyReportsRouter);
 app.use("/api", scheduleRouter);
 app.use("/api", weekMeetingsRouter);
 app.use("/api", plmRouter);
+app.use("/api/users", usersRouter);
 
 // === 生产模式：托管前端静态文件 ===
 const clientDist = path.resolve(__dirname, "../../client/dist");

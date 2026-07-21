@@ -13,6 +13,7 @@ import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
 import RedirectLegacyRoutes from "./components/layout/RedirectLegacyRoutes";
 import WeekMeetingPage from "./pages/WeekMeetingPage";
+import UserManagementPage from "./pages/UserManagementPage";
 import LoginPage from "./pages/LoginPage";
 
 function FullScreenLoader() {
@@ -49,6 +50,7 @@ function AppInner() {
           <Route path="/materials" element={<MaterialListPage />} />
           <Route path="/meetings" element={<MeetingListPage />} />
           <Route path="/reports" element={<WeeklyReportPage />} />
+          <Route path="/users" element={<UserManagementPage />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Route>
         {/* Legacy nested route catch-all for /projects/* */}

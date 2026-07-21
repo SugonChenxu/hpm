@@ -2,6 +2,22 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-21 — 新增 M8 用户管理模块（网页加用户 / 改密码）
+
+- **新增功能**
+  - 用户管理页（`/users`，侧边栏入口）：用户列表、新增账号、重置他人密码、删除账号（禁删自己）
+  - AppBar「修改密码」入口：改自己密码，需校验原密码，改后新密码可登录
+  - 将「加用户 / 改密码」从命令行直连 SQLite 迁移为网页界面操作
+- **接口调整**
+  - 新增 `server/src/routes/users.js`，挂载 `app.use("/api/users", usersRouter)`（受 `requireAuth` 保护）
+    - `GET /api/users` 列表 / `POST /api/users` 新增 / `POST /api/users/me/password` 改自己密码 / `PUT /api/users/:id/password` 重置他人 / `DELETE /api/users/:id` 删除
+  - 前端 `api.users`（list/create/resetPassword/remove/changeOwnPassword）
+- **缺陷修复**
+  - 路由挂载点修正：初版误挂 `app.use("/api", usersRouter)` 导致 `/api/users` 返回 404（router 内 `get("/")` 实际匹配 `/api/`）→ 改为 `app.use("/api/users", usersRouter)`
+- **参数变动 / 约束**
+  - 密码 bcrypt 哈希（cost 10）；无角色权限（内网人人平等，任一登录用户均可管理账号）
+  - 新增菜单/按钮图标均用内联 `SvgIcon`，遵循 Vite 8 禁用 `@mui/icons-material` 约束
+
 ## 2026-07-17 — 修复物料页白屏（React #130）+ 增量重构
 
 - **缺陷修复**

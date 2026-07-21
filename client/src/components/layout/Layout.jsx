@@ -13,6 +13,7 @@ import { useState, useCallback } from "react";
 import Sidebar from "./Sidebar";
 import CreateProjectDialog from "../common/CreateProjectDialog";
 import { useAuth } from "../../context/AuthContext";
+import ChangePasswordDialog from "../common/ChangePasswordDialog";
 
 // 内联菜单图标（避免 @mui/icons-material）
 function MenuIcon(props) {
@@ -41,6 +42,7 @@ export default function Layout() {
   const [manualDialogOpen, setManualDialogOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, logout } = useAuth();
+  const [changePwdOpen, setChangePwdOpen] = useState(false);
 
   // Support ?create=true in URL to trigger the dialog
   const createParam = searchParams.get("create") === "true";
@@ -114,6 +116,14 @@ export default function Layout() {
             <Button
               color="inherit"
               size="small"
+              onClick={() => setChangePwdOpen(true)}
+              sx={{ textTransform: "none", display: { xs: "none", sm: "block" } }}
+            >
+              🔑 修改密码
+            </Button>
+            <Button
+              color="inherit"
+              size="small"
               onClick={logout}
               startIcon={<LogoutIcon />}
               sx={{ textTransform: "none" }}
@@ -145,6 +155,8 @@ export default function Layout() {
           // Dialog already refreshed project list; no further action needed
         }}
       />
+
+      <ChangePasswordDialog open={changePwdOpen} onClose={() => setChangePwdOpen(false)} />
     </Box>
   );
 }
