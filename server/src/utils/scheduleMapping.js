@@ -422,16 +422,34 @@ export function mapScheduleMatrix(matrix) {
           emittedPhaseKeys.add(key);
         }
       }
-      if (!name) continue; // 纯分组标题行
+      // 若「任务」列为纯数字（Excel 日期序列号或工期等）→ 任务名回退到最后一个分组列的值
+      // （常见于模板把任务名写在「小阶段」列、日期误放在「任务」列的结构）
+      let effectiveName = name;
+      let colShifted = false; // 标记列是否整体左移（任务列实际是日期）
+      if (/^\d+$/.test(name) && Number(name) > 20000) {
+        colShifted = true;
+        let fallback = "";
+        for (let g = groupCols.length - 1; g >= 0; g--) {
+          if (curVals[g]) { fallback = curVals[g]; break; }
+        }
+        if (fallback) effectiveName = fallback;
+      }
+
+      if (!effectiveName) continue; // 纯分组标题行
       const leafIndent = maxLevel + 1;
-      const taskType = detectTaskType(get(row, "task_type"), name);
+      const taskType = detectTaskType(get(row, "task_type"), effectiveName);
+
+      // 列偏移修正：当「任务」列实际是数字时，planned_start→name列，planned_end→start列，duration→end列
+      const startRaw = colShifted ? get(row, "name") : get(row, "planned_start");
+      const endRaw   = colShifted ? get(row, "planned_start") : get(row, "planned_end");
+      const durRaw   = colShifted ? get(row, "planned_end") : get(row, "duration_days");
       const { start: dStart, end: dEnd, duration: dDur } = deriveDates(
-        toDateStr(get(row, "planned_start"), yearMap.get(`${r}:planned_start`)),
-        toDateStr(get(row, "planned_end"), yearMap.get(`${r}:planned_end`)),
-        toDur(get(row, "duration_days")),
+        toDateStr(startRaw, yearMap.get(`${r}:planned_start`)),
+        toDateStr(endRaw, yearMap.get(`${r}:planned_end`)),
+        toDur(durRaw),
         taskType
       );
-      pushTask(name, taskType, dStart, dEnd, dDur, get(row, "predecessor"), get(row, "notes"), leafIndent);
+      pushTask(effectiveName, taskType, dStart, dEnd, dDur, get(row, "predecessor"), get(row, "notes"), leafIndent);
       continue;
     }
 
