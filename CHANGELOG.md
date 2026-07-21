@@ -2,6 +2,15 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-21 — 缺陷修复：OA 浏览器插件导入物料「项目错配」
+
+- **缺陷背景**：M8 多用户隔离改造（commit 767328c）给所有 `/api` 加了 `requireAuth`。`auth-middleware.js` 白名单漏掉了插件用来匹配项目的 `GET /api/projects`，导致插件匿名调用被 401 拦截 → 拿不到项目列表 → 所有 OA 物料被塞进写死的 project 20（液冷超节点），表现为「导入不好使」。
+- **缺陷修复**
+  - 后端 `POST /api/materials/oa-import`：新增按 `internal_code`（内部立项号）/ `order_number` 服务端解析目标项目，不再依赖插件调用受保护的 `/api/projects`；解析优先级 internal_code → project_id → 失败报错；响应返回 `project_id` / `project_name` 便于前端回显。
+  - 插件 `chrome-extension/inject.js`：移除对 `/api/projects` 的调用，改为把已提取的「内部立项号」作为 `internal_code` 上报，由后端完成项目匹配；导入成功提示显示项目名称。
+  - 重新打包 `chrome-extension.crx`（用 chrome-extension.pem）。
+- **参数变动**：`oa-import` 请求体新增可选字段 `internal_code` / `order_number`（二选一，用于服务端解析项目）。
+
 ## 2026-07-21（补）— M8 权限模型升级：owner / admin / member 三级
 
 - **新增功能**

@@ -424,18 +424,36 @@ router.post("/materials/oa-fetch", async (req, res) => {
   }
 });
 
-// ===== OA 书签直接提交（跨域）: 浏览器端提取 DOM 后 POST items，无需 cookie =====
+// ===== OA 书签/插件直接提交（跨域）: 浏览器端提取 DOM 后 POST items，无需 cookie =====
+// 目标项目解析优先级：internal_code（内部立项号）/ order_number → project_id → 失败。
+// 不再依赖插件调用 /api/projects（该接口受 requireAuth 保护，匿名调用会被 401 拦截）。
 router.post("/materials/oa-import", (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Headers", "Content-Type");
-  const { project_id, items } = req.body;
-  if (!project_id || !Array.isArray(items) || !items.length)
-    return res.json({ ok: false, error: "project_id 与 items 必填" });
+  const { project_id, internal_code, order_number, items } = req.body;
+  if (!Array.isArray(items) || !items.length)
+    return res.json({ ok: false, error: "items 必填且非空" });
 
-  const proj = db.prepare("SELECT owner_id FROM projects WHERE id = ?").get(Number(project_id));
-  const ownerId = proj ? proj.owner_id : 0;
+  // 解析目标项目（无需登录态）
+  let target = null;
+  const code = String(internal_code || order_number || "").trim();
+  if (code) {
+    target =
+      db.prepare("SELECT id, owner_id, name FROM projects WHERE order_number = ? OR code = ?").get(code, code) ||
+      null;
+  }
+  if (!target && project_id) {
+    target = db.prepare("SELECT id, owner_id, name FROM projects WHERE id = ?").get(Number(project_id));
+  }
+  if (!target)
+    return res.json({
+      ok: false,
+      error: "无法确定目标项目（请确认 OA 页面含「内部立项号」，或在请求中指定 project_id）",
+    });
 
-  let seq = nextSeq(Number(project_id));
+  const ownerId = target.owner_id;
+
+  let seq = nextSeq(target.id);
   const insert = db.prepare(
     `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes, owner_id)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?)`
@@ -444,7 +462,7 @@ router.post("/materials/oa-import", (req, res) => {
   db.transaction(() => {
     items.forEach((it) => {
       const r = insert.run(
-        Number(project_id), seq++,
+        target.id, seq++,
         it.part_number || "", it.manufacturer || "", it.model || "",
         it.material_status || "已下单",
         parseFloat(it.quantity) || 0,
@@ -457,8 +475,11 @@ router.post("/materials/oa-import", (req, res) => {
   })();
   // 快照
   db.prepare("INSERT INTO material_import_snapshots (project_id, ids_json) VALUES (?, ?)")
-    .run(Number(project_id), JSON.stringify(insertedIds));
-  res.json({ ok: true, data: { count: items.length, ids: insertedIds } });
+    .run(target.id, JSON.stringify(insertedIds));
+  res.json({
+    ok: true,
+    data: { count: items.length, ids: insertedIds, project_id: target.id, project_name: target.name },
+  });
 });
 
 // 处理 CORS 预检

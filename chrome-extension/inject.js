@@ -151,10 +151,9 @@
       const btn = this, st = document.getElementById("forge-oa-status");
       btn.disabled = true; btn.textContent = "发送中…"; st.textContent = "";
 
-      // 提取内部立项号，匹配项目
-      let projectId = 20; // 默认
+      // 提取内部立项号（用于后端匹配项目；不再调用需登录态的 /api/projects）
+      let internalCode = "";
       try {
-        let orderNo = "";
         const allLbl = document.querySelectorAll("span, label, div");
         for (const el of allLbl) {
           if (el.children.length > 0) continue;
@@ -163,21 +162,11 @@
             const parent = el.parentElement;
             if (parent) {
               const input = parent.querySelector("input, select, textarea");
-              if (input) orderNo = input.value || "";
-              if (!orderNo && parent.nextElementSibling)
-                orderNo = (parent.nextElementSibling.textContent || "").trim();
+              if (input) internalCode = input.value || "";
+              if (!internalCode && parent.nextElementSibling)
+                internalCode = (parent.nextElementSibling.textContent || "").trim();
             }
             break;
-          }
-        }
-        if (orderNo) {
-          const resp = await fetch("http://localhost:3000/api/projects");
-          const j = await resp.json();
-          const matched = (j.data || []).find(p => p.order_number && p.order_number.trim() === orderNo);
-          if (matched) projectId = matched.id;
-          else {
-            const pm = (j.data || []).find(p => p.name && p.name.includes("项目管理部"));
-            if (pm) projectId = pm.id;
           }
         }
       } catch {}
@@ -187,7 +176,8 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            project_id: projectId,
+            internal_code: internalCode || undefined,
+            project_id: 20,
             items: bestResult.items.map(it => ({
               part_number: it.part_number || "",
               manufacturer: it.manufacturer || "",
@@ -200,7 +190,11 @@
           }),
         });
         const json = await resp.json();
-        if (json.ok) { st.textContent = "✅ 已导入 " + json.data.count + " 条！"; st.style.color = "#2e7d32"; }
+        if (json.ok) {
+          const pn = json.data.project_name ? `（${json.data.project_name}）` : "";
+          st.textContent = `✅ 已导入 ${json.data.count} 条${pn}！`;
+          st.style.color = "#2e7d32";
+        }
         else throw new Error(json.error);
       } catch (e) {
         st.textContent = "❌ " + (e.message || "连接失败");
