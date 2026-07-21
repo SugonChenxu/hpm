@@ -1,5 +1,5 @@
 // 排期计划导入：表头模糊识别 + 阶段/普通/节点任务自动区分
-// 与 server/src/utils/scheduleMapping.js 保持同一份语义（client 端副本）。
+// 与 client/src/utils/scheduleMapping.js 保持同一份语义（server 端副本）。
 // 仅依赖纯字符串 + 日期算术处理，不耦合任何 Excel 库 —— 输入是 string[][] 矩阵。
 
 // ============ 任务类型识别（值 / 关键字） ============
@@ -39,6 +39,16 @@ const CONTAINS_RULES = [
 // 分组列（多级分组：大阶段/小阶段/阶段/分组…），用于识别「大阶段/小阶段/任务」这类结构
 const GROUPING_TOKENS = ["大阶段", "中阶段", "小阶段", "阶段", "分组", "组别", "group", "phase", "stage"];
 
+// 表头关键字（用于扫描定位表头行）
+const HEADER_KEYWORDS = [
+  "任务", "任务名", "名称", "事项", "工作",
+  "开始", "开始时间", "开始日期", "起始", "开工",
+  "结束", "完成", "完成时间", "截止", "完工",
+  "工期", "天数", "历时",
+  "类型", "类别", "阶段",
+  "备注", "说明",
+];
+
 function norm(s) {
   let t = String(s == null ? "" : s).trim().toLowerCase();
   // 全角 → 半角（括号、短横、空格），避免「工期（天）」「计划开始时间」等匹配失败
@@ -48,6 +58,44 @@ function norm(s) {
     .replace(/[－﹣—–―]/g, "-")
     .replace(/[　]/g, " ");
   return t.replace(/\s+/g, "");
+}
+
+/**
+ * 扫描矩阵前 N 行，找到最像"表头行"的那一行。
+ * 返回 { headerRowIndex, warnings }——导入将从 headerRowIndex 开始取表头，
+ * headerRowIndex+1 开始取数据。
+ */
+export function findHeaderRow(matrix) {
+  if (!matrix || !matrix.length) return { headerRowIndex: 0, warnings: [] };
+  const maxScan = Math.min(matrix.length, 15);
+  let bestIdx = 0, bestScore = 0;
+
+  for (let r = 0; r < maxScan; r++) {
+    const row = matrix[r];
+    if (!row || row.every((c) => c === "" || c == null)) continue;
+    let score = 0;
+    const seen = new Set();
+    for (const cell of row) {
+      const cn = norm(cell);
+      if (!cn) continue;
+      for (const kw of HEADER_KEYWORDS) {
+        if (cn.includes(norm(kw)) && !seen.has(kw)) {
+          score++;
+          seen.add(kw);
+          break;
+        }
+      }
+      // 含核心词额外加分
+      if (cn.includes("任务") || cn.includes("开始") || cn.includes("完成")) score += 0.5;
+    }
+    if (score > bestScore) { bestScore = score; bestIdx = r; }
+  }
+
+  const warnings = [];
+  if (bestScore < 2) {
+    warnings.push(`表头识别置信度较低（得分 ${bestScore}），将首行作为表头`);
+  }
+  return { headerRowIndex: bestIdx, warnings };
 }
 
 export function buildFieldMap(headers) {
@@ -132,28 +180,78 @@ function calcIndent(name, indentColVal) {
 }
 
 const DATE_RE = /(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/;
+const DATE_RE_CN = /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?/; // 2025年12月23日
 const MD_RE = /(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]?/; // 中文「X月X日 / X月X号」
+const MDY_RE = /(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/; // MM/DD/YYYY 或 DD/MM/YYYY
 
 export function toDateStr(v, assumeYear) {
   if (v == null || v === "") return null;
   if (typeof v === "number" && v > 20000 && v < 80000) {
-    // Excel 日期序列号（1900 系统，现代日期偏移量 25569 已吸收闰年 bug）
-    return new Date((v - 25569) * 86400 * 1000).toISOString().slice(0, 10);
-  }
-  if (v instanceof Date) {
-    const y = v.getFullYear();
-    const m = String(v.getMonth() + 1).padStart(2, "0");
-    const d = String(v.getDate()).padStart(2, "0");
+    // Excel 日期序列号：用 UTC 避免时区偏移导致日期±1天
+    const jsDate = new Date(Math.round((v - 25569) * 86400) * 1000);
+    const y = jsDate.getUTCFullYear();
+    const m = String(jsDate.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(jsDate.getUTCDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }
+  if (v instanceof Date) {
+    // Date 对象：用 UTC 方法避免本地时区偏移
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(v.getUTCDate()).padStart(2, "0");
+    const hours = v.getUTCHours();
+    const mins = v.getUTCMinutes();
+    // 若时间为 00:00 或接近，可能是纯日期；否则保留时间精度
+    if (hours === 0 && mins === 0) {
+      return `${y}-${m}-${d}`;
+    }
+    // xlsx 的 Date 对象可能在本地时区创建 → 退到本地方法
+    const ly = v.getFullYear();
+    const lm = String(v.getMonth() + 1).padStart(2, "0");
+    const ld = String(v.getDate()).padStart(2, "0");
+    return `${ly}-${lm}-${ld}`;
+  }
   const s = String(v).trim();
-  const m = s.match(DATE_RE); // 已含年份：2025/12/23、2025-12-23
-  if (m) return `${m[1]}-${String(m[2]).padStart(2, "0")}-${String(m[3]).padStart(2, "0")}`;
-  const md = s.match(MD_RE); // 仅月日：12月23日、1月6号
+
+  // 1) YYYY/MM/DD 或 YYYY-MM-DD
+  const m1 = s.match(DATE_RE);
+  if (m1) return `${m1[1]}-${String(m1[2]).padStart(2, "0")}-${String(m1[3]).padStart(2, "0")}`;
+
+  // 2) YYYY年MM月DD日
+  const m2 = s.match(DATE_RE_CN);
+  if (m2) return `${m2[1]}-${String(m2[2]).padStart(2, "0")}-${String(m2[3]).padStart(2, "0")}`;
+
+  // 3) MM/DD/YYYY 或 DD/MM/YYYY：根据数值大小推断（>12 的数是日）
+  const mdy = s.match(MDY_RE);
+  if (mdy) {
+    const a = Number(mdy[1]), b = Number(mdy[2]), yr = mdy[3];
+    if (a > 12) {
+      // DD/MM/YYYY（如 23/12/2025）
+      return `${yr}-${String(b).padStart(2, "0")}-${String(a).padStart(2, "0")}`;
+    }
+    if (b > 12) {
+      // MM/DD/YYYY（如 12/23/2025）
+      return `${yr}-${String(a).padStart(2, "0")}-${String(b).padStart(2, "0")}`;
+    }
+    // 都 ≤12：默认 MM/DD/YYYY（常见英文 Excel 格式）
+    return `${yr}-${String(a).padStart(2, "0")}-${String(b).padStart(2, "0")}`;
+  }
+
+  // 4) 仅月日：12月23日、1月6号
+  const md = s.match(MD_RE);
   if (md) {
     const y = assumeYear || new Date().getFullYear();
     return `${y}-${String(md[1]).padStart(2, "0")}-${String(md[2]).padStart(2, "0")}`;
   }
+
+  // 5) 纯数字串或无法识别 → 尝试 JS Date 解析作为最后兜底
+  if (/^\d+$/.test(s) && Number(s) > 20000 && Number(s) < 80000) {
+    // 数字可能是 xlsx 的 Date 类型（raw: false 也可能返回整数串）
+    const serial = Number(s);
+    const jsDate = new Date(Math.round((serial - 25569) * 86400) * 1000);
+    return `${jsDate.getUTCFullYear()}-${String(jsDate.getUTCMonth()+1).padStart(2,"0")}-${String(jsDate.getUTCDate()).padStart(2,"0")}`;
+  }
+
   return s.slice(0, 10) || s;
 }
 
@@ -216,9 +314,11 @@ function deriveDates(start, end, duration, taskType) {
 // 将 string[][] 矩阵映射为任务数组
 export function mapScheduleMatrix(matrix) {
   if (!matrix || !matrix.length) return { tasks: [], unmatched: [], warnings: [] };
-  const headers = matrix[0].map((h) => (h == null ? "" : String(h)));
+
+  const { headerRowIndex, warnings: headerWarnings } = findHeaderRow(matrix);
+  const headers = matrix[headerRowIndex].map((h) => (h == null ? "" : String(h)));
   const { map, unmatched, groupCols } = buildFieldMap(headers);
-  const warnings = [];
+  const warnings = [...headerWarnings];
   const tasks = [];
   const get = (row, f) => (map[f] != null ? row[map[f]] : undefined);
 
@@ -236,11 +336,13 @@ export function mapScheduleMatrix(matrix) {
       indentLevel: indent,
     });
 
+  const dataStart = headerRowIndex + 1;
+
   // ---------- 年份推断（针对「X月X日」无年日期） ----------
   // 收集所有「仅月日」的日期单元格，按行顺序推断跨年（如 12月 → 次年1月）。
   const baseYear = new Date().getFullYear();
   const unknownEntries = [];
-  for (let r = 1; r < matrix.length; r++) {
+  for (let r = dataStart; r < matrix.length; r++) {
     for (const f of ["planned_start", "planned_end"]) {
       const raw = get(matrix[r], f);
       if (raw == null || String(raw).trim() === "") continue;
@@ -278,7 +380,7 @@ export function mapScheduleMatrix(matrix) {
   const lastGroups = new Array(groupCols.length).fill(""); // 多分组模式：各级当前值（空白沿用上级）
   const emittedPhaseKeys = new Set(); // 避免重复发射阶段节点
 
-  for (let r = 1; r < matrix.length; r++) {
+  for (let r = dataStart; r < matrix.length; r++) {
     const row = matrix[r];
     if (!row || row.every((c) => c === "" || c == null)) continue; // 跳过空行
     const nameRaw = get(row, "name");
