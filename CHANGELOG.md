@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-21（补）— M3 易用性：Mantis 设置卡片内置「？如何获取 Cookie」弹窗
+
+- **新增功能**：`client/src/components/issue/MantisConnectionCard.jsx` 在 Cookie 输入框 helperText 处新增可点击「？如何获取 Cookie」链接，点击弹出 Dialog，内嵌浏览器通用取 Cookie 指南（Edge/Firefox/Safari 均适用、DevTools Network 复制法、httpOnly 关键坑、cURL 备选、过期说明）。同事在界面内即可查看，无需另开文档。
+- **配套文档**：新增 `docs/mantis-cookie-guide.md`（可转发给同事的完整版图文指南）。
+- **约束遵守**：新增 UI 未引入 `@mui/icons-material`（Vite 8 兼容禁止项），关闭按钮用 Unicode `✕` 内联。
+
 ## 2026-07-21 — 缺陷修复：OA 浏览器插件导入物料「项目错配」
 
 - **缺陷背景**：M8 多用户隔离改造（commit 767328c）给所有 `/api` 加了 `requireAuth`。`auth-middleware.js` 白名单漏掉了插件用来匹配项目的 `GET /api/projects`，导致插件匿名调用被 401 拦截 → 拿不到项目列表 → 所有 OA 物料被塞进写死的 project 20（液冷超节点），表现为「导入不好使」。

@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Box, Card, CardContent, TextField, Button, Typography, Alert, Stack, Divider, MenuItem } from "@mui/material";
+import { Box, Card, CardContent, TextField, Button, Typography, Alert, Stack, Divider, MenuItem, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Link } from "@mui/material";
 import api from "../../api/client";
 
 export default function MantisConnectionCard({ onSaved, onClose }) {
@@ -19,6 +19,7 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
   const [lastSync, setLastSync] = useState(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const [recentMantis, setRecentMantis] = useState([]); // [{id, name}] 来自真实最近使用接口
   const [forgeProjects, setForgeProjects] = useState([]);
@@ -83,6 +84,7 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
   };
 
   return (
+    <>
     <Card variant="outlined" sx={{ mb: 3 }}>
       <CardContent>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
@@ -101,7 +103,15 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
             onChange={(e) => setCookie(e.target.value)}
             size="small" fullWidth multiline minRows={2}
             type={showCookie ? "text" : "password"}
-            helperText="浏览器登录 Mantis 后，F12 → Network → 复制任一请求的 Cookie 请求头完整内容"
+            helperText={
+              <span>
+                浏览器登录 Mantis 后，F12 → Network → 复制任一请求的 Cookie 请求头完整内容。
+                {" "}
+                <Link component="button" type="button" onClick={() => setHelpOpen(true)} sx={{ cursor: "pointer" }}>
+                  ？如何获取 Cookie
+                </Link>
+              </span>
+            }
           />
           <Box>
             <Button onClick={() => setShowCookie((s) => !s)} size="small" sx={{ mr: 1 }}>{showCookie ? "隐藏" : "显示"}</Button>
@@ -141,5 +151,52 @@ export default function MantisConnectionCard({ onSaved, onClose }) {
         {msg && <Alert severity={msg.type} sx={{ mt: 1 }}>{msg.text}</Alert>}
       </CardContent>
     </Card>
+
+    <Dialog open={helpOpen} onClose={() => setHelpOpen(false)} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        如何获取 Mantis Cookie
+        <Tooltip title="关闭">
+          <IconButton onClick={() => setHelpOpen(false)} sx={{ position: "absolute", right: 8, top: 8 }}>
+            ✕
+          </IconButton>
+        </Tooltip>
+      </DialogTitle>
+      <DialogContent dividers>
+        <Typography variant="body2" sx={{ mb: 1.5 }}>
+          用途：把这段 Cookie 填进上面的框，让故障管理模块能拉取你账号下的 Mantis 缺陷数据。
+          <strong>任何浏览器都可以（Edge / Firefox / Safari 无需谷歌浏览器）</strong>——Cookie 取自你平时登录 Mantis 用的那个浏览器。
+        </Typography>
+
+        <Typography variant="subtitle2" sx={{ mt: 1 }}>① 打开开发者工具（各浏览器通用）</Typography>
+        <Box component="ul" sx={{ mt: 0.5, mb: 1, pl: 3 }}>
+          <li><strong>Edge / Chrome</strong>：按 <code>F12</code> 或 <code>Ctrl+Shift+I</code>（操作完全一样）。</li>
+          <li><strong>Firefox</strong>：按 <code>F12</code>，或直接 <code>Ctrl+Shift+E</code> 开 Network。</li>
+          <li><strong>Safari</strong>：先「设置 → 高级」勾选显示开发菜单，再 <code>Option+Cmd+I</code> 开检查器。</li>
+        </Box>
+
+        <Typography variant="subtitle2">② 复制 Cookie 请求头（推荐、最稳）</Typography>
+        <Box component="ul" sx={{ mt: 0.5, mb: 1, pl: 3 }}>
+          <li>在<strong>已登录 Mantis</strong>的页面，切到 <strong>Network</strong> 标签，按 <code>F5</code> 刷新。</li>
+          <li>点列表里任意请求 → 右侧 <strong>Headers → 请求标头</strong> 里的 <code>Cookie</code> 一行 → 右键 <strong>复制值</strong>。</li>
+          <li>回到 Forge 输入框 <code>Ctrl+V</code> 粘贴 → 保存。下方「最近使用的 Mantis 项目」能列出即成功。</li>
+        </Box>
+
+        <Typography variant="subtitle2">③ 备选：右键请求复制为 cURL</Typography>
+        <Box component="ul" sx={{ mt: 0.5, mb: 1, pl: 3 }}>
+          <li>Network 里右键任意请求 → <strong>Copy as cURL</strong> → 在记事本找 <code>--cookie '....'</code> 那段复制出来。</li>
+        </Box>
+
+        <Alert severity="warning" sx={{ mt: 1 }}>
+          <strong>关键坑</strong>：Mantis 登录态 Cookie 通常是 <code>httpOnly</code>，JS 书签 / <code>document.cookie</code> 读不到，取出来会缺关键字段导致「鉴权失败」。请务必走上面的 DevTools 网络抓取法。
+        </Alert>
+        <Alert severity="info" sx={{ mt: 1 }}>
+          Cookie 会随 Mantis 会话过期（退出登录或几天后），届时 Forge 报「鉴权失败」，重新走一遍即可。整段复制最保险，无需只挑某个字段。
+        </Alert>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={() => setHelpOpen(false)} variant="contained">知道了</Button>
+      </DialogActions>
+    </Dialog>
+    </>
   );
 }
