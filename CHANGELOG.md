@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-21（补）— M4 易用性：物料管理页内置「？OA 导入说明（Chrome 扩展）」弹窗
+
+- **新增功能**：`client/src/pages/MaterialListPage.jsx` 工具栏新增「？OA 导入说明」按钮，弹出 Dialog 图文说明 Chrome/Edge 扩展「Forge OA 物料导入」的安装（chrome://extensions → 开发者模式 → 加载已解压的扩展程序 / 拖入 .crx）、使用（OA 页点图标 → 提取 → 发送到 Forge → 按内部立项号归项目）、更新后需重载扩展、以及仅支持 Chromium 内核浏览器等关键提示。
+- **约束遵守**：复用已导入的 `Dialog/Alert` 组件，未引入 `@mui/icons-material`；行内 code 片段用 `Box component="code"` 轻量样式。
+- **说明**：OA 一键导入依赖 Chrome 扩展，仅 Chrome/Edge 可用；Firefox/Safari 不支持，弹窗已如实标注，引导同事改用 Chrome/Edge。
+
 ## 2026-07-21（补）— M3 易用性：Mantis 设置卡片内置「？如何获取 Cookie」弹窗
 
 - **新增功能**：`client/src/components/issue/MantisConnectionCard.jsx` 在 Cookie 输入框 helperText 处新增可点击「？如何获取 Cookie」链接，点击弹出 Dialog，内嵌浏览器通用取 Cookie 指南（Edge/Firefox/Safari 均适用、DevTools Network 复制法、httpOnly 关键坑、cURL 备选、过期说明）。同事在界面内即可查看，无需另开文档。

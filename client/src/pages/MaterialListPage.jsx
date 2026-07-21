@@ -35,6 +35,16 @@ const COLUMNS = [
 const COL_WIDTH_KEY = "forge.material.colwidths.v1";
 const UNDO_WINDOW = 5 * 60 * 1000;
 
+// 行内 code 片段样式（弹窗中复用）
+const codeStyle = {
+  fontFamily: "monospace",
+  bgcolor: "grey.100",
+  px: 0.5,
+  py: 0.2,
+  borderRadius: 1,
+  fontSize: "0.85em",
+};
+
 // ===== Unicode 箭头 =====
 function SortArrow({ dir }) {
   return (
@@ -122,6 +132,7 @@ export default function MaterialListPage() {
     catch { return {}; }
   });
   const [importOpen, setImportOpen] = useState(false);
+  const [oaHelpOpen, setOaHelpOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
   const [colWidths, setColWidths] = useState(() => {
@@ -527,6 +538,9 @@ export default function MaterialListPage() {
           <Button variant="outlined" onClick={handleExport} sx={{ gap: 0.5 }}>
             ↓ 导出{selected.size > 0 ? `(${selected.size})` : ""}
           </Button>
+          <Button variant="outlined" onClick={() => setOaHelpOpen(true)} sx={{ gap: 0.5 }}>
+            ？ OA 导入说明
+          </Button>
           {undoTime != null && (
             <Button variant="outlined" color="warning" onClick={handleUndo} sx={{ gap: 0.5 }}>
               ↩ 撤销导入({Math.max(0, Math.ceil((UNDO_WINDOW - undoTime) / 60000))}分钟)
@@ -815,6 +829,54 @@ export default function MaterialListPage() {
             anchorOrigin={{ vertical: "bottom", horizontal: "center" }}>
             <Alert severity={snack.severity} onClose={() => setSnack(null)} variant="filled">{snack.text}</Alert>
           </Snackbar>
+        )}
+
+        {/* ---- OA 导入（Chrome 扩展）说明 ---- */}
+        {oaHelpOpen && (
+          <Dialog open onClose={() => setOaHelpOpen(false)} maxWidth="sm" fullWidth>
+            <DialogTitle>OA 物料导入 · Chrome 扩展安装说明</DialogTitle>
+            <DialogContent dividers>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                扩展能做什么
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary", mb: 1.5 }}>
+                安装「Forge OA 物料导入」扩展后，在 OA 采购申请页面点一下扩展图标，即可自动提取物料表格并一键发送到 Forge 对应的项目，省去手动录 Excel。
+              </Typography>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                安装步骤（Chrome / Edge 通用）
+              </Typography>
+              <ol style={{ margin: "4px 0 8px 18px", padding: 0, color: "text.secondary", fontSize: 13, lineHeight: 1.8 }}>
+                <li>地址栏输入 <Box component="code" sx={codeStyle}>chrome://extensions</Box>（Edge 用 <Box component="code" sx={codeStyle}>edge://extensions</Box>）打开扩展管理页</li>
+                <li>右上角打开「开发者模式」开关</li>
+                <li>方式一（推荐，便于后续更新）：点「加载已解压的扩展程序」，选择 Forge 目录下的 <Box component="code" sx={codeStyle}>chrome-extension</Box> 文件夹</li>
+                <li>方式二（打包版）：把 <Box component="code" sx={codeStyle}>chrome-extension.crx</Box> 直接拖到扩展页面完成安装</li>
+              </ol>
+
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                如何使用
+              </Typography>
+              <ol style={{ margin: "4px 0 8px 18px", padding: 0, color: "text.secondary", fontSize: 13, lineHeight: 1.8 }}>
+                <li>打开 OA 采购申请页面（soa.com.cn 域下）</li>
+                <li>点浏览器工具栏的扩展图标「提取物料到 Forge」</li>
+                <li>页面右侧出现提取面板，核对物料条数、申请日期</li>
+                <li>点「发送到 Forge」——物料会自动归到该 OA 单「内部立项号」对应的 Forge 项目</li>
+              </ol>
+
+              <Alert severity="warning" sx={{ mt: 1, mb: 1 }}>
+                该扩展仅支持 Chrome / Edge 等 Chromium 内核浏览器；Firefox、Safari 无法安装使用。如同事用的是这两类浏览器，请改用 Chrome / Edge 进行 OA 导入。
+              </Alert>
+              <Alert severity="info" sx={{ mb: 1 }}>
+                更新扩展代码后，需回到 <Box component="code" sx={codeStyle}>chrome://extensions</Box> 点该扩展的「刷新 / 重载」图标才会生效。
+              </Alert>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                其他注意：① 扩展只在 OA 站点生效，其他网页点图标无反应属正常；② 需保证 Forge 服务正在运行（本机 http://localhost:3000 或内网地址）；③ OA 单上的「内部立项号」要填好，否则物料可能无法正确归到项目。
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setOaHelpOpen(false)} variant="contained">知道了</Button>
+            </DialogActions>
+          </Dialog>
         )}
       </Box>
     </LocalizationProvider>
