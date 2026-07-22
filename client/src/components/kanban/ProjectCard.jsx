@@ -240,8 +240,8 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
             </>
           )}
 
-          {/* 故障概览（关联 Mantis 故障管理模块） */}
-          {faults?.linked && (() => {
+          {/* 故障概览（统一读本地 issues 表，与 M3 故障管理同源） */}
+          {faults?.summary && (() => {
             const s = faults.summary || {};
             const di = Number(s.di) || 0;
             const total = Number(s.total) || 0;
@@ -363,10 +363,10 @@ export default function ProjectCard({ project, tasks = [], faults, onEdit, onPha
             );
           })()}
 
-          {/* 未关联 Mantis 故障时提示 */}
-          {!faults?.linked && faults && (
+          {/* 未关联 Mantis 时提示（本地缺陷仍展示，仅趋势图不可用） */}
+          {faults?.summary && !faults?.linked && (
             <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 0.5 }}>
-              · 未关联 Mantis 故障
+              · 未关联 Mantis（趋势图不可用，仅显示本地缺陷）
             </Typography>
           )}
         </CardContent>

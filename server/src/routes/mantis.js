@@ -153,6 +153,9 @@ router.post("/mantis/sync", async (req, res) => {
 
     // 清除该项目的所有缓存（仅当前用户）
     db.prepare("DELETE FROM sync_cache WHERE project_id=? AND owner_id=?").run(forgeId, req.userId);
+    // 同步后失效仪表板 DI 趋势缓存（该缓存以 Mantis hex id 为 project_id 存储）
+    db.prepare("DELETE FROM sync_cache WHERE project_id=? AND cache_key=? AND owner_id=?")
+      .run(String(mantisHexId), "dashboard_trend", req.userId);
 
     // 更新最后同步状态
     updateLastSync("success", req.userId);

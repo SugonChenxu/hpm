@@ -2,6 +2,14 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-22 — M1 项目概览故障概览实时化（统一源 + 刷新）
+
+- **缺陷修复（两套 DI 分歧）**：原「项目概览」卡片的 DI / 故障数 / 解决率 / 分类饼图**绕过本地库、直读 Mantis 实时接口**（`fetchSummary` 取 Mantis「Defect Index」趋势末点），与 M3 故障管理（读本地 `issues` 表 `SUM(di_weight)`）使用两套数据源，导致"M3 改了 DI、概览不跟随"且两端数字对不上。
+- **重构数据源（统一源 D）**：`GET /api/projects/:id/faults` 改为**头条 DI / 故障数 / 解决率 / 未解决分类**全部从本地 `issues` 表聚合（与 M3 `di-summary` 同口径：`di=SUM(di_weight) WHERE status NOT IN('已关闭')`、`total=COUNT`、`resolved=status='已解决'`、`rate=比例`；分类按 `category` 以 `/` 拆分统计未解决），彻底消除两套 DI 分歧。DI 趋势图仍走 Mantis 时序接口（与 M3 趋势同源，无"两套趋势"问题）。
+- **缺陷修复（300s 缓存致滞后）**：原接口把整个故障概览写入 `sync_cache`（`dashboard_faults`，TTL 300s），缓存期内直接返回旧值、不重算。现**移除该整包缓存**，头条指标每次实时计算；仅 Mantis DI 趋势保留短缓存（`dashboard_trend`，TTL 300s），未关联 Mantis 时仍返回本地 DI。
+- **新增功能（同步即失效 A）**：`POST /api/mantis/sync` 成功 upsert 后，按 Mantis hex id 删除 `dashboard_trend` 趋势缓存（原清理只按 Forge id，清不到以 hex id 为键的趋势缓存），使概览下次请求立即重算趋势。
+- **新增功能（仪表板刷新 B）**：项目概览页新增「刷新故障概览」按钮 + 每 60s 定时刷新（仅重拉 faults，不重载整页），并显示"故障概览更新于 HH:MM:SS"。`ProjectCard` 改为只要 `summary` 存在即渲染故障概览块（未关联 Mantis 时也展示本地缺陷，仅趋势图不可用）。
+
 ## 2026-07-22 — M1 模板导入（Forge 导出 Excel 反灌）
 
 - **新增功能（模板导入按钮）**：排期页工具栏新增独立的「模板导入」按钮（区别于「导入 Excel」），仅识别 Forge 导出的带公式 Excel，实现"导出 → Excel 编辑 → 回灌"闭环。非 Forge 模板会被拒绝并提示改用「导入 Excel」。

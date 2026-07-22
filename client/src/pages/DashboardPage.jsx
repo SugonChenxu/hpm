@@ -9,13 +9,14 @@ import {
   TextField,
   MenuItem,
   IconButton,
+  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogContentText,
   DialogActions,
 } from "@mui/material";
-import { Add, Flag, DeleteOutline } from "@mui/icons-material";
+import { Add, Flag, DeleteOutline, Refresh } from "@mui/icons-material";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
 import {
@@ -70,6 +71,8 @@ export default function DashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editProject, setEditProject] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(null);
   const { openCreateDialog } = useOutletContext();
 
   const sensors = useSensors(
@@ -116,8 +119,23 @@ export default function DashboardPage() {
         if (res.status === "fulfilled") map[res.value.id] = res.value.data;
       });
       setFaultsByProject((prev) => ({ ...prev, ...map }));
+      setLastUpdated(new Date());
     });
   }, []);
+
+  // 手动 / 定时刷新故障概览（仅重拉 faults，不重载整个页面）
+  const refreshFaults = useCallback(() => {
+    if (!projects.length) return;
+    setRefreshing(true);
+    loadFaults(projects);
+    setRefreshing(false);
+  }, [projects, loadFaults]);
+
+  // 每 60 秒自动刷新故障概览（DI 已统一读本地 issues，实时跟随 M3）
+  useEffect(() => {
+    const timer = setInterval(() => refreshFaults(), 60000);
+    return () => clearInterval(timer);
+  }, [refreshFaults]);
 
   useEffect(() => { load(); }, [filter]);
 
@@ -188,6 +206,18 @@ export default function DashboardPage() {
         </TextField>
         <Box sx={{ flexGrow: 1 }} />
         <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+          {lastUpdated && (
+            <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.72rem" }}>
+              故障概览更新于 {lastUpdated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </Typography>
+          )}
+          <Tooltip title="刷新故障概览">
+            <span>
+              <IconButton size="small" onClick={refreshFaults} disabled={refreshing || loading}>
+                <Refresh sx={{ fontSize: 18 }} />
+              </IconButton>
+            </span>
+          </Tooltip>
           <Chip icon={<Flag />} label={`总数 ${projects.length}`} variant="outlined" />
           <Chip label={`进行中 ${activeCount}`} color="primary" variant="outlined" />
         </Box>
