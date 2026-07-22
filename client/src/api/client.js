@@ -156,12 +156,6 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ tasks }),
       }),
-    // 腾讯文档链接导入
-    importFromUrl: (projectId, url) =>
-      request(`/projects/${projectId}/schedule/import-from-url`, {
-        method: "POST",
-        body: JSON.stringify({ url }),
-      }),
   },
   // Mantis 集成
   mantis: {

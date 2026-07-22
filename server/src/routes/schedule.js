@@ -2,7 +2,6 @@ import { Router } from "express";
 import { readdirSync, readFileSync, existsSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import ExcelJS from "exceljs";
 import db from "../db.js";
 import { mapScheduleMatrix } from "../utils/scheduleMapping.js";
 
@@ -15,32 +14,6 @@ const router = Router();
 
 /** 模板目录路径 */
 const TEMPLATES_DIR = join(__dirname, "..", "templates");
-
-/**
- * 将 ExcelJS 单元格转为字符串（修正日期单元格被吞成空串的问题）
- * - Date 对象 → 本地时区 YYYY-MM-DD（避免 UTC 偏移导致跨天）
- * - 富文本 / 公式结果 → 取文本
- */
-function cellValueToStr(cell) {
-  const v = cell.value;
-  if (v == null) return "";
-  if (typeof v === "object") {
-    if (v instanceof Date) {
-      const y = v.getFullYear();
-      const m = String(v.getMonth() + 1).padStart(2, "0");
-      const d = String(v.getDate()).padStart(2, "0");
-      return `${y}-${m}-${d}`;
-    }
-    if (typeof v.text === "string" && v.text) return v.text;
-    if (v.richText && Array.isArray(v.richText)) {
-      return v.richText.map((t) => t.text || "").join("");
-    }
-    if (v.result != null) return String(v.result);
-    if (v.formula != null) return "";
-    return "";
-  }
-  return String(v);
-}
 
 /**
  * 格式化日期为本地时区的 YYYY-MM-DD 字符串
@@ -1445,79 +1418,4 @@ router.post("/projects/:id/schedule/import", (req, res) => {
 });
 
 // ============================================================
-// 端点：POST /projects/:id/schedule/import-from-url — 腾讯文档链接导入
-// ============================================================
-router.post("/projects/:id/schedule/import-from-url", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { url } = req.body;
-    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
-    if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
-    if (project.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
-    if (!url || !/^https?:\/\//i.test(url)) {
-      return res.status(400).json({ ok: false, error: "请提供有效的腾讯文档下载链接" });
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 20000);
-    let buf;
-    let contentType = "";
-    try {
-      const resp = await fetch(url, { signal: controller.signal, redirect: "follow" });
-      if (!resp.ok) throw new Error(`远程获取失败 HTTP ${resp.status}`);
-      contentType = resp.headers.get("content-type") || "";
-      buf = Buffer.from(await resp.arrayBuffer());
-    } finally {
-      clearTimeout(timer);
-    }
-
-    // 校验返回内容是否真是 Excel 文件。腾讯文档的「浏览页链接」返回的是 HTML 网页
-    // （且导出接口需登录鉴权，后端无法直连抓取），必须识别并给出清晰、可执行的指引。
-    const isZip = buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x50 && buf[2] === 0x03 && buf[3] === 0x04; // PK\x03\x04
-    const looksExcel = /excel|spreadsheet|sheet|openxmlformats|octet-stream/i.test(contentType) || /\.xlsx?($|\?)/i.test(url);
-    if (!isZip && !looksExcel) {
-      let host = "";
-      try {
-        host = new URL(url).host || "";
-      } catch {
-        host = "";
-      }
-      if (/docs\.qq\.com|doc\.weixin\.qq\.com/i.test(host)) {
-        return res.status(400).json({
-          ok: false,
-          error:
-            "这是腾讯文档的【浏览页链接】，不是可下载的 Excel 文件。腾讯文档需登录才能导出，系统后端无法直接抓取。\n请任选一种方式导入：\n1）在腾讯文档中点「文件 → 下载为 → 本地 Excel(.xlsx)」，再用本系统的「导入 Excel」上传；\n2）在「分享」设置里开启「允许下载」后，复制「下载链接」（不是浏览链接）粘贴到这里。",
-        });
-      }
-      return res.status(400).json({
-        ok: false,
-        error: "链接返回的不是 Excel 文件（可能是网页）。请确认粘贴的是 .xlsx 下载链接，或改用「导入 Excel」上传本地文件。",
-      });
-    }
-
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buf);
-    const ws = wb.worksheets[0];
-    if (!ws) throw new Error("文档无工作表");
-    const matrix = [];
-    ws.eachRow((row) => {
-      const arr = [];
-      row.eachCell({ includeEmpty: true }, (cell) => {
-        arr.push(cellValueToStr(cell));
-      });
-      matrix.push(arr);
-    });
-
-    const { tasks, warnings } = mapScheduleMatrix(matrix);
-    if (!tasks.length) {
-      return res.status(400).json({ ok: false, error: "未能从文档解析出任何任务", warnings });
-    }
-    const count = db.transaction((pid, list) => insertScheduleTasks(pid, list))(Number(id), tasks);
-    res.json({ ok: true, data: { imported: count, warnings } });
-  } catch (err) {
-    console.error("POST import-from-url:", err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
 export default router;

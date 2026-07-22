@@ -17,7 +17,6 @@ import {
   ToggleButtonGroup,
   ToggleButton,
   SvgIcon,
-  TextField,
 } from "@mui/material";
 import {
   Save,
@@ -45,11 +44,6 @@ const ImportIcon = (props) => (
 const TrashIcon = (props) => (
   <SvgIcon {...props}>
     <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-  </SvgIcon>
-);
-const CloudIcon = (props) => (
-  <SvgIcon {...props}>
-    <path d="M19 9h-1.4c.3-1-.2-2.2-1.2-2.5l-1 .4.9 1.9c.2.4.1.9-.3 1.1-.4.2-.9.1-1.1-.3L13.7 7c1.7-.3 2.3-1.2 2.3-2 0-1.1-1-1.9-2.3-1.7C12.7 3 11.7 3.8 11.4 5H11c-4.4 0-8 3.6-8 8 0 4.4 3.6 8 8 8h8c2.8 0 5-2.2 5-5 0-2.6-2-4.8-4.7-5z" />
   </SvgIcon>
 );
 
@@ -80,12 +74,9 @@ export default function SchedulePage() {
   // Predecessor trigger
   const [predTriggerTaskId, setPredTriggerTaskId] = useState(null);
 
-  // 导入 / 腾讯文档 / 清空
+  // 导入 / 清空
   const fileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
-  const [tencentOpen, setTencentOpen] = useState(false);
-  const [tencentUrl, setTencentUrl] = useState("");
-  const [tencentError, setTencentError] = useState("");
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   // 甘特图时间轴单位
@@ -295,23 +286,6 @@ export default function SchedulePage() {
     }
   };
 
-  const handleTencentImport = async () => {
-    if (!tencentUrl.trim()) return;
-    setImporting(true);
-    setTencentError("");
-    try {
-      const res = await api.schedule.importFromUrl(Number(projectId), tencentUrl.trim());
-      const n = res.data?.imported ?? 0;
-      setSnackbar({ open: true, message: `已从腾讯文档导入 ${n} 条计划`, severity: "success" });
-      setTencentOpen(false);
-      setTencentUrl("");
-      await loadSchedule();
-    } catch (err) {
-      setTencentError(err.message || "导入失败");
-    } finally {
-      setImporting(false);
-    }
-  };
 
   const handleClearAll = async () => {
     setClearConfirmOpen(false);
@@ -545,15 +519,6 @@ export default function SchedulePage() {
         <Button
           size="small"
           variant="outlined"
-          startIcon={<CloudIcon />}
-          onClick={() => setTencentOpen(true)}
-          disabled={importing}
-        >
-          腾讯文档导入
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
           color="error"
           startIcon={<TrashIcon />}
           onClick={() => setClearConfirmOpen(true)}
@@ -678,45 +643,6 @@ export default function SchedulePage() {
         style={{ display: "none" }}
         onChange={handleFileImport}
       />
-
-      {/* 腾讯文档导入对话框 */}
-      <Dialog open={tencentOpen} onClose={() => setTencentOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>从腾讯文档导入</DialogTitle>
-        <DialogContent>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            粘贴腾讯文档表格的<strong>「下载链接」</strong>（不是浏览页链接）。获取方式二选一：
-            ① 文档中点「文件 → 下载为 → 本地 Excel(.xlsx)」，再用本系统的「导入 Excel」上传；
-            ② 在「分享」设置开启「允许下载」后，复制系统提供的<strong>下载链接</strong>粘贴到这里。
-            Forge 会自动识别「任务 / 任务类型 / 开始 / 结束 / 工期」等列，并按层级区分阶段任务与普通任务。
-          </Alert>
-          {tencentError && (
-            <Alert severity="error" sx={{ mb: 2, whiteSpace: "pre-line" }}>
-              {tencentError}
-            </Alert>
-          )}
-          <TextField
-            label="腾讯文档下载链接"
-            placeholder="https://docs.qq.com/.../ 或 .xlsx 下载链接"
-            fullWidth
-            value={tencentUrl}
-            onChange={(e) => {
-              setTencentUrl(e.target.value);
-              if (tencentError) setTencentError("");
-            }}
-            autoFocus
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => { setTencentOpen(false); setTencentError(""); }}>取消</Button>
-          <Button
-            onClick={handleTencentImport}
-            variant="contained"
-            disabled={importing || !tencentUrl.trim()}
-          >
-            {importing ? "导入中…" : "导入"}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* 清空确认 */}
       <Dialog open={clearConfirmOpen} onClose={() => setClearConfirmOpen(false)} maxWidth="xs">

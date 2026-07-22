@@ -2,6 +2,13 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-22 — M1 精简：移除腾讯文档导入功能
+
+- **移除功能**：删除前端"腾讯文档导入"按钮及相关 UI（Dialog、handleTencentImport、CloudIcon、tencentUrl/tencentError state）。
+- **接口清理**：删除后端 `POST /api/projects/:id/schedule/import-from-url` 端点及 `cellValueToStr` 辅助函数；前端 API client 同步移除 `importFromUrl`。
+- **原因**：腾讯文档浏览页链接返回 HTML 而非 Excel，内部 protobuf 格式逆向成本高（行列映射未攻克），下载链接实际就是 xlsx 直链，与"导入 Excel"走同一套逻辑——保留半残功能反而困惑用户。
+- **保留**：`import ExcelJS` 静态导入移除（仅用于已删的 `cellValueToStr`），导出端点仍使用动态 import。
+
 ## 2026-07-21（补4）— M1 导入兼容：任务列含日期序列号时的自动列偏移修正
 
 - **缺陷背景**：部分 Excel 模板（如勒拿河 T610H59L 开发计划）表头虽含「任务」列，但数据行中该列的实际值为 Excel 序列号（开始日期），任务名称实际写在「小阶段」列中——导致映射后任务名变成数字、日期列整体左移串行。
