@@ -1,105 +1,38 @@
 import { Router } from "express";
 import db from "../db.js";
-import { getConnection, getAdapter, resolveMantisId } from "../mantis-resolve.js";
+import { getConnection, getAdapter, resolveMantisId, mantisError } from "../mantis-resolve.js";
 
 const router = Router();
 
-// ── 项目卡片故障概览：DI 趋势（Mantis 实时）短缓存 ──
-// 说明：头条 DI / 故障数 / 解决率 / 未解决分类 已统一改读本地 issues 表（与 M3 故障管理同源），
-// 因此这些字段每次实时计算、无需缓存。仅「DI 趋势」依赖 Mantis 时序接口，
-// 保留短缓存（TTL 300s），并在 Mantis 同步成功后失效（见 mantis.js）。
-function getTrendCache(ownerId, mantisId) {
-  const row = db.prepare(
-    "SELECT cache_data FROM sync_cache WHERE project_id=? AND cache_key=? AND owner_id=?"
-  ).get(String(mantisId), "dashboard_trend", ownerId);
-  if (!row) return null;
-  try { return JSON.parse(row.cache_data); } catch { return null; }
-}
-function setTrendCache(ownerId, mantisId, data) {
-  db.prepare("DELETE FROM sync_cache WHERE project_id=? AND cache_key=? AND owner_id=?")
-    .run(String(mantisId), "dashboard_trend", ownerId);
-  db.prepare(
-    "INSERT INTO sync_cache (project_id, cache_key, cache_data, ttl_seconds, owner_id) VALUES (?,?,?,300,?)"
-  ).run(String(mantisId), "dashboard_trend", JSON.stringify(data), ownerId);
-}
-
-// 从本地 issues 表聚合故障概览（与 M3 故障管理共用同一数据源）
-// 返回 { di, total, resolved, rate }
-function aggregateLocalIssues(ownerId, projectId) {
-  const rows = db.prepare(
-    "SELECT di_weight, status, category FROM issues WHERE project_id=? AND owner_id=?"
-  ).all(Number(projectId), ownerId);
-  const total = rows.length;
-  const resolved = rows.filter((r) => (r.status || "") === "已解决").length;
-  const di = Math.round(
-    rows
-      .filter((r) => (r.status || "") !== "已关闭")
-      .reduce((s, r) => s + (Number(r.di_weight) || 0), 0) * 100
-  ) / 100;
-  const rate = total > 0 ? Math.round((resolved / total) * 10000) / 100 : 0;
-  // 未解决分类分布（category 可能以 "/" 分隔多分类）
-  const counts = {};
-  for (const r of rows) {
-    if ((r.status || "") === "已解决") continue;
-    const cats = (r.category || "").split("/").map((c) => c.trim()).filter(Boolean);
-    const list = cats.length ? cats : ["其他"];
-    for (const c of list) counts[c] = (counts[c] || 0) + 1;
-  }
-  const unresolvedCategoryStats = Object.entries(counts)
-    .map(([category, count]) => ({ category, count }))
-    .filter((x) => x.count > 0)
-    .sort((a, b) => b.count - a.count);
-  return { summary: { di, total, resolved, rate }, unresolvedCategoryStats };
-}
-
-// 项目卡片故障概览
-// 返回 { linked, summary(来自本地 issues), unresolvedCategoryStats(本地), diTrend(Mantis 时序) }
-//       linked=false 时 diTrend=[]，但 summary 仍来自本地 issues（即使未关联 Mantis 也展示本地缺陷）
+// 项目卡片故障概览（从 Mantis 实时拉取，与故障管理页同源）
+// 返回 { linked:true, mantisProjectId, summary, diTrend, unresolvedCategoryStats }
+//       { linked:false, reason:"no_cookie"|"no_match" }
 router.get("/projects/:id/faults", async (req, res) => {
   const projectId = req.params.id;
   const ownerId = req.userId;
   const project = db.prepare("SELECT id FROM projects WHERE id=? AND owner_id=?").get(projectId, ownerId);
   if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
-
-  // 1) 头条 DI / 故障数 / 解决率 / 分类 —— 始终来自本地 issues（实时、与 M3 同源）
-  const local = aggregateLocalIssues(ownerId, projectId);
-
-  // 2) DI 趋势 —— 来自 Mantis 时序接口（与 M3 故障仪表板同源），短缓存
-  let linked = false;
-  let diTrend = [];
   try {
     const conn = getConnection(ownerId);
-    if (conn && conn.api_token) {
-      let mantisId;
-      try {
-        mantisId = await resolveMantisId(ownerId, projectId);
-      } catch (e) {
-        if (e.code === "no_match") mantisId = null;
-        else throw e;
-      }
-      if (mantisId) {
-        linked = true;
-        const cached = getTrendCache(ownerId, mantisId);
-        if (cached) {
-          diTrend = cached;
-        } else {
-          const adapter = getAdapter(ownerId);
-          diTrend = await adapter.fetchDITrend(mantisId);
-          setTrendCache(ownerId, mantisId, diTrend);
-        }
-      }
+    if (!conn || !conn.api_token) return res.json({ ok: true, linked: false, reason: "no_cookie" });
+    let mantisId;
+    try {
+      mantisId = await resolveMantisId(ownerId, projectId);
+    } catch (e) {
+      if (e.code === "no_match") return res.json({ ok: true, linked: false, reason: "no_match" });
+      throw e;
     }
+    const adapter = getAdapter(ownerId);
+    const [summary, diTrend, unresolvedCategoryStats] = await Promise.all([
+      adapter.fetchSummary(mantisId),
+      adapter.fetchDITrend(mantisId),
+      adapter.fetchUnresolvedCategoryStats(mantisId),
+    ]);
+    res.json({ ok: true, linked: true, mantisProjectId: mantisId, summary, diTrend, unresolvedCategoryStats });
   } catch (e) {
-    // 趋势拉取失败不影响头条 DI（已来自本地），仅趋势为空
-    console.warn(`[faults] DI 趋势拉取失败 project=${projectId}:`, e?.message || e);
+    const { status, message } = mantisError(e, "获取故障概览失败");
+    res.status(status).json({ ok: false, error: message });
   }
-
-  res.json({
-    ok: true,
-    linked,
-    ...local,
-    diTrend,
-  });
 });
 
 // 项目列表（仅当前用户）
