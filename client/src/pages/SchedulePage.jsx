@@ -391,7 +391,7 @@ export default function SchedulePage() {
     window.document.body.appendChild(link);
     link.click();
     window.document.body.removeChild(link);
-    setSnackbar({ open: true, message: "正在导出...", severity: "info" });
+    setSnackbar({ open: true, message: "已导出 Excel（开始/完成时间已写入联动公式）", severity: "info" });
   };
 
   // Save version

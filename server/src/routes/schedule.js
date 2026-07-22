@@ -4,6 +4,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import db from "../db.js";
 import { mapScheduleMatrix } from "../utils/scheduleMapping.js";
+import { buildScheduleWorkbook } from "../utils/scheduleExport.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const router = Router();
@@ -1177,91 +1178,7 @@ router.get("/projects/:id/schedule/export", async (req, res) => {
 
     tasks = updateAllCompletionStatuses(tasks);
 
-    const ExcelJS = (await import("exceljs")).default;
-
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("项目排期表");
-
-    sheet.columns = [
-      { header: "序号", key: "order", width: 8 },
-      { header: "任务名称", key: "name", width: 30 },
-      { header: "开始时间", key: "start", width: 14 },
-      { header: "完成时间", key: "end", width: 14 },
-      { header: "工期", key: "duration", width: 8 },
-      { header: "完成情况", key: "status", width: 12 },
-      { header: "前置任务", key: "predecessors", width: 20 },
-      { header: "备注", key: "notes", width: 20 },
-    ];
-
-    const taskRowMap = new Map();
-    tasks.forEach((t, i) => {
-      taskRowMap.set(t.id, i + 2);
-    });
-
-    for (let i = 0; i < tasks.length; i++) {
-      const t = tasks[i];
-      const rowNum = i + 2;
-
-      let predNames = "";
-      try {
-        const preds = JSON.parse(t.predecessor_ids || "[]");
-        predNames = preds
-          .map(pid => tasks.find(tt => tt.id === pid))
-          .filter(Boolean)
-          .map(p => p.name)
-          .join("、");
-      } catch { predNames = ""; }
-
-      const durationVal = t.duration_days || 1;
-      const indent = "  ".repeat(t.depth || 0);
-      const displayName = indent + (t.depth > 0 ? "└ " : "") + t.name;
-
-      const rowValues = [
-        t.task_order,
-        displayName,
-        t.planned_start,
-        t.planned_end,
-        durationVal,
-        t.completion_status || "未开始",
-        predNames,
-        t.notes || "",
-      ];
-
-      sheet.addRow(rowValues);
-    }
-
-    for (let i = 0; i < tasks.length; i++) {
-      const rowNum = i + 2;
-      const startCell = sheet.getCell(rowNum, 3);
-      const endCell = sheet.getCell(rowNum, 4);
-      if (typeof startCell.value === "string" && !String(startCell.value).startsWith("=")) {
-        startCell.numFmt = "yyyy-mm-dd";
-      }
-      if (typeof endCell.value === "string" && !String(endCell.value).startsWith("=")) {
-        endCell.numFmt = "yyyy-mm-dd";
-      }
-    }
-
-    const headerRow = sheet.getRow(1);
-    headerRow.font = { bold: true };
-    headerRow.fill = {
-      type: "pattern",
-      pattern: "solid",
-      fgColor: { argb: "FFE3F2FD" },
-    };
-    headerRow.alignment = { horizontal: "center", vertical: "middle" };
-
-    for (let i = 1; i <= tasks.length + 1; i++) {
-      const row = sheet.getRow(i);
-      row.eachCell(cell => {
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        };
-      });
-    }
+    const workbook = await buildScheduleWorkbook(tasks, project);
 
     const rawName = `${project.code || project.name}_排期表_${todayStr()}.xlsx`;
     res.setHeader(
