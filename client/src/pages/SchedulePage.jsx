@@ -46,6 +46,12 @@ const TrashIcon = (props) => (
     <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
   </SvgIcon>
 );
+// 模板导入（Forge 导出 Excel 反灌）：双箭头循环图标
+const SyncIcon = (props) => (
+  <SvgIcon {...props}>
+    <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
+  </SvgIcon>
+);
 
 export default function SchedulePage() {
   const [searchParams] = useSearchParams();
@@ -76,8 +82,11 @@ export default function SchedulePage() {
 
   // 导入 / 清空
   const fileInputRef = useRef(null);
+  const templateInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false);
+  const [pendingTemplateTasks, setPendingTemplateTasks] = useState(null);
 
   // 甘特图时间轴单位
   const [ganttUnit, setGanttUnit] = useState("day");
@@ -281,6 +290,50 @@ export default function SchedulePage() {
       await loadSchedule();
     } catch (err) {
       setSnackbar({ open: true, message: err.message || "导入失败", severity: "error" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // ===== 模板导入（Forge 导出 Excel 反灌） =====
+  const handleTemplateImportClick = () => templateInputRef.current?.click();
+
+  const handleTemplateImport = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      // 第二参 "forge-template"：仅识别 Forge 导出的带公式 Excel
+      const { tasks, warnings } = await parseScheduleExcel(file, "forge-template");
+      setPendingTemplateTasks(tasks);
+      setTemplateConfirmOpen(true);
+      if (warnings?.length) {
+        setSnackbar({ open: true, message: `模板解析提示：${warnings.length} 条`, severity: "info" });
+      }
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "模板解析失败", severity: "error" });
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const confirmTemplateImport = async () => {
+    if (!pendingTemplateTasks) return;
+    setTemplateConfirmOpen(false);
+    setImporting(true);
+    try {
+      const res = await api.schedule.importTemplate(Number(projectId), pendingTemplateTasks);
+      const n = res.data?.imported ?? pendingTemplateTasks.length;
+      setPendingTemplateTasks(null);
+      setSnackbar({
+        open: true,
+        message: `已通过模板反灌 ${n} 条计划（覆盖原排期）`,
+        severity: "success",
+      });
+      await loadSchedule();
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "模板导入失败", severity: "error" });
     } finally {
       setImporting(false);
     }
@@ -518,6 +571,17 @@ export default function SchedulePage() {
         </Button>
         <Button
           size="small"
+          variant="contained"
+          color="secondary"
+          startIcon={<SyncIcon />}
+          onClick={handleTemplateImportClick}
+          disabled={importing}
+          title="识别 Forge 导出的 Excel（含公式），回灌并覆盖当前排期"
+        >
+          模板导入
+        </Button>
+        <Button
+          size="small"
           variant="outlined"
           color="error"
           startIcon={<TrashIcon />}
@@ -643,6 +707,14 @@ export default function SchedulePage() {
         style={{ display: "none" }}
         onChange={handleFileImport}
       />
+      {/* 隐藏文件选择（模板导入 / Forge 导出 Excel 反灌） */}
+      <input
+        ref={templateInputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        style={{ display: "none" }}
+        onChange={handleTemplateImport}
+      />
 
       {/* 清空确认 */}
       <Dialog open={clearConfirmOpen} onClose={() => setClearConfirmOpen(false)} maxWidth="xs">
@@ -656,6 +728,22 @@ export default function SchedulePage() {
           <Button onClick={() => setClearConfirmOpen(false)}>取消</Button>
           <Button onClick={handleClearAll} color="error" variant="contained">
             清空
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 模板导入确认（反灌将覆盖当前排期） */}
+      <Dialog open={templateConfirmOpen} onClose={() => setTemplateConfirmOpen(false)} maxWidth="xs">
+        <DialogTitle>确认模板反灌</DialogTitle>
+        <DialogContent>
+          <Typography>
+            将用该 Forge 模板覆盖当前项目的全部排期（共 {pendingTemplateTasks?.length ?? 0} 条）。原排期数据将被替换，此操作不可恢复。是否继续？
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTemplateConfirmOpen(false)}>取消</Button>
+          <Button onClick={confirmTemplateImport} color="secondary" variant="contained">
+            覆盖导入
           </Button>
         </DialogActions>
       </Dialog>

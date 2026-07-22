@@ -10,6 +10,8 @@ import ExcelJS from "exceljs";
  *     完成时间 = MAX(其叶子子孙的完成时间)。
  *  4. 所有日期以真实 Excel 日期序列号写入，并写入缓存结果；同时设置
  *     fullCalcOnLoad，确保用 Excel/WPS 打开时重新计算，公式联动生效。
+ *  5. 额外导出「任务类型」列（阶段任务/普通任务/节点任务），使导出的 Excel
+ *     可被「模板导入」精确还原层级与里程碑，实现反灌。
  *
  * @param {Array} tasks 已附带 completion_status / depth 的任务树（扁平、按展示顺序）
  * @param {Object} project 项目对象（用于可能的扩展）
@@ -21,9 +23,28 @@ export async function buildScheduleWorkbook(tasks, project) {
   workbook.calcProperties = { fullCalcOnLoad: true };
 
   const sheet = workbook.addWorksheet("项目排期表");
+
+  // 列布局（含「任务类型」列，便于反灌时精确还原阶段/节点）
+  const COL = {
+    order: 1,
+    name: 2,
+    type: 3,
+    start: 4,
+    end: 5,
+    duration: 6,
+    status: 7,
+    pred: 8,
+    notes: 9,
+  };
+  const colL = (n) => String.fromCharCode(64 + n); // 1->A ... 9->I
+  const startCol = colL(COL.start); // D
+  const endCol = colL(COL.end); // E
+  const durCol = colL(COL.duration); // F
+
   sheet.columns = [
     { header: "序号", key: "order", width: 8 },
     { header: "任务名称", key: "name", width: 30 },
+    { header: "任务类型", key: "type", width: 10 },
     { header: "开始时间", key: "start", width: 14 },
     { header: "完成时间", key: "end", width: 14 },
     { header: "工期", key: "duration", width: 8 },
@@ -99,11 +120,16 @@ export async function buildScheduleWorkbook(tasks, project) {
 
     const durationVal = t.duration_days || 1;
     const indent = "  ".repeat(t.depth || 0);
-    const displayName = indent + (t.depth > 0 ? "└ " : "") + t.name;
+    // 先剥离名字中可能已存在的「└ 」/前导空格（避免历史数据或重复导出时前缀累积），
+    // 再按规范拼接待导出层级前缀，保证导出幂等、反灌后名称干净。
+    const cleanSrcName = String(t.name).replace(/^(\s*)(└\s)?/, "");
+    const displayName = indent + (t.depth > 0 ? "└ " : "") + cleanSrcName;
+    const typeVal = t.task_type || "普通任务";
 
     const rowValues = [
       t.task_order,
       displayName,
+      typeVal,
       null, // 开始时间（下方填充）
       null, // 完成时间（下方填充）
       durationVal,
@@ -113,8 +139,8 @@ export async function buildScheduleWorkbook(tasks, project) {
     ];
     sheet.addRow(rowValues);
 
-    const startCell = sheet.getCell(rowNum, 3);
-    const endCell = sheet.getCell(rowNum, 4);
+    const startCell = sheet.getCell(rowNum, COL.start);
+    const endCell = sheet.getCell(rowNum, COL.end);
     startCell.numFmt = "yyyy-mm-dd";
     endCell.numFmt = "yyyy-mm-dd";
 
@@ -127,8 +153,8 @@ export async function buildScheduleWorkbook(tasks, project) {
       const leafRows = collectLeafRows(t.id);
       if (leafRows.length > 0) {
         const leafTasks = leafRows.map((r) => tasks[r - 2]).filter(Boolean);
-        const cRefs = leafRows.map((r) => `C${r}`).join(",");
-        const dRefs = leafRows.map((r) => `D${r}`).join(",");
+        const cRefs = leafRows.map((r) => `${startCol}${r}`).join(",");
+        const dRefs = leafRows.map((r) => `${endCol}${r}`).join(",");
         const minStart = Math.min(
           ...leafTasks.map((lt) => toSerial(lt.planned_start)).filter((x) => x != null)
         );
@@ -155,7 +181,7 @@ export async function buildScheduleWorkbook(tasks, project) {
         const dRefs = predIds
           .map((pid) => taskRowMap.get(pid))
           .filter(Boolean)
-          .map((r) => `D${r}`)
+          .map((r) => `${endCol}${r}`)
           .join(",");
         if (dRefs) {
           startCell.value = {
@@ -172,7 +198,7 @@ export async function buildScheduleWorkbook(tasks, project) {
       // 完成时间 = 开始时间 + 工期 - 1（含首尾日历天数，与 Forge 一致）
       if (startSerial != null) {
         endCell.value = {
-          formula: `=C${rowNum}+E${rowNum}-1`,
+          formula: `=${startCol}${rowNum}+${durCol}${rowNum}-1`,
           result: endSerial != null ? endSerial : undefined,
         };
       } else if (endSerial != null) {

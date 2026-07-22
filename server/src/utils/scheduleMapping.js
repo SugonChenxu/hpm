@@ -275,7 +275,7 @@ function daysBetweenLocal(startStr, endStr) {
 // - 阶段任务：时间由系统聚合，保持原样（通常留空，落库后由子任务回推）
 // - 节点任务：单日里程碑，开始 = 完成，工期恒为 1
 // - 普通任务：开始+完成→算工期；开始+工期→算完成；完成+工期→反推开始
-function deriveDates(start, end, duration, taskType) {
+export function deriveDates(start, end, duration, taskType) {
   if (taskType === "阶段任务") {
     // 阶段任务时间通常由子任务聚合回推；若显式给了开始+完成，也先算出工期（无子任务时仍正确显示）
     if (start && end) return { start, end, duration: Math.max(1, daysBetweenLocal(start, end)) };
@@ -478,4 +478,139 @@ export function mapScheduleMatrix(matrix) {
     pushTask(name, taskType, dStart, dEnd, dDur, get(row, "predecessor"), get(row, "notes"), indent);
   }
   return { tasks, unmatched, warnings };
+}
+
+// ============ Forge 导出模板识别与解析（模板导入 / 反灌专用） ============
+
+// 判断一组表头是否为 Forge 导出的排期模板。
+// 必要条件：含 任务名称 + 开始时间 + 完成时间 + 工期；
+// 确认条件（区别于普通 Excel）：含「任务类型」列，或数据行存在 └ 缩进。
+export function detectForgeTemplate(headers, sampleNames = []) {
+  const h = (headers || []).map((x) => (x == null ? "" : String(x)));
+  const { map } = buildFieldMap(h);
+  const hasCore =
+    map.name != null &&
+    map.planned_start != null &&
+    map.planned_end != null &&
+    map.duration_days != null;
+  if (!hasCore) return false;
+  const hasTypeCol = map.task_type != null;
+  const hasIndent = sampleNames.some((n) => typeof n === "string" && n.includes("└"));
+  return hasTypeCol || hasIndent;
+}
+
+// 解析 Forge 导出的排期模板矩阵，返回可被 insertScheduleTasks 直接消费的任务数组。
+// 关键能力（区别于通用 mapScheduleMatrix）：
+//  1. 剥离「└ 」前缀与前导空格，还原干净任务名与缩进层级（depth）。
+//  2. 依据「任务类型」列（或层级推断）精确还原阶段任务 / 节点任务。
+//  3. 日期列读取公式缓存值（SheetJS raw:true 返回序列号或 Date），跨时区稳定。
+//  4. 前置任务以「名称」呈现（与导出一致），由 insertScheduleTasks 按名解析为 ID。
+//  5. 完成情况列不导入（Forge 按日期自动推导，导出仅作参考）。
+export function mapForgeTemplate(matrix) {
+  if (!matrix || !matrix.length) {
+    return { isForgeTemplate: false, tasks: [], unmatched: [], warnings: ["文件为空，无数据"] };
+  }
+  const { headerRowIndex, warnings: hw } = findHeaderRow(matrix);
+  const headers = matrix[headerRowIndex].map((h) => (h == null ? "" : String(h)));
+  const { map } = buildFieldMap(headers);
+  const get = (row, f) => (map[f] != null ? row[map[f]] : undefined);
+
+  // 采样数据行名称，用于 └ 缩进判定
+  const sampleNames = [];
+  for (let r = headerRowIndex + 1; r < matrix.length; r++) {
+    const row = matrix[r];
+    if (!row) continue;
+    const v = get(row, "name");
+    if (v != null && String(v).trim() !== "") sampleNames.push(String(v));
+  }
+
+  if (!detectForgeTemplate(headers, sampleNames)) {
+    return {
+      isForgeTemplate: false,
+      tasks: [],
+      unmatched: headers,
+      warnings: [
+        "未识别到 Forge 排期模板（需含：任务名称、开始时间、完成时间、工期，且含「任务类型」列或 └ 缩进）。请确认文件来源，或改用「导入 Excel」。",
+      ],
+    };
+  }
+
+  const warnings = [...hw];
+  const dataStart = headerRowIndex + 1;
+  const toDur = (raw) =>
+    raw !== undefined && raw !== null && raw !== ""
+      ? Number(String(raw).replace(/[, ]/g, "")) || null
+      : null;
+
+  // 第一遍：逐行提取（含剥离 └ / 前导空格还原名称与层级）
+  const rows = [];
+  for (let r = dataStart; r < matrix.length; r++) {
+    const row = matrix[r];
+    if (!row || row.every((c) => c === "" || c == null)) continue;
+    const nameRaw = get(row, "name");
+    const rawName = nameRaw != null ? String(nameRaw) : "";
+    const m = rawName.match(/^(\s*)(└\s)?([\s\S]*)$/);
+    const lead = m ? m[1].length : 0;
+    const cleanName = m ? m[3].trim() : rawName.trim();
+    const depth = Math.floor(lead / 2);
+    if (!cleanName) continue;
+
+    const startRaw = get(row, "planned_start");
+    const endRaw = get(row, "planned_end");
+    // 防御：若单元格意外返回公式字符串（正常应为缓存序列号），置空交由 deriveDates 兜底
+    const sVal = typeof startRaw === "string" && startRaw.startsWith("=") ? null : startRaw;
+    const eVal = typeof endRaw === "string" && endRaw.startsWith("=") ? null : endRaw;
+
+    rows.push({
+      cleanName,
+      depth,
+      task_type_hint: get(row, "task_type") != null ? String(get(row, "task_type")).trim() : "",
+      start: toDateStr(sVal),
+      end: toDateStr(eVal),
+      duration: get(row, "duration_days"),
+      predecessor: get(row, "predecessor") != null ? String(get(row, "predecessor")).trim() : "",
+      notes: get(row, "notes") != null ? String(get(row, "notes")).trim() : "",
+    });
+  }
+
+  if (!rows.length) {
+    return { isForgeTemplate: true, tasks: [], unmatched: [], warnings: ["模板未包含任何任务行"] };
+  }
+
+  // 第二遍：用缩进栈确定 parent，并据「任务类型」列或层级推断阶段任务
+  const stack = [];
+  const parentOf = new Array(rows.length).fill(null);
+  for (let i = 0; i < rows.length; i++) {
+    const d = rows[i].depth;
+    stack.length = d; // 截断更深层级，避免跨级
+    if (d > 0 && stack[d - 1] != null) parentOf[i] = stack[d - 1];
+    stack[d] = i;
+  }
+  const isParent = new Array(rows.length).fill(false);
+  for (let i = 0; i < rows.length; i++) if (parentOf[i] != null) isParent[parentOf[i]] = true;
+
+  const tasks = [];
+  for (let i = 0; i < rows.length; i++) {
+    const rw = rows[i];
+    let taskType;
+    if (rw.task_type_hint) {
+      taskType = detectTaskType(rw.task_type_hint, rw.cleanName);
+    } else {
+      taskType = isParent[i] ? "阶段任务" : "普通任务";
+    }
+    const dur = toDur(rw.duration);
+    const derived = deriveDates(rw.start, rw.end, dur, taskType);
+    tasks.push({
+      name: rw.cleanName,
+      task_type: taskType,
+      planned_start: derived.start,
+      planned_end: derived.end,
+      duration_days: derived.duration,
+      predecessor: rw.predecessor || null,
+      notes: rw.notes,
+      indentLevel: rw.depth,
+    });
+  }
+
+  return { isForgeTemplate: true, tasks, unmatched: [], warnings };
 }

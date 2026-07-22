@@ -1,9 +1,11 @@
 import * as XLSX from "xlsx";
-import { mapScheduleMatrix } from "./scheduleMapping";
+import { mapScheduleMatrix, mapForgeTemplate } from "./scheduleMapping";
 
 // 解析本地 Excel 文件为排期任务
-// 模糊识别表头，并自动区分阶段任务 / 节点任务 / 普通任务
-export async function parseScheduleExcel(file) {
+// mode:
+//  - "excel"（默认）：通用导入，模糊识别表头，自动区分阶段/节点/普通任务
+//  - "forge-template"：识别 Forge 导出的带公式 Excel，剥离 └ 缩进、按任务类型列精确还原层级
+export async function parseScheduleExcel(file, mode = "excel") {
   const buf = await file.arrayBuffer();
   let wb;
   try {
@@ -16,6 +18,17 @@ export async function parseScheduleExcel(file) {
   // raw: true → 返回原始值（数字=日期序列号、字符串=文本），避免 locale 格式化导致日期乱序
   const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "", raw: true });
   if (!matrix.length) throw new Error("文件无数据");
+
+  if (mode === "forge-template") {
+    const result = mapForgeTemplate(matrix);
+    if (!result.isForgeTemplate) {
+      throw new Error(result.warnings?.[0] || "该文件不是 Forge 导出的排期模板");
+    }
+    if (!result.tasks.length) {
+      throw new Error("模板未包含任何任务行");
+    }
+    return { tasks: result.tasks, unmatched: result.unmatched, warnings: result.warnings };
+  }
 
   const { tasks, unmatched, warnings } = mapScheduleMatrix(matrix);
   if (!tasks.length) {

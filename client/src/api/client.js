@@ -156,6 +156,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ tasks }),
       }),
+    // 模板导入（Forge 导出 Excel 反灌）：替换式写入
+    importTemplate: (projectId, tasks) =>
+      request(`/projects/${projectId}/schedule/import-template`, {
+        method: "POST",
+        body: JSON.stringify({ tasks }),
+      }),
   },
   // Mantis 集成
   mantis: {

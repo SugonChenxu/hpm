@@ -1335,4 +1335,29 @@ router.post("/projects/:id/schedule/import", (req, res) => {
 });
 
 // ============================================================
+// 端点：POST /projects/:id/schedule/import-template — 模板导入（Forge 导出 Excel 反灌）
+// 与 import 的区别：先清空该项目现有排期，再整体写入，实现「导出→编辑→回灌」闭环。
+// ============================================================
+router.post("/projects/:id/schedule/import-template", (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tasks } = req.body;
+    const project = db.prepare("SELECT id, owner_id FROM projects WHERE id = ?").get(id);
+    if (!project) return res.status(404).json({ ok: false, error: "项目不存在" });
+    if (project.owner_id !== req.userId) return res.status(403).json({ ok: false, error: "无权访问该项目" });
+    if (!Array.isArray(tasks) || !tasks.length) {
+      return res.status(400).json({ ok: false, error: "tasks 不能为空" });
+    }
+    const count = db.transaction((pid, list) => {
+      db.prepare("DELETE FROM schedule_tasks WHERE project_id = ?").run(pid);
+      return insertScheduleTasks(pid, list);
+    })(Number(id), tasks);
+    res.json({ ok: true, data: { imported: count } });
+  } catch (err) {
+    console.error("POST import-template:", err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ============================================================
 export default router;
