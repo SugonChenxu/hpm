@@ -40,7 +40,6 @@ const REQUIREMENT_COLUMNS = [
   { key: "estimated_price", label: "预估单价", type: "number", width: 110 },
   { key: "quantity",        label: "数量",     type: "number", width: 90 },
   { key: "material_status", label: "物料状态", type: "status", width: 110 },
-  { key: "oa_link",         label: "OA链接",  type: "text",   width: 200 },
   { key: "notes",           label: "备注",     type: "text",   width: 220 },
 ];
 
@@ -72,10 +71,10 @@ function StatusChip({ status, onClick }) {
   const st = statusStyle(status);
   return (
     <Chip
-      label={<Box component="span" sx={{ color: st.color }}>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3, opacity: 0.7 }}>▾</Box></Box>}
+      label={<Box component="span" sx={{ color: st.color }}>{status}<Box component="span" sx={{ fontSize: 10, ml: 0.3, opacity: onClick ? 0.7 : 0 }}>▾</Box></Box>}
       size="small"
       onClick={onClick}
-      sx={{ bgcolor: st.bg, fontWeight: 600, cursor: "pointer", maxWidth: 90, border: "1px solid", borderColor: st.border, "& .MuiChip-label": { px: 1 } }}
+      sx={{ bgcolor: st.bg, fontWeight: 600, cursor: onClick ? "pointer" : "default", maxWidth: 90, border: "1px solid", borderColor: st.border, "& .MuiChip-label": { px: 1 } }}
     />
   );
 }
@@ -327,7 +326,6 @@ export default function MaterialListPage() {
         { key: "estimated_price", label: "预估单价", type: "number" },
         { key: "quantity", label: "数量", type: "number" },
         { key: "material_status", label: "物料状态", type: "status" },
-        { key: "oa_link", label: "OA链接", type: "text" },
         { key: "notes", label: "备注", type: "text" },
       ]
     : [
@@ -419,7 +417,11 @@ export default function MaterialListPage() {
   // ===== 导入/导出/撤销 =====
   const handleImportDone = () => { setImportOpen(false); load(); };
   const handleExport = () => {
-    const exportRows = selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
+    const base = selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
+    // 需求清单导出用联动状态（采购状态优先），与界面显示一致
+    const exportRows = isRequirement
+      ? base.map((r) => (r.purchase_status != null ? { ...r, material_status: r.purchase_status } : r))
+      : base;
     const exportCols = [{ key: "__seq__", label: "序号" }, ...activeColumns];
     exportMaterialsExcel(exportRows, {
       fileName: isRequirement ? "需求清单.xlsx" : "采购清单.xlsx",
@@ -610,7 +612,7 @@ export default function MaterialListPage() {
           <Alert severity="info" sx={{ mb: 1, py: 0 }}
             action={
               <Box sx={{ display: "flex", gap: 0.5 }}>
-                {MATERIAL_STATUSES.map((s) => (
+                {!isRequirement && MATERIAL_STATUSES.map((s) => (
                   <Button key={s} size="small" variant="outlined" onClick={() => handleBatchStatus(s)}
                     sx={{ fontSize: "0.75rem", py: 0, color: statusStyle(s).color, borderColor: statusStyle(s).bg }}>
                     {s}
@@ -709,14 +711,23 @@ export default function MaterialListPage() {
                         );
                       }
 
-                      // 状态列
+                      // 状态列（需求清单联动采购状态，联动时只读）
                       if (col.key === "material_status") {
+                        const synced = isRequirement && row.purchase_status != null;
+                        const shown = synced ? row.purchase_status : (row.material_status || "默认");
                         return (
                           <TableCell key={col.key} sx={{ p: 0.5 }}>
-                            <StatusChip
-                              status={row.material_status || "默认"}
-                              onClick={(e) => setStatusMenu({ rowId: row.id, anchorEl: e.currentTarget })}
-                            />
+                            <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+                              <StatusChip
+                                status={shown}
+                                onClick={synced ? undefined : (e) => setStatusMenu({ rowId: row.id, anchorEl: e.currentTarget })}
+                              />
+                              {synced && (
+                                <Box component="span" sx={{ fontSize: 10, color: "text.secondary" }} title="状态随采购清单联动">
+                                  ↓采购
+                                </Box>
+                              )}
+                            </Box>
                           </TableCell>
                         );
                       }
@@ -818,18 +829,27 @@ export default function MaterialListPage() {
               {selected.size > 1 ? `已选 ${selected.size} 项` : "右键操作"}
             </Typography>
           </MenuItem>
-          <MenuItem onClick={() => handleCtxAction("manufacturer", "厂家", "text")} sx={{ color: "#222" }}>修改厂家</MenuItem>
-          <MenuItem onClick={() => handleCtxAction("material_status", "物料状态", "status")} sx={{ color: "#222" }}>修改状态</MenuItem>
-          <MenuItem onClick={() => handleCtxAction("quantity", "数量", "number")} sx={{ color: "#222" }}>修改数量</MenuItem>
-          <MenuItem onClick={() => handleCtxAction("purchase_date", "采购时间", "date")} sx={{ color: "#222" }}>采购时间</MenuItem>
-          <MenuItem onClick={() => handleCtxAction("lead_time", "采购周期", "number")} sx={{ color: "#222" }}>采购周期</MenuItem>
-          <MenuItem onClick={() => handleCtxAction("expected_delivery", "预计交期", "date")} sx={{ color: "#222" }}>预计交期</MenuItem>
           {isRequirement ? (
-            <MenuItem onClick={() => handleCtxAction("notes", "备注", "text")} sx={{ color: "#222" }}>修改备注</MenuItem>
+            <>
+              <MenuItem onClick={() => handleCtxAction("module", "模块", "text")} sx={{ color: "#222" }}>修改模块</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("description", "物料描述", "text")} sx={{ color: "#222" }}>修改物料描述</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("part_number", "物料号", "text")} sx={{ color: "#222" }}>修改物料号</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("estimated_price", "预估单价", "number")} sx={{ color: "#222" }}>修改预估单价</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("quantity", "数量", "number")} sx={{ color: "#222" }}>修改数量</MenuItem>
+              <MenuItem disabled sx={{ color: "#999", opacity: "0.7 !important" }}>物料状态（随采购清单联动）</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("notes", "备注", "text")} sx={{ color: "#222" }}>修改备注</MenuItem>
+            </>
           ) : (
-            <MenuItem onClick={() => handleCtxAction("oa_link", "OA链接", "text")} sx={{ color: "#222" }}>修改OA链接</MenuItem>
+            <>
+              <MenuItem onClick={() => handleCtxAction("manufacturer", "厂家", "text")} sx={{ color: "#222" }}>修改厂家</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("material_status", "物料状态", "status")} sx={{ color: "#222" }}>修改状态</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("quantity", "数量", "number")} sx={{ color: "#222" }}>修改数量</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("purchase_date", "采购时间", "date")} sx={{ color: "#222" }}>采购时间</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("lead_time", "采购周期", "number")} sx={{ color: "#222" }}>采购周期</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("expected_delivery", "预计交期", "date")} sx={{ color: "#222" }}>预计交期</MenuItem>
+              <MenuItem onClick={() => handleCtxAction("oa_link", "OA链接", "text")} sx={{ color: "#222" }}>修改OA链接</MenuItem>
+            </>
           )}
-          <MenuItem onClick={() => handleCtxAction("oa_link", "OA链接", "text")} sx={{ color: "#222" }}>修改OA链接</MenuItem>
           <Box sx={{ borderTop: "1px solid", borderColor: "divider", my: 0.5 }} />
           {/* 底色子菜单 */}
           <MenuItem sx={{ color: "#222", justifyContent: "space-between" }}>

@@ -20,6 +20,9 @@ const COLUMNS = [
 
 const MATERIAL_STATUSES = ["默认", "已入库", "已下单", "待决策", "高风险"];
 
+// 需求清单与采购清单通过物料号(part_number)关联，需求状态在「读取需求清单」时
+// 实时联动采购清单同物料号的最新状态（见 requirements.js 列表接口），故此处无需写时同步。
+
 // 取某项目下最大序号，返回下一个连续序号
 function nextSeq(projectId) {
   const row = db
@@ -72,6 +75,7 @@ function normalize(item = {}) {
       return item.expected_delivery || null;
     })(),
     notes: item.notes != null ? String(item.notes) : "",
+    oa_link: item.oa_link != null ? String(item.oa_link) : "",
   };
 }
 
@@ -107,8 +111,8 @@ router.post("/materials", (req, res) => {
   const seq = nextSeq(Number(project_id));
   const result = db
     .prepare(
-      `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, owner_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, oa_link, owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       Number(project_id),
@@ -124,6 +128,7 @@ router.post("/materials", (req, res) => {
       n.lead_time,
       n.expected_delivery,
       n.notes,
+      n.oa_link,
       req.userId
     );
   res.status(201).json({
@@ -142,8 +147,8 @@ router.post("/materials/batch", (req, res) => {
     return res.status(400).json({ ok: false, error: "items 必填且非空" });
   let seq = nextSeq(Number(project_id));
   const insert = db.prepare(
-    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, owner_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, oa_link, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -163,6 +168,7 @@ router.post("/materials/batch", (req, res) => {
         n.lead_time,
         n.expected_delivery,
         n.notes,
+        n.oa_link,
         req.userId
       );
       insertedIds.push(r.lastInsertRowid);
@@ -286,7 +292,7 @@ router.put("/materials/:id", (req, res) => {
   db.prepare(
     `UPDATE materials SET
       part_number=?, manufacturer=?, model=?, material_status=?, quantity=?,
-      quantity_per_set=?, set_count=?, purchase_date=?, lead_time=?, expected_delivery=?, notes=?,
+      quantity_per_set=?, set_count=?, purchase_date=?, lead_time=?, expected_delivery=?, notes=?, oa_link=?,
       updated_at=datetime('now','localtime')
      WHERE id=?`
   ).run(
@@ -301,6 +307,7 @@ router.put("/materials/:id", (req, res) => {
     n.lead_time,
     n.expected_delivery,
     n.notes,
+    n.oa_link,
     req.params.id
   );
   res.json({ ok: true, data: db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id) });
@@ -407,12 +414,10 @@ router.post("/materials/oa-fetch", async (req, res) => {
         }
       });
       if (hasData && item.part_number) {
-        if (item._price && item.quantity) {
-          item.notes = (item.notes ? item.notes + " | " : "") + "单价:" + item._price + ",金额:" + (item._amount || item._price * item.quantity);
-        }
         delete item._price; delete item._amount;
         item.purchase_date = item.purchase_date || formDate;
         item.material_status = "默认";
+        item.oa_link = url || ""; // OA 采购单链接（单价/金额不再塞进备注）
         items.push(item);
       }
     }
@@ -430,7 +435,7 @@ router.post("/materials/oa-fetch", async (req, res) => {
 router.post("/materials/oa-import", (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Headers", "Content-Type");
-  const { project_id, internal_code, order_number, items } = req.body;
+  const { project_id, internal_code, order_number, oa_url, items } = req.body;
   if (!Array.isArray(items) || !items.length)
     return res.json({ ok: false, error: "items 必填且非空" });
 
@@ -455,8 +460,8 @@ router.post("/materials/oa-import", (req, res) => {
 
   let seq = nextSeq(target.id);
   const insert = db.prepare(
-    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes, owner_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?)`
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes, oa_link, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -468,6 +473,7 @@ router.post("/materials/oa-import", (req, res) => {
         parseFloat(it.quantity) || 0,
         it.purchase_date || null,
         it.notes || "",
+        it.oa_link || oa_url || "",
         ownerId
       );
       insertedIds.push(r.lastInsertRowid);

@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-24 — M4 物料：需求清单去除 OA 链接 + 采购/需求按物料号状态联动
+
+- **需求清理（OA 链接）**：需求清单不再需要 OA 链接。移除 `routes/requirements.js` 中 COLUMNS/normalize/INSERT/UPDATE/搜索里的 `oa_link` 字段；前端 `REQUIREMENT_COLUMNS`、`REQ_PREVIEW_FIELDS`、`CTX_FIELDS` 需求分支、导入解析 `REQ_FIELD_ALIASES` 与 `parseRequirementExcel` 同步去除。采购清单（materials）的 OA 链接及 OA 抓取功能保持不变。
+- **联动（采购 → 需求状态实时同步）**：需求清单的"物料状态"改为**读取时按物料号(part_number)实时联动**采购清单同物料号的最新状态，取代原单向、仅"已下单"的写时同步（`syncRequirementOnOrdered`）。`GET /api/requirements` 现返回 `purchase_status` 字段（有对应采购记录则为其状态，否则 null）；前端需求清单状态列优先显示 `purchase_status`，并标注"↓采购"、联动时只读（不弹状态菜单、右键隐藏"修改状态"、批量状态栏对需求清单隐藏）；搜索与状态过滤均基于联动后的值。采购清单任一条物料状态变化后，需求清单重新加载/搜索即同步，无需触发器。
+- **接口调整**：`GET /api/requirements` 搜索/状态过滤改在应用层基于联动值执行；删除 `materials.js` 中 `syncRequirementOnOrdered` 函数及其在 `batch-status`/`PUT`/`oa-import` 三处调用。
+
 ## 2026-07-24 — M4 物料管理：修复需求清单"添加失败" + 需求清单支持 Excel 导入
 
 - **缺陷修复（需求清单添加失败）**：根因为多用户改造时 `owner_id` 列只加给了 `materials` 表，漏加 `material_requirements`；而 `routes/requirements.js` 的新增（POST /requirements）与批量导入（POST /requirements/batch）INSERT 语句都写入 `owner_id`，导致 SQLite 报 "no such column: owner_id" → 500 → 前端"添加失败"。

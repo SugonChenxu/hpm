@@ -31,7 +31,6 @@ const REQ_FIELD_ALIASES = [
   ["estimated_price", ["预估单价", "预估价格", "单价", "estimatedprice", "estimated_price", "price"]],
   ["quantity", ["数量", "总数量", "quantity", "qty"]],
   ["notes", ["备注", "说明", "notes"]],
-  ["oa_link", ["oa链接", "oa_link", "oalink", "链接", "link"]],
   ["seq_ignore", ["序号", "seq", "no"]], // 序号由后端重新分配，忽略但允许存在
 ];
 
@@ -194,7 +193,6 @@ export async function parseRequirementExcel(file) {
       part_number: raw.part_number != null ? String(raw.part_number) : "",
       material_status: raw.material_status || "默认",
       notes: raw.notes != null ? String(raw.notes) : "",
-      oa_link: raw.oa_link != null ? String(raw.oa_link) : "",
     };
     const priceRes = toNum(raw.estimated_price);
     item.estimated_price = priceRes.value;

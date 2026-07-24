@@ -40,7 +40,6 @@ const REQ_PREVIEW_FIELDS = [
   { key: "estimated_price", label: "预估单价" },
   { key: "quantity", label: "数量" },
   { key: "material_status", label: "物料状态" },
-  { key: "oa_link", label: "OA链接" },
   { key: "notes", label: "备注" },
 ];
 
