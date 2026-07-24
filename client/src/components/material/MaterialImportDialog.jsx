@@ -18,7 +18,7 @@ import {
   CircularProgress,
   Chip,
 } from "@mui/material";
-import { parseMaterialExcel } from "../../utils/materialExcel";
+import { parseMaterialExcel, parseRequirementExcel } from "../../utils/materialExcel";
 import { statusStyle } from "../../utils/materialStatus";
 
 const PREVIEW_FIELDS = [
@@ -33,28 +33,43 @@ const PREVIEW_FIELDS = [
   { key: "notes", label: "备注" },
 ];
 
-export default function MaterialImportDialog({ open, file, projectId, onClose, onConfirmed }) {
+const REQ_PREVIEW_FIELDS = [
+  { key: "module", label: "模块" },
+  { key: "description", label: "物料描述" },
+  { key: "part_number", label: "物料号" },
+  { key: "estimated_price", label: "预估单价" },
+  { key: "quantity", label: "数量" },
+  { key: "material_status", label: "物料状态" },
+  { key: "oa_link", label: "OA链接" },
+  { key: "notes", label: "备注" },
+];
+
+export default function MaterialImportDialog({ open, file, projectId, mode = "purchase", onClose, onConfirmed }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const isReq = mode === "requirement";
+  const previewFields = isReq ? REQ_PREVIEW_FIELDS : PREVIEW_FIELDS;
 
   useEffect(() => {
     if (!open || !file) return;
     setLoading(true);
     setError(null);
     setResult(null);
-    parseMaterialExcel(file)
+    (isReq ? parseRequirementExcel(file) : parseMaterialExcel(file))
       .then((res) => setResult(res))
       .catch((e) => setError(e.message || "解析失败"))
       .finally(() => setLoading(false));
-  }, [open, file]);
+  }, [open, file, isReq]);
 
   const handleConfirm = async () => {
     if (!result || !result.items.length) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/materials/batch", {
+      const endpoint = isReq ? "/api/requirements/batch" : "/api/materials/batch";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project_id: Number(projectId), items: result.items }),
@@ -70,7 +85,7 @@ export default function MaterialImportDialog({ open, file, projectId, onClose, o
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      <DialogTitle>导入 Excel 预览</DialogTitle>
+      <DialogTitle>导入 Excel 预览（{isReq ? "需求清单" : "采购清单"}）</DialogTitle>
       <DialogContent dividers>
         {loading && (
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 4 }}>
@@ -112,7 +127,7 @@ export default function MaterialImportDialog({ open, file, projectId, onClose, o
                 <TableHead>
                   <TableRow>
                     <TableCell>#</TableCell>
-                    {PREVIEW_FIELDS.map((f) => (
+                    {previewFields.map((f) => (
                       <TableCell key={f.key}>{f.label}</TableCell>
                     ))}
                   </TableRow>
@@ -121,7 +136,7 @@ export default function MaterialImportDialog({ open, file, projectId, onClose, o
                   {result.preview.map((row, i) => (
                     <TableRow key={i}>
                       <TableCell>{i + 1}</TableCell>
-                      {PREVIEW_FIELDS.map((f) => (
+                      {previewFields.map((f) => (
                         <TableCell key={f.key}>
                           {f.key === "material_status" ? (
                             <Chip

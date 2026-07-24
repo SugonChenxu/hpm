@@ -4,7 +4,7 @@ import dayjs from "dayjs";
 import {
   Box, Typography, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, Chip, TextField, Button, IconButton,
-  Menu, MenuItem, Checkbox, Tooltip, Alert, Snackbar,
+  Menu, MenuItem, Checkbox, Tooltip, Alert, Snackbar, Tabs, Tab,
   Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
@@ -30,8 +30,20 @@ const COLUMNS = [
   { key: "purchase_date",     label: "采购时间", type: "date",   width: 120 },
   { key: "lead_time",         label: "采购周期", type: "number", width: 90 },
   { key: "expected_delivery", label: "预计交期", type: "date",   width: 120 },
-  { key: "notes",             label: "备注",     type: "text",   width: 220 },
+  { key: "oa_link",           label: "OA链接",  type: "text",   width: 220 },
 ];
+// 前期物料需求清单列（与实际采购清单相互独立，字段不同）
+const REQUIREMENT_COLUMNS = [
+  { key: "module",          label: "模块",     type: "text",   width: 120 },
+  { key: "description",     label: "物料描述", type: "text",   width: 200 },
+  { key: "part_number",     label: "物料号",   type: "text",   width: 150 },
+  { key: "estimated_price", label: "预估单价", type: "number", width: 110 },
+  { key: "quantity",        label: "数量",     type: "number", width: 90 },
+  { key: "material_status", label: "物料状态", type: "status", width: 110 },
+  { key: "oa_link",         label: "OA链接",  type: "text",   width: 200 },
+  { key: "notes",           label: "备注",     type: "text",   width: 220 },
+];
+
 const COL_WIDTH_KEY = "forge.material.colwidths.v1";
 const UNDO_WINDOW = 5 * 60 * 1000;
 
@@ -111,6 +123,7 @@ function EditControl({ type, value, onSave, onCancel, onTab }) {
 export default function MaterialListPage() {
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get("projectId") || null;
+  const [listType, setListType] = useState("purchase"); // "purchase" | "requirement"
 
   // 数据
   const [rows, setRows] = useState([]);
@@ -132,6 +145,7 @@ export default function MaterialListPage() {
     catch { return {}; }
   });
   const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState("purchase");
   const [oaHelpOpen, setOaHelpOpen] = useState(false);
   const [snack, setSnack] = useState(null);
   const [confirmDlg, setConfirmDlg] = useState(null);
@@ -141,6 +155,17 @@ export default function MaterialListPage() {
       return COLUMNS.map((c) => ({ key: c.key, width: saved[c.key] || c.width }));
     } catch { return COLUMNS.map((c) => ({ key: c.key, width: c.width })); }
   });
+
+  // 切换清单类型：实际采购清单 / 前期物料需求清单（两套相互独立，按物料号关联同步）
+  const switchList = (type) => {
+    setListType(type);
+    const cols = type === "requirement" ? REQUIREMENT_COLUMNS : COLUMNS;
+    setColWidths(cols.map((c) => ({ key: c.key, width: c.width })));
+    setSelected(new Set());
+  };
+  const isRequirement = listType === "requirement";
+  const activeApi = isRequirement ? api.requirements : api.materials;
+  const activeColumns = useMemo(() => (isRequirement ? REQUIREMENT_COLUMNS : COLUMNS), [isRequirement]);
 
   // 列宽拖拽
   const resizing = useRef(null);
@@ -177,20 +202,26 @@ export default function MaterialListPage() {
     if (!projectId) { setRows([]); setLoading(false); return; }
     setLoading(true);
     try {
-      const [res, snap] = await Promise.all([
-        api.materials.list({ project_id: Number(projectId) }),
-        api.materials.importSnapshot(Number(projectId)),
-      ]);
+      const res = await activeApi.list({ project_id: Number(projectId) });
       setRows(res.data || []);
-      if (snap.data && snap.data.ids_json && snap.data.created_at) {
-        setSnapshot(snap.data);
-        const elapsed = Date.now() - new Date(snap.data.created_at + "+08:00").getTime();
-        if (elapsed < UNDO_WINDOW) setUndoTime(elapsed);
-        else setUndoTime(null);
+      // 采购清单才有导入快照 / 撤销导入；需求清单无此机制
+      if (!isRequirement) {
+        try {
+          const snap = await api.materials.importSnapshot(Number(projectId));
+          if (snap.data && snap.data.ids_json && snap.data.created_at) {
+            setSnapshot(snap.data);
+            const elapsed = Date.now() - new Date(snap.data.created_at + "+08:00").getTime();
+            if (elapsed < UNDO_WINDOW) setUndoTime(elapsed);
+            else setUndoTime(null);
+          }
+        } catch { /* 快照查询失败不影响主列表 */ }
+      } else {
+        setSnapshot(null);
+        setUndoTime(null);
       }
     } catch { setSnack({ severity: "error", text: "加载物料数据失败" }); }
     setLoading(false);
-  }, [projectId]);
+  }, [projectId, isRequirement, activeApi]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -223,7 +254,7 @@ export default function MaterialListPage() {
         }
       }
 
-      await api.materials.update(rowId, updates);
+      await activeApi.update(rowId, updates);
       setRows((prev) => prev.map((r) => r.id === rowId ? { ...r, ...updates } : r));
     } catch { setSnack({ severity: "error", text: "保存失败" }); load(); }
   };
@@ -232,7 +263,7 @@ export default function MaterialListPage() {
   const handleStatusChange = async (rowId, status) => {
     setStatusMenu(null);
     try {
-      await api.materials.update(rowId, { material_status: status });
+      await activeApi.update(rowId, { material_status: status });
       setRows((prev) => prev.map((r) => r.id === rowId ? { ...r, material_status: status } : r));
     } catch { setSnack({ severity: "error", text: "状态更新失败" }); }
   };
@@ -241,7 +272,7 @@ export default function MaterialListPage() {
   const handleAdd = async () => {
     if (!projectId) return;
     try {
-      const res = await api.materials.create({ project_id: Number(projectId), material_status: "默认" });
+      const res = await activeApi.create({ project_id: Number(projectId), material_status: "默认" });
       load(); // 重新加载获取完整 seq
     } catch { setSnack({ severity: "error", text: "添加失败" }); }
   };
@@ -252,7 +283,7 @@ export default function MaterialListPage() {
       title: "确认删除", text: "确定要删除该物料吗？此操作不可撤销。",
       onOk: async () => {
         setConfirmDlg(null);
-        try { await api.materials.remove(rowId); load(); }
+        try { await activeApi.remove(rowId); load(); }
         catch { setSnack({ severity: "error", text: "删除失败" }); }
       },
     });
@@ -265,7 +296,7 @@ export default function MaterialListPage() {
       text: `确定将选中的 ${selected.size} 项物料状态改为「${status}」吗？`,
       onOk: async () => {
         setConfirmDlg(null);
-        try { await api.materials.batchUpdateStatus({ ids: [...selected], material_status: status }); setSelected(new Set()); load(); }
+        try { await activeApi.batchUpdateStatus({ ids: [...selected], material_status: status }); setSelected(new Set()); load(); }
         catch { setSnack({ severity: "error", text: "批量修改失败" }); }
       },
     });
@@ -275,7 +306,7 @@ export default function MaterialListPage() {
       title: "批量删除", text: `确定删除选中的 ${selected.size} 项物料吗？此操作不可撤销。`,
       onOk: async () => {
         setConfirmDlg(null);
-        try { await api.materials.batchRemove({ project_id: Number(projectId), ids: [...selected] }); setSelected(new Set()); load(); }
+        try { await activeApi.batchRemove({ project_id: Number(projectId), ids: [...selected] }); setSelected(new Set()); load(); }
         catch { setSnack({ severity: "error", text: "批量删除失败" }); }
       },
     });
@@ -288,15 +319,26 @@ export default function MaterialListPage() {
     setCtxMenu({ mouseX: e.clientX - 2, mouseY: e.clientY - 4, rowId });
   };
 
-  const CTX_FIELDS = [
-    { key: "manufacturer", label: "厂家", type: "text" },
-    { key: "material_status", label: "物料状态", type: "status" },
-    { key: "quantity", label: "数量", type: "number" },
-    { key: "purchase_date", label: "采购时间", type: "date" },
-    { key: "lead_time", label: "采购周期", type: "number" },
-    { key: "expected_delivery", label: "预计交期", type: "date" },
-    { key: "notes", label: "备注", type: "text" },
-  ];
+  const CTX_FIELDS = isRequirement
+    ? [
+        { key: "module", label: "模块", type: "text" },
+        { key: "description", label: "物料描述", type: "text" },
+        { key: "part_number", label: "物料号", type: "text" },
+        { key: "estimated_price", label: "预估单价", type: "number" },
+        { key: "quantity", label: "数量", type: "number" },
+        { key: "material_status", label: "物料状态", type: "status" },
+        { key: "oa_link", label: "OA链接", type: "text" },
+        { key: "notes", label: "备注", type: "text" },
+      ]
+    : [
+        { key: "manufacturer", label: "厂家", type: "text" },
+        { key: "material_status", label: "物料状态", type: "status" },
+        { key: "quantity", label: "数量", type: "number" },
+        { key: "purchase_date", label: "采购时间", type: "date" },
+        { key: "lead_time", label: "采购周期", type: "number" },
+        { key: "expected_delivery", label: "预计交期", type: "date" },
+        { key: "oa_link", label: "OA链接", type: "text" },
+      ];
 
   // 预设行底色
   const ROW_COLORS = [
@@ -338,7 +380,7 @@ export default function MaterialListPage() {
       title: "确认删除", text: `确定删除选中的 ${ids.length} 项物料吗？此操作不可撤销。`,
       onOk: async () => {
         setConfirmDlg(null);
-        try { await api.materials.batchRemove({ project_id: Number(projectId), ids }); setSelected(new Set()); load(); }
+        try { await activeApi.batchRemove({ project_id: Number(projectId), ids }); setSelected(new Set()); load(); }
         catch { setSnack({ severity: "error", text: "批量删除失败" }); }
       },
     });
@@ -366,7 +408,7 @@ export default function MaterialListPage() {
             updates.expected_delivery = dayjs(pd).add(lt, "day").format("YYYY-MM-DD");
           }
         }
-        await api.materials.update(id, updates);
+        await activeApi.update(id, updates);
       }
       setBatchEditDlg(null);
       setSnack({ severity: "success", text: `已更新 ${ids.length} 项物料的「${batchEditDlg.label}」` });
@@ -378,7 +420,11 @@ export default function MaterialListPage() {
   const handleImportDone = () => { setImportOpen(false); load(); };
   const handleExport = () => {
     const exportRows = selected.size > 0 ? rows.filter((r) => selected.has(r.id)) : rows;
-    exportMaterialsExcel(exportRows);
+    const exportCols = [{ key: "__seq__", label: "序号" }, ...activeColumns];
+    exportMaterialsExcel(exportRows, {
+      fileName: isRequirement ? "需求清单.xlsx" : "采购清单.xlsx",
+      columns: exportCols,
+    });
   };
   const handleOaImportOpen = () => { setOaImportOpen(true); setOaUrl(""); setOaJson(""); setOaPreview(null); setOaError(null); };
   const handleOaFetch = async () => {
@@ -420,6 +466,7 @@ export default function MaterialListPage() {
           return m ? m[1].replace(/[./]/g, "-") : String(d).slice(0, 10);
         })(),
         notes: it.notes || it["备注"] || "",
+        oa_link: it.oa_link || it["OA链接"] || it.oaUrl || it["oa_url"] || "",
         expected_delivery: it.expected_delivery || it.expectedDelivery || it["交期"] || it["预计交期"] || null,
       }));
       setOaPreview(items);
@@ -464,9 +511,7 @@ export default function MaterialListPage() {
     if (search.trim()) {
       const kw = search.trim().toLowerCase();
       list = list.filter((r) =>
-        ["part_number", "manufacturer", "model", "material_status", "notes"].some((k) =>
-          String(r[k] ?? "").toLowerCase().includes(kw)
-        )
+        activeColumns.some((c) => String(r[c.key] ?? "").toLowerCase().includes(kw))
       );
     }
     if (sortKey) {
@@ -478,7 +523,7 @@ export default function MaterialListPage() {
       });
     }
     return list;
-  }, [rows, sortKey, sortDir, search]);
+  }, [rows, sortKey, sortDir, search, activeColumns]);
 
   // ===== 全选（仅针对当前筛选后的条目，必须放在 filtered 声明之后） =====
   const filteredIds = filtered.map((r) => r.id);
@@ -528,20 +573,30 @@ export default function MaterialListPage() {
         <Box sx={{ mb: 2 }}><ProjectSelector /></Box>
         <PageHeader title="物料管理" subtitle="BOM 与备料跟踪" />
 
+        {/* ---- 清单类型切换：实际采购清单 / 前期物料需求清单 ---- */}
+        <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 1.5 }}>
+          <Tabs value={listType} onChange={(e, v) => switchList(v)}>
+            <Tab value="purchase" label="采购清单" />
+            <Tab value="requirement" label="需求清单" />
+          </Tabs>
+        </Box>
+
         {/* ---- 工具栏 ---- */}
         <Box sx={{ display: "flex", gap: 1, mb: 1.5, flexWrap: "wrap", alignItems: "center" }}>
           <Button variant="outlined" component="label" sx={{ gap: 0.5 }}>
             📥 导入 Excel
-            <input type="file" hidden accept=".xlsx,.xls" onChange={(e) => { if (e.target.files?.[0]) setImportOpen(e.target.files[0]); e.target.value = ""; }} />
+            <input type="file" hidden accept=".xlsx,.xls" onChange={(e) => { if (e.target.files?.[0]) { setImportMode(listType); setImportOpen(e.target.files[0]); } e.target.value = ""; }} />
           </Button>
           <Button variant="outlined" onClick={handleAdd} sx={{ gap: 0.5 }}>＋ 添加一行</Button>
           <Button variant="outlined" onClick={handleExport} sx={{ gap: 0.5 }}>
             ↓ 导出{selected.size > 0 ? `(${selected.size})` : ""}
           </Button>
+          {!isRequirement && (
           <Button variant="outlined" onClick={() => setOaHelpOpen(true)} sx={{ gap: 0.5 }}>
             ？ OA 导入说明
           </Button>
-          {undoTime != null && (
+          )}
+          {!isRequirement && undoTime != null && (
             <Button variant="outlined" color="warning" onClick={handleUndo} sx={{ gap: 0.5 }}>
               ↩ 撤销导入({Math.max(0, Math.ceil((UNDO_WINDOW - undoTime) / 60000))}分钟)
             </Button>
@@ -588,7 +643,7 @@ export default function MaterialListPage() {
                     序号<SortArrow dir={sortKey === "seq" ? sortDir : null} />
                   </Box>
                 </TableCell>
-                {COLUMNS.map((col) => {
+                {activeColumns.map((col) => {
                   const width = colWidths.find((c) => c.key === col.key)?.width || col.width;
                   return (
                     <TableCell key={col.key}
@@ -634,8 +689,8 @@ export default function MaterialListPage() {
                     <TableCell sx={{ color: "text.secondary", fontSize: "0.82rem" }}>{idx + 1}</TableCell>
 
                     {/* 业务列 */}
-                    {COLUMNS.map((col) => {
-                      const isEditing = editing?.rowId === row.id && editing?.field === col.key;
+                {activeColumns.map((col) => {
+                  const isEditing = editing?.rowId === row.id && editing?.field === col.key;
                       if (isEditing) {
                         return (
                           <TableCell key={col.key} sx={{ p: 0.5 }}>
@@ -668,6 +723,27 @@ export default function MaterialListPage() {
 
                       // 普通单元格
                       const raw = row[col.key];
+                      // OA链接：渲染为可点击链接（点击直接打开，不进入编辑态）
+                      if (col.key === "oa_link") {
+                        return (
+                          <TableCell key={col.key} sx={{ p: 0.5, fontSize: "0.85rem" }}>
+                            {raw ? (
+                              <Box
+                                component="a"
+                                href={raw}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                sx={{ color: "primary.main", textDecoration: "underline", cursor: "pointer" }}
+                              >
+                                打开OA
+                              </Box>
+                            ) : (
+                              <Box component="span" sx={{ color: "text.disabled" }}>-</Box>
+                            )}
+                          </TableCell>
+                        );
+                      }
                       const display = col.type === "date"
                         ? (raw ? dayjs(raw).format("YYYY/M/D") : "-")
                         : (raw ?? "-");
@@ -712,6 +788,7 @@ export default function MaterialListPage() {
             open={!!importOpen}
             file={importOpen}
             projectId={Number(projectId)}
+            mode={importMode}
             onClose={() => setImportOpen(false)}
             onConfirmed={handleImportDone}
           />
@@ -747,7 +824,12 @@ export default function MaterialListPage() {
           <MenuItem onClick={() => handleCtxAction("purchase_date", "采购时间", "date")} sx={{ color: "#222" }}>采购时间</MenuItem>
           <MenuItem onClick={() => handleCtxAction("lead_time", "采购周期", "number")} sx={{ color: "#222" }}>采购周期</MenuItem>
           <MenuItem onClick={() => handleCtxAction("expected_delivery", "预计交期", "date")} sx={{ color: "#222" }}>预计交期</MenuItem>
-          <MenuItem onClick={() => handleCtxAction("notes", "备注", "text")} sx={{ color: "#222" }}>修改备注</MenuItem>
+          {isRequirement ? (
+            <MenuItem onClick={() => handleCtxAction("notes", "备注", "text")} sx={{ color: "#222" }}>修改备注</MenuItem>
+          ) : (
+            <MenuItem onClick={() => handleCtxAction("oa_link", "OA链接", "text")} sx={{ color: "#222" }}>修改OA链接</MenuItem>
+          )}
+          <MenuItem onClick={() => handleCtxAction("oa_link", "OA链接", "text")} sx={{ color: "#222" }}>修改OA链接</MenuItem>
           <Box sx={{ borderTop: "1px solid", borderColor: "divider", my: 0.5 }} />
           {/* 底色子菜单 */}
           <MenuItem sx={{ color: "#222", justifyContent: "space-between" }}>

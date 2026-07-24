@@ -2,6 +2,16 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-24 — M4 物料管理：修复需求清单"添加失败" + 需求清单支持 Excel 导入
+
+- **缺陷修复（需求清单添加失败）**：根因为多用户改造时 `owner_id` 列只加给了 `materials` 表，漏加 `material_requirements`；而 `routes/requirements.js` 的新增（POST /requirements）与批量导入（POST /requirements/batch）INSERT 语句都写入 `owner_id`，导致 SQLite 报 "no such column: owner_id" → 500 → 前端"添加失败"。
+- **修复（补列）**：`db.js` 的 `OWNER_TABLES` 清单加入 `material_requirements`（服务启动即 ALTER 补列），并在 `CREATE TABLE material_requirements` 补 `owner_id INTEGER DEFAULT 0`（新库直接带列）。修复后单条新增与批量导入恢复正常。
+- **新增功能（需求清单 Excel 导入）**：原先"导入 Excel"按钮仅采购清单可用，需求清单无法导入。现放开按钮（两种清单都显示），`MaterialImportDialog` 增加 `mode` 属性（purchase/requirement）：
+  - 需求模式用新增的 `parseRequirementExcel`（识别 模块/物料描述/物料号/预估单价/数量/物料状态/备注/OA链接），按需求列预览，提交到 `POST /api/requirements/batch`。
+  - 采购模式行为保持不变。
+  - `materialExcel.js` 的 `buildFieldMap` 改为可接收自定义别名表，新增 `REQ_FIELD_ALIASES` 与 `parseRequirementExcel`；导出函数不变。
+- **验证**：DB 层确认 `material_requirements` 已含 `owner_id`；`vite build` 通过；`forge` 重启在线、无重启报错。需求清单导出→导入可往返（导出表头均能被解析器识别）。
+
 ## 2026-07-22 — M1 项目概览故障概览实时化（统一源 + 刷新）
 
 - **缺陷修复（两套 DI 分歧）**：原「项目概览」卡片的 DI / 故障数 / 解决率 / 分类饼图**绕过本地库、直读 Mantis 实时接口**（`fetchSummary` 取 Mantis「Defect Index」趋势末点），与 M3 故障管理（读本地 `issues` 表 `SUM(di_weight)`）使用两套数据源，导致"M3 改了 DI、概览不跟随"且两端数字对不上。

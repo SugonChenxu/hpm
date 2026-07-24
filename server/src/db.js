@@ -141,6 +141,22 @@ CREATE TABLE IF NOT EXISTS materials (
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS material_requirements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL DEFAULT 0,
+    owner_id INTEGER DEFAULT 0,
+    module TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    part_number TEXT DEFAULT '',
+    estimated_price REAL DEFAULT 0,
+    quantity REAL DEFAULT 0,
+    material_status TEXT DEFAULT '默认',
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
 CREATE TABLE IF NOT EXISTS material_import_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
@@ -716,6 +732,7 @@ const OWNER_TABLES = [
   "sync_cache",
   "smart_minutes",
   "materials",
+  "material_requirements",
 ];
 
 for (const t of OWNER_TABLES) {
@@ -747,5 +764,28 @@ try {
 }
 
 console.log("Migration multi-user (users + owner_id columns): done");
+
+// =====================================================
+// 物料 OA 链接：materials.oa_link / material_requirements.oa_link
+// 采购清单 OA 导入时记录 OA 采购单链接；同步需求清单时一并复制过来
+// =====================================================
+
+// 迁移：materials.oa_link
+try {
+  db.exec(`ALTER TABLE materials ADD COLUMN oa_link TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration materials.oa_link:", e.message);
+  }
+}
+
+// 迁移：material_requirements.oa_link（同步自采购清单的 OA 链接）
+try {
+  db.exec(`ALTER TABLE material_requirements ADD COLUMN oa_link TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration material_requirements.oa_link:", e.message);
+  }
+}
 
 export default db;
