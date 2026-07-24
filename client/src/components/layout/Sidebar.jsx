@@ -34,6 +34,15 @@ function PeopleIcon(props) {
   );
 }
 
+// 内联仓库图标（库存管理）
+function WarehouseIcon(props) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path d="M22 21V7L12 3 2 7v14h9v-5h2v5h9zM10 9.05l2 .8 2-.8v1.9l-2 .8-2-.8V9.05z" />
+    </SvgIcon>
+  );
+}
+
 /**
  * Navigation items grouped into three sections for visual hierarchy.
  * Each group has a label and a list of route items.
@@ -58,6 +67,7 @@ const NAV_GROUPS = [
     title: "数据管理",
     items: [
       { text: "物料管理", icon: <Inventory />, path: "/materials" },
+      { text: "库存管理", icon: <WarehouseIcon />, path: "/inventory" },
       { text: "故障管理", icon: <BugReport />, path: "/issues" },
       { text: "周报记录", icon: <Description />, path: "/reports" },
       ],

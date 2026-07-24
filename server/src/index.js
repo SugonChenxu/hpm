@@ -16,11 +16,14 @@ import tasksRouter from "./routes/tasks.js";
 import issuesRouter from "./routes/issues.js";
 import mantisRouter from "./routes/mantis.js";
 import materialsRouter from "./routes/materials.js";
+import requirementsRouter from "./routes/requirements.js";
 import meetingsRouter from "./routes/meetings.js";
 import weeklyReportsRouter from "./routes/weekly-reports.js";
 import scheduleRouter from "./routes/schedule.js";
 import weekMeetingsRouter from "./routes/week-meetings.js";
 import usersRouter from "./routes/users.js";
+import sapStockRouter from "./routes/sap-stock.js";
+import plmRouter from "./routes/plm.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -64,11 +67,14 @@ app.use("/api", tasksRouter);
 app.use("/api", issuesRouter);
 app.use("/api", mantisRouter);
 app.use("/api", materialsRouter);
+app.use("/api", requirementsRouter);
 app.use("/api", meetingsRouter);
 app.use("/api", weeklyReportsRouter);
 app.use("/api", scheduleRouter);
 app.use("/api", weekMeetingsRouter);
 app.use("/api/users", usersRouter);
+app.use("/api", sapStockRouter);
+app.use("/api", plmRouter);
 
 // === 生产模式：托管前端静态文件 ===
 const clientDist = path.resolve(__dirname, "../../client/dist");

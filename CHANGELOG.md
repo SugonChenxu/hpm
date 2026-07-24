@@ -2,6 +2,14 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-24 — 新增【库存管理】模块（PLM 研发库房库存拉取）
+
+- **新增模块**：按技术方案 `PLM数据抓取技术方案.md` 落地「库存管理」模块，从 PLM 研发库房(sgDevelopmentWarehouse.jsp)拉取指定项目+库位号的库存信息。导航新增「库存管理」(/inventory)，位于「数据管理」分组。
+- **后端适配器** `server/src/adapters/plm.js`：实现 PLM 认证(CAS SSO → JSESSIONID+afs Cookie)、CSRF Token 自动获取(emxUIConstantsJavaScriptInclude.jsp)、项目列表抓取(emxIndentedTable.jsp → emxFreezePaneGetData.jsp，XML 解析)、研发库房库存抓取(JSON 提取)，错误归一化(network/timeout/auth_failed)，跳过内网自签证书。
+- **解析与路由** `plm-resolve.js` + `routes/plm.js`：每用户 PLM 连接配置(plm_connection)与项目关联(project_links：plm_oid/plm_name/tree_label/lgort)；`GET/PUT /api/plm/connection`、`GET /api/plm/projects`、`GET /api/plm/link`(无关联时按项目名自动匹配 PLM 项目，优先自动、可手动)、`POST /api/plm/sync`(拉取库存入库 plm_inventory)、`GET /api/plm/inventory`(按 lgort 过滤)；挂载到 index.js；全部按 owner_id 隔离。
+- **前端** `components/inventory/PLMConnectionCard.jsx`(Cookie 设置 + 项目关联含仓库 treeLabel/库位号 lgort，名称自动匹配)+ `pages/InventoryPage.jsx`(项目选择、关联、同步库存、库存表、库位号过滤、库存总件数/总金额)。`api/client.js` 新增 `api.plm`；Sidebar + App 注册。
+- **DB** 新增 `plm_connection`(server_url/cookie/project_links/last_sync)、`plm_inventory`(matnr/maktx/labst/werks/lgort/lgobe/stprs/matkl/wgbez)；后者入 OWNER_TABLES。修复 db.js 中 2026-07-21 废弃 PLM 时遗留的 `DROP TABLE plm_connection` 清理代码（导致表被建后立即删除），并将 SQL 模板内的 `//` 注释改为 `--`（避免 SQLite "near /" 语法错）。
+
 ## 2026-07-24 — M4 物料：需求清单去除 OA 链接 + 采购/需求按物料号状态联动
 
 - **需求清理（OA 链接）**：需求清单不再需要 OA 链接。移除 `routes/requirements.js` 中 COLUMNS/normalize/INSERT/UPDATE/搜索里的 `oa_link` 字段；前端 `REQUIREMENT_COLUMNS`、`REQ_PREVIEW_FIELDS`、`CTX_FIELDS` 需求分支、导入解析 `REQ_FIELD_ALIASES` 与 `parseRequirementExcel` 同步去除。采购清单（materials）的 OA 链接及 OA 抓取功能保持不变。

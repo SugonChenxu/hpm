@@ -122,6 +122,37 @@ CREATE TABLE IF NOT EXISTS mantis_connection (
     is_active INTEGER DEFAULT 1
 );
 
+-- 库存管理 — PLM 连接配置（每用户独立，server_url + cookie）
+CREATE TABLE IF NOT EXISTS plm_connection (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    server_url TEXT DEFAULT 'https://plm.sugon.com/3dspace',
+    cookie TEXT DEFAULT '',
+    project_links TEXT DEFAULT '[]',
+    last_sync_at TEXT,
+    last_sync_status TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+-- 库存管理 — 从 PLM 研发库房拉取的库存明细（按 owner + 项目隔离）
+CREATE TABLE IF NOT EXISTS plm_inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    project_id INTEGER NOT NULL,
+    matnr TEXT DEFAULT '',        -- 物料号
+    maktx TEXT DEFAULT '',        -- 物料描述
+    labst INTEGER DEFAULT 0,      -- 非限制使用库存（件）
+    werks TEXT DEFAULT '',        -- 工厂
+    lgort TEXT DEFAULT '',        -- 库存地点（库位号）
+    lgobe TEXT DEFAULT '',        -- 库存地点描述
+    stprs REAL DEFAULT 0,         -- 研发参考单价（元）
+    matkl TEXT DEFAULT '',        -- 物料组代码
+    wgbez TEXT DEFAULT '',        -- 物料组描述
+    synced_at TEXT,
+    UNIQUE(owner_id, project_id, matnr, lgort)
+);
+
 CREATE TABLE IF NOT EXISTS materials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -694,15 +725,6 @@ try {
 }
 
 // =====================================================
-// P0 增量：PLM 连接与只读探针（曙光 PLM / 经典 ENOVIA v6）
-// 本次只建表 + 连接配置，不实现实际排程同步（P1 负责）
-// =====================================================
-
-// PLM 功能已移除（2026-07-21）：清理历史遗留表
-db.exec(`DROP TABLE IF EXISTS plm_task_map`);
-db.exec(`DROP TABLE IF EXISTS plm_connection`);
-
-// =====================================================
 // 多用户：users 表 + 业务表 owner_id 列
 // 设计：每个业务表带 owner_id，登录用户只能读写自己的数据。
 // 老数据（owner_id=0）由 scripts/bind-legacy-data.js 绑定到专属账号。
@@ -733,6 +755,7 @@ const OWNER_TABLES = [
   "smart_minutes",
   "materials",
   "material_requirements",
+  "plm_inventory",
 ];
 
 for (const t of OWNER_TABLES) {

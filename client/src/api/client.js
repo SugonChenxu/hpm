@@ -92,6 +92,18 @@ export const api = {
     importUndo: (projectId) =>
       request("/materials/import-undo", { method: "POST", body: JSON.stringify({ project_id: projectId }) }),
   },
+  // 前期物料需求清单（与实际采购清单相互独立，可切换）
+  requirements: {
+    list: (params) => request(`/requirements?${new URLSearchParams(params)}`),
+    create: (data) => request("/requirements", { method: "POST", body: JSON.stringify(data) }),
+    get: (id) => request(`/requirements/${id}`),
+    update: (id, data) => request(`/requirements/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    remove: (id) => request(`/requirements/${id}`, { method: "DELETE" }),
+    batchImport: (data) => request("/requirements/batch", { method: "POST", body: JSON.stringify(data) }),
+    batchRemove: (data) => request("/requirements/batch", { method: "DELETE", body: JSON.stringify(data) }),
+    batchUpdateStatus: (data) =>
+      request("/requirements/batch-status", { method: "PUT", body: JSON.stringify(data) }),
+  },
   // 会议纪要
   meetings: {
     list: (params) => request(`/meetings?${new URLSearchParams(params)}`),
@@ -186,6 +198,17 @@ export const api = {
       remove: (id) => request(`/week-meetings/outputs/${id}`, { method: "DELETE" }),
       cycleInstance: (data) => request("/week-meetings/outputs/cycle-instance", { method: "POST", body: JSON.stringify(data) }),
     },
+  },
+  // 库存管理（PLM）
+  plm: {
+    connection: () => request("/plm/connection"),
+    updateConnection: (data) =>
+      request("/plm/connection", { method: "PUT", body: JSON.stringify(data) }),
+    projects: () => request("/plm/projects"),
+    link: (projectId) => request(`/plm/link?project_id=${projectId}`),
+    sync: (data) => request("/plm/sync", { method: "POST", body: JSON.stringify(data) }),
+    inventory: (projectId, lgort) =>
+      request(`/plm/inventory?project_id=${projectId}${lgort ? "&lgort=" + encodeURIComponent(lgort) : ""}`),
   },
   // 缓存管理
   cache: {
