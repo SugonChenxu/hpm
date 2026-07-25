@@ -32,7 +32,9 @@ class PLMAdapter {
       Cookie: this.cookie,
       ...extra,
     };
+    // PLM CSRF 双重 Header：先声明 token 名称，再传 token 值（技术方案 2.2 节）
     if (this._csrf) {
+      h.csrfTokenName = this._csrf.name;
       h[this._csrf.name] = this._csrf.value;
     }
     return h;
