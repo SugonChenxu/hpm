@@ -187,10 +187,11 @@ function parseIndentedTable(xml) {
       .trim();
 
   const rows = [];
-  const rowRe = /<r o="([^"]+)">([\s\S]*?)<\/r>/g;
+  // <r> 标签可能有多个属性（ra/p/id/type/i/rel/level/filter/t/r/d），用更宽松的正则
+  const rowRe = /<r\b[^>]*\bo="([^"]+)"[^>]*>([\s\S]*?)<\/r>/g;
   while ((m = rowRe.exec(xml))) {
     const oid = m[1];
-    const cells = [...m[2].matchAll(/<c>([\s\S]*?)<\/c>/g)].map((x) => decode(x[1]));
+    const cells = [...m[2].matchAll(/<c\b[^>]*>([\s\S]*?)<\/c>/g)].map((x) => decode(x[1]));
     rows.push({
       oid,
       code: decode(cells[nameIdx >= 0 ? nameIdx : 0]),
