@@ -86,9 +86,7 @@
         }
       });
       if (hasData) {
-        if (item._price && item.quantity) {
-          item.notes = (item.notes ? item.notes + " | " : "") + "单价:" + item._price + ",金额:" + (item._amount || item._price * item.quantity);
-        }
+        // 单价/金额不再写入 notes（备注列已改为 OA链接列）；真实备注仍由"备注/说明"列映射保留
         delete item._price; delete item._amount;
         item.purchase_date = formDate;
         items.push(item);
@@ -178,6 +176,7 @@
           body: JSON.stringify({
             internal_code: internalCode || undefined,
             project_id: 20,
+            oa_url: location.href, // 当前 OA 采购单页面 URL → 后端存为 oa_link
             items: bestResult.items.map(it => ({
               part_number: it.part_number || "",
               manufacturer: it.manufacturer || "",

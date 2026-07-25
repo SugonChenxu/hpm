@@ -722,11 +722,6 @@ export default function MaterialListPage() {
                                 status={shown}
                                 onClick={synced ? undefined : (e) => setStatusMenu({ rowId: row.id, anchorEl: e.currentTarget })}
                               />
-                              {synced && (
-                                <Box component="span" sx={{ fontSize: 10, color: "text.secondary" }} title="状态随采购清单联动">
-                                  ↓采购
-                                </Box>
-                              )}
                             </Box>
                           </TableCell>
                         );

@@ -149,7 +149,7 @@ export default function WeekMeetingPage() {
       });
       setAddOpen(false);
       setForm({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1 });
-      load();
+      loadMeetingData();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
     }
@@ -159,7 +159,7 @@ export default function WeekMeetingPage() {
   const handleDelete = async (id) => {
     try {
       await api.weekMeetings.remove(id);
-      load();
+      loadMeetingData();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
     }
@@ -238,7 +238,7 @@ export default function WeekMeetingPage() {
         severity: "success",
       });
       setPopper((p) => ({ ...p, open: false, title: "", weeks: 1 }));
-      load();
+      loadMeetingData();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
     } finally {

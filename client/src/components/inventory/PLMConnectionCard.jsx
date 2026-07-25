@@ -56,7 +56,6 @@ export default function PLMConnectionCard({ onSaved, onClose }) {
           m[p.id] = {
             forge_id: p.id, forge_name: p.name,
             plm_oid: hit.oid, plm_code: hit.code || "", plm_name: hit.name || hit.code,
-            tree_label: "",
           };
         }
       });
@@ -161,8 +160,6 @@ export default function PLMConnectionCard({ onSaved, onClose }) {
                         </MenuItem>
                       ))}
                     </TextField>
-                    <TextField size="small" label="仓库" placeholder="青海" value={l.tree_label || ""}
-                      onChange={(e) => setField(p.id, "tree_label", e.target.value)} sx={{ minWidth: 110 }} />
                   </Box>
                 </Box>
               );

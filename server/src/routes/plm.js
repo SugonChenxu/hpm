@@ -155,32 +155,39 @@ router.post("/plm/sync", async (req, res) => {
     return res.status(status).json({ ok: false, error: message });
   }
 
-  // tree_label 以请求优先级覆盖（自动关联后用户可改仓库）
-  const treeLabel = tree_label != null ? tree_label : link?.tree_label || "";
-  if (!treeLabel) {
-    return res.status(422).json({
-      ok: false,
-      error: "未设置仓库(treeLabel)，请在关联中填写（如 青海/北京/天津），以确定拉取哪个研发库房",
+  // tree_label 不强制：优先用已存值，次尝试无仓库/默认「青海」
+  let treeLabel = tree_label != null ? tree_label : (link?.tree_label || "");
+  let warehouseRows = [];
+
+  try {
+    const adapter = getAdapter(req.userId);
+    // 尝试拉取
+    warehouseRows = await adapter.fetchWarehouse(plmOid, treeLabel);
+    // 如果返回空且未指定仓库，尝试默认「青海」
+    if (warehouseRows.length === 0 && !treeLabel) {
+      warehouseRows = await adapter.fetchWarehouse(plmOid, "青海");
+      if (warehouseRows.length > 0) treeLabel = "青海";
+    }
+  } catch (error) {
+    updateLastSync(error.code || "error", req.userId);
+    const { status, message } = plmError(error, "同步库存失败");
+    return res.status(status).json({ ok: false, error: message });
+  }
+
+  // 写回 tree_label（自动探测到的）
+  if (treeLabel && treeLabel !== (link?.tree_label || "")) {
+    saveLink(req.userId, {
+      forge_id: project_id,
+      forge_name: proj.name,
+      plm_oid: plmOid,
+      plm_code: link?.plm_code || "",
+      plm_name: link?.plm_name || "",
+      tree_label: treeLabel,
+      lgort: link?.lgort || "",
     });
   }
 
   try {
-    const adapter = getAdapter(req.userId);
-    const rows = await adapter.fetchWarehouse(plmOid, treeLabel);
-
-    // 合并用户传入的 lgort（用于记录默认库位号过滤）
-    const finalLgort = lgort != null ? lgort : link?.lgort || "";
-    if (finalLgort !== (link?.lgort || "")) {
-      saveLink(req.userId, {
-        forge_id: project_id,
-        forge_name: proj.name,
-        plm_oid: plmOid,
-        plm_name: link?.plm_name || "",
-        tree_label: treeLabel,
-        lgort: finalLgort,
-      });
-    }
-
     const upsert = db.prepare(`
       INSERT INTO plm_inventory
         (owner_id, project_id, matnr, maktx, labst, werks, lgort, lgobe, stprs, matkl, wgbez, synced_at)
@@ -193,7 +200,7 @@ router.post("/plm/sync", async (req, res) => {
 
     const count = db.transaction(() => {
       let n = 0;
-      for (const r of rows) {
+      for (const r of warehouseRows) {
         const matnr = String(r.MATNR || "").trim();
         if (!matnr) continue;
         const labst = parseInt(r.LABST, 10);
@@ -214,10 +221,10 @@ router.post("/plm/sync", async (req, res) => {
         n++;
       }
       return n;
-    })(rows);
+    })(warehouseRows);
 
     updateLastSync("success", req.userId);
-    res.json({ ok: true, data: { synced_count: count, total_rows: rows.length } });
+    res.json({ ok: true, data: { synced_count: count, total_rows: warehouseRows.length } });
   } catch (error) {
     updateLastSync(error.code || "error", req.userId);
     const { status, message } = plmError(error, "同步库存失败");

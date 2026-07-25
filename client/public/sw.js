@@ -35,8 +35,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 静态资源（JS/CSS/图片等）：缓存优先
+  // 静态资源（JS/CSS/图片等）：缓存优先，网络回退（成功才缓存，失败不 reject）
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request)
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((c) => c.put(event.request, copy));
+          }
+          return res;
+        })
+        .catch(() => cached);
+    })
   );
 });

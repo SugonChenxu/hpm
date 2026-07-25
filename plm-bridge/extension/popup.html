@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Forge PLM Bridge</title>
+    <style>
+      body { font: 13px/1.4 sans-serif; width: 480px; margin: 0; padding: 8px; }
+      button { margin: 4px 4px 8px 0; padding: 4px 10px; }
+      .item { border: 1px solid #ddd; padding: 6px; margin-bottom: 6px; border-radius: 6px; }
+      .url { word-break: break-all; color: #1565c0; }
+      textarea { width: 100%; height: 110px; font: 11px monospace; box-sizing: border-box; }
+      .filter { width: 100%; padding: 4px; margin-bottom: 6px; box-sizing: border-box; }
+      #status { color: #2e7d32; }
+      .hint { color: #888; padding: 8px; }
+    </style>
+  </head>
+  <body>
+    <button id="openViewer" style="background:#1565c0;color:#fff;border:none;border-radius:6px;width:100%;padding:8px;font-size:13px;">📋 在独立标签页打开捕获查看器（推荐）</button>
+    <div style="color:#888;font-size:11px;margin:2px 0 8px;">弹窗切走会自动关闭，用独立标签页看捕获不会丢。</div>
+    <button id="push">推送 Cookie 到本地代理</button>
+    <button id="refresh">刷新</button>
+    <button id="clear">清空列表</button>
+    <span id="status"></span>
+    <input class="filter" id="filter" placeholder="过滤 URL（如 bom / material / structure）" />
+    <div id="list"></div>
+    <script src="popup.js"></script>
+  </body>
+</html>

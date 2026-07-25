@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>Forge PLM Bridge - 捕获查看器</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { font: 14px/1.5 sans-serif; margin: 0; padding: 16px 24px; background: #f5f6f8; color: #222; }
+      header { position: sticky; top: 0; background: #f5f6f8; padding: 12px 0; margin: -16px 0 12px; border-bottom: 1px solid #ddd; z-index: 10; }
+      h1 { font-size: 18px; margin: 0 0 8px; }
+      .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      button { padding: 6px 14px; border: 1px solid #bbb; background: #fff; border-radius: 6px; cursor: pointer; font-size: 13px; }
+      button:hover { background: #eef; }
+      button.primary { background: #1565c0; color: #fff; border-color: #1565c0; }
+      button.primary:hover { background: #0d47a1; }
+      #status { color: #2e7d32; font-size: 13px; }
+      .filter { flex: 1; min-width: 220px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 6px; }
+      .meta { color: #888; font-size: 12px; margin-left: auto; }
+      .item { background: #fff; border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+      .url { word-break: break-all; color: #1565c0; font-weight: 600; margin-bottom: 4px; }
+      .sub { color: #666; font-size: 12px; margin-bottom: 8px; }
+      .tag { display: inline-block; background: #fff3cd; color: #7a5c00; border-radius: 4px; padding: 1px 6px; font-size: 11px; margin-left: 6px; }
+      textarea { width: 100%; height: 160px; font: 12px/1.4 monospace; padding: 8px; border: 1px solid #ddd; border-radius: 6px; background: #fafafa; }
+      .row { margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap; }
+      .hint { color: #888; padding: 24px; text-align: center; background: #fff; border-radius: 8px; border: 1px dashed #ccc; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Forge PLM Bridge · 捕获查看器</h1>
+      <div class="toolbar">
+        <button id="push" class="primary">推送 Cookie 到本地代理</button>
+        <button id="refresh">刷新</button>
+        <button id="clear">清空列表</button>
+        <span id="status"></span>
+        <input class="filter" id="filter" placeholder="过滤 URL（如 bom / material / structure / part）" />
+        <span class="meta" id="meta"></span>
+      </div>
+    </header>
+    <div id="list"></div>
+    <script src="viewer.js"></script>
+  </body>
+</html>

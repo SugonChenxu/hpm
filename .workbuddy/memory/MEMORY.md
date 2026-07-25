@@ -61,7 +61,8 @@
 ## 用户决策（2026-07-07 确认 + 2026-07-20 推广形态重大更新）
 - **用户模型（2026-07-20 重大变更）**：由「个人使用/单用户」转为「**多用户、各自独立管理**」。需登录认证 + 全表 `owner_id` 数据隔离；无角色权限（人人平等，仅看自己的数据）。
 - 推广形态（2026-07-20 定）：由「方案A 绿色包每人本机」转为「**局域网内网网页集中部署**」——一台常开机器跑一份 Forge，同事浏览器访问，零安装。
-- 外部对接：Mantis 必须（每用户各自配 Token，per-user）；OA 选装；腾讯会议 / PLM 不做。
+- 外部对接：Mantis 必须（每用户各自配 Token，per-user）；OA 选装；**腾讯会议不做；PLM 已实现为【库存管理】模块**（2026-07-24 落地：复刻 Mantis 适配器模式，用 PLM SSO Cookie(JSESSIONID+afs) 拉取研发库房库存 sgDevelopmentWarehouse.jsp；技术方案见 `PLM数据抓取技术方案.md`）。
+- **PLM 库存模块（2026-07-24 实现）**：推翻此前"PLM 不做/放弃"，正式开发。后端 `server/src/adapters/plm.js`(CSRF+XML/JSON 解析)、`server/src/plm-resolve.js`、`server/src/routes/plm.js`(connection/projects/link/sync/inventory)；前端 `InventoryPage` + `PLMConnectionCard`（cookie 设置 + 项目关联含仓库 treeLabel/库位号 lgort，按名自动匹配）；表 `plm_connection`/`plm_inventory`。`D:\HPM\plm-bridge\` 旧探索骨架已弃用（db.js 曾有其 `DROP TABLE plm_connection` 残留，已清除）。
 - 阶段模板：支持自定义，预设曙光标准流程为默认模板（新用户注册时初始化自己的模板副本）
 - 物料管理：需备料跟踪（交期状态 + 逾期预警）
 - 文档导出：不做

@@ -1,0 +1,4 @@
+# 敏感凭证与采集产物，禁止提交
+cookie.txt
+captured/
+capture-urls.txt

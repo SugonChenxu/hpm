@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Forge PLM Bridge",
+  "version": "0.1.3",
+  "description": "将已登录的 PLM(3DEXPERIENCE) 会话 cookie 推送给本地 Forge 代理，并捕获 BOM/物料接口用于对接。",
+  "permissions": ["cookies", "storage", "scripting"],
+  "host_permissions": [
+    "https://plm.sugon.com/*",
+    "https://*.sugon.com/*",
+    "http://127.0.0.1:8770/*",
+    "http://localhost:8770/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://plm.sugon.com/*", "https://*.sugon.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://plm.sugon.com/*", "https://*.sugon.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "action": { "default_popup": "popup.html", "default_title": "Forge PLM Bridge" }
+}
