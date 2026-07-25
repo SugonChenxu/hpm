@@ -43,6 +43,20 @@ router.get("/plm/connection", (req, res) => {
 router.put("/plm/connection", (req, res) => {
   const { server_url, cookie, project_links } = req.body;
   const existing = getConnection(req.userId);
+
+  let mergedLinks = null;
+  if (project_links != null) {
+    // 合并模式：按 forge_id 去重，新覆盖旧
+    const incomingArr = Array.isArray(project_links) ? project_links : [];
+    let oldArr = [];
+    try { oldArr = JSON.parse(existing?.project_links || "[]"); } catch {}
+    if (!Array.isArray(oldArr)) oldArr = [];
+    const map = new Map();
+    for (const l of oldArr) { if (l?.forge_id) map.set(String(l.forge_id), l); }
+    for (const l of incomingArr) { if (l?.forge_id) map.set(String(l.forge_id), { ...(map.get(String(l.forge_id)) || {}), ...l }); }
+    mergedLinks = JSON.stringify([...map.values()]);
+  }
+
   if (existing) {
     db.prepare(
       `UPDATE plm_connection SET
@@ -54,7 +68,7 @@ router.put("/plm/connection", (req, res) => {
     ).run(
       server_url,
       cookie,
-      project_links != null ? JSON.stringify(project_links) : null,
+      mergedLinks,
       existing.id,
       req.userId
     );
@@ -65,7 +79,7 @@ router.put("/plm/connection", (req, res) => {
     ).run(
       server_url || "https://plm.sugon.com/3dspace",
       cookie || "",
-      project_links != null ? JSON.stringify(project_links) : "[]",
+      mergedLinks || "[]",
       req.userId
     );
   }

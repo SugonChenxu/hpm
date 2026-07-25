@@ -116,6 +116,7 @@ export async function resolvePlmOid(ownerId, forgeProjectId) {
     forge_id: forgeProjectId,
     forge_name: forge.name,
     plm_oid: match.oid,
+    plm_code: match.code || "",
     plm_name: match.name || match.code,
     tree_label: existing?.tree_label || "",
     lgort: existing?.lgort || "",
