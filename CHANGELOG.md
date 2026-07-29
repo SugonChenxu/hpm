@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-29 — 快速笔记增强（缩进 / 任务列表 / 统一工具栏 + 修复图片保存）
+
+- **新增功能** `client/src/components/notes/RichTextEditor.jsx`：工具栏加「增加缩进 / 减少缩进」(`execCommand indent/outdent`)；新增「任务列表」按钮（插入 `<div class="qn-task"><input type=checkbox contenteditable=false> + 可编辑<span>`，勾选后文字加删除线）；所有动作按钮统一为 `ToolBtn`（30px 方形 IconButton + Tooltip），点击前 `onMouseDown preventDefault` 保留编辑器选区；颜色/字号 Select 改为保存并还原选区，确保作用于选中文字而非丢失。
+- **缺陷修复** `server/src/index.js` + `server/src/routes/quick-notes.js`：根因为 Express 默认 `express.json()` body 上限 100kb，base64 图片超阈值时 `PUT /quick-notes/:id` 被 413 拒绝导致图片无法保存。修复：`express.json({limit:"25mb"})` + `express.urlencoded({limit:"25mb"})`，`safeContent` 上限提到 20MB。已用 6MB body 探针验证通过。
+- **约束**：图片仍以内嵌 base64 存储（单条上限 20MB），未引入第三方富文本库，遵循 Vite8 兼容规范。
+
 ## 2026-07-29 — 新增【快速笔记】模块（富文本随手记）
 
 - **新增模块**：落地「快速笔记」模块（M10，个人空间），提供所见即所得富文本编辑器，用于随手记录灵感/待办/要点，支持图文表格混排，对标 ProcessOn「思维笔记」模式。导航新增「个人空间 → 快速笔记」(/notes)。

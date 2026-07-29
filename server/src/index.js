@@ -32,7 +32,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-app.use(express.json());
+// 放宽 body 上限：笔记内嵌 base64 图片时单条可能远超默认 100kb（否则 PUT 保存失败 413）
+app.use(express.json({ limit: "25mb" }));
+app.use(express.urlencoded({ limit: "25mb", extended: true }));
 
 // === Session（持久化到文件，登录保持 30 天）===
 const SESSION_SECRET = process.env.SESSION_SECRET || "forge-internal-lan-secret-2026";

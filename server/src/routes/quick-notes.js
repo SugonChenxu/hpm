@@ -86,8 +86,8 @@ router.put("/quick-notes/:id", (req, res) => {
 
   const newTitle = title !== undefined ? String(title).slice(0, 200) : cur.title;
   const newContent = content_html !== undefined ? String(content_html) : cur.content_html;
-  // 内容长度保护（base64 图片可能较大，留足余量）
-  const safeContent = newContent.length > 5_000_000 ? newContent.slice(0, 5_000_000) : newContent;
+  // 内容长度保护（base64 图片可能较大，上限对齐 body 上限留足余量）
+  const safeContent = newContent.length > 20_000_000 ? newContent.slice(0, 20_000_000) : newContent;
   const newPinned = pinned !== undefined ? (pinned ? 1 : 0) : cur.pinned;
 
   db.prepare(
