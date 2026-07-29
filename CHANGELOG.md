@@ -2,6 +2,11 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-29 — 会议计划重叠会议分栏并排显示（方案A）
+
+- **新增功能** `client/src/pages/WeekMeetingPage.jsx`：同天时间重复的会议不再互相遮挡、可全部显示且方便观看。新增 `assignLanes(meetings)`——按 `[start,end]` 区间构建并查集冲突组（传递闭包），组内贪心分配泳道 `lane`，组最大并发数=`lanes`；`meetingsByDay` 分组后每天调用。卡片定位由 `left:0;right:0` 改为 `left: lane*100/lanes%`、`width: calc(100/lanes% - 2px)`（lanes>1 留 2px 间隙）；`lanes=1` 时行为完全等价旧版，无回归。顺带修复同起点会议叠放、删除可能误删的隐患（每张卡片独立定位）。
+- **范围**：仅做显示层分栏（方案A），未改覆盖/拖拽建会交互；极端重叠(≥5)卡片会变窄，已用省略号+Tooltip 兜底。
+
 ## 2026-07-29 — 快速笔记增强（缩进 / 任务列表 / 统一工具栏 + 修复图片保存）
 
 - **新增功能** `client/src/components/notes/RichTextEditor.jsx`：工具栏加「增加缩进 / 减少缩进」(`execCommand indent/outdent`)；新增「任务列表」按钮（插入 `<div class="qn-task"><input type=checkbox contenteditable=false> + 可编辑<span>`，勾选后文字加删除线）；所有动作按钮统一为 `ToolBtn`（30px 方形 IconButton + Tooltip），点击前 `onMouseDown preventDefault` 保留编辑器选区；颜色/字号 Select 改为保存并还原选区，确保作用于选中文字而非丢失。

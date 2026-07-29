@@ -68,6 +68,63 @@ function meetingSpan(start, end) {
   return timeToSlotIndex(end) - timeToSlotIndex(start);
 }
 
+/**
+ * 同一天内，为时间重叠的会议分配泳道（方案A 分栏并排显示，互不遮挡）。
+ * - 两场会议时间交叉（sa<eb 且 sb<ea）则归为同一冲突组（并查集传递闭包）
+ * - 组内按开始时间贪心分配最小可用泳道 lane，组最大并发数 = lanes
+ * 返回带 _lane / _lanes / _conflict 的会议数组；无重叠时 lanes=1，行为与原来一致。
+ */
+function assignLanes(meetings) {
+  if (!meetings.length) return meetings;
+  const items = meetings.map((m, i) => {
+    const s = timeToSlotIndex(m.start_time);
+    const e = timeToSlotIndex(m.end_time);
+    return { i, s, e: e <= s ? s + 1 : e }; // 防 end<=start 的异常数据
+  });
+
+  // 1) 并查集：交叉即连通
+  const parent = items.map((_, idx) => idx);
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  for (let a = 0; a < items.length; a++) {
+    for (let b = a + 1; b < items.length; b++) {
+      if (items[a].s < items[b].e && items[b].s < items[a].e) {
+        parent[find(a)] = find(b);
+      }
+    }
+  }
+
+  // 2) 按根分组
+  const groups = new Map();
+  items.forEach((it) => {
+    const root = find(it.i);
+    if (!groups.has(root)) groups.set(root, []);
+    groups.get(root).push(it);
+  });
+
+  // 3) 组内贪心分配泳道
+  const laneInfo = new Array(items.length);
+  groups.forEach((grp) => {
+    grp.sort((x, y) => x.s - y.s);
+    const laneEnds = []; // 每条泳道当前最后结束 slot
+    grp.forEach((it) => {
+      let placed = -1;
+      for (let l = 0; l < laneEnds.length; l++) {
+        if (laneEnds[l] <= it.s) { placed = l; break; }
+      }
+      if (placed === -1) { placed = laneEnds.length; laneEnds.push(it.e); }
+      else { laneEnds[placed] = it.e; }
+      laneInfo[it.i] = { lane: placed, lanes: 0 };
+    });
+    const lanes = laneEnds.length;
+    grp.forEach((it) => { laneInfo[it.i].lanes = lanes; });
+  });
+
+  return meetings.map((m, i) => {
+    const info = laneInfo[i] || { lane: 0, lanes: 1 };
+    return { ...m, _lane: info.lane, _lanes: info.lanes, _conflict: info.lanes > 1 };
+  });
+}
+
 export default function WeekMeetingPage() {
   const [weekKey, setWeekKey] = useState(getMonday(new Date()));
   const [data, setData] = useState({ meetings: [], outputs: [], recurring: [] });
@@ -126,13 +183,14 @@ export default function WeekMeetingPage() {
     return [...custom, ...data.recurring];
   }, [data]);
 
-  // 按 weekday 分组
+  // 按 weekday 分组，并对每天做冲突泳道分配（方案A）
   const meetingsByDay = useMemo(() => {
     const map = {};
     WEEKDAYS.forEach((d) => { map[d] = []; });
     allMeetings.forEach((m) => {
       if (map[m.weekday]) map[m.weekday].push(m);
     });
+    WEEKDAYS.forEach((d) => { map[d] = assignLanes(map[d]); });
     return map;
   }, [allMeetings]);
 
@@ -798,6 +856,11 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
               const span = meetingSpan(m.start_time, m.end_time);
               const isProject = m.source === "project";
               const color = isProject ? (m.theme_color || "#7C3AED") : "#7C3AED";
+              // 方案A：同天时间重叠的会议按泳道分列，互不遮挡
+              const lanes = m._lanes || 1;
+              const lane = m._lane || 0;
+              const lanePct = 100 / lanes;
+              const gap = lanes > 1 ? 2 : 0; // 泳道之间留 2px 间隙
               return (
                 <Tooltip key={m.id || m.title} title={m.title} arrow disableInteractive>
                   <Box
@@ -806,8 +869,8 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
                     sx={{
                       position: "absolute",
                       top: 0,
-                      left: 0,
-                      right: 0,
+                      left: `${lane * lanePct}%`,
+                      width: `calc(${lanePct}% - ${gap}px)`,
                       bgcolor: isProject ? `${color}15` : `${color}20`,
                       borderLeft: `3px solid ${color}`,
                       borderRadius: 0.5,
@@ -819,6 +882,7 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
                       flexDirection: "column",
                       gap: 0.25,
                       zIndex: 2,
+                      transition: "left 0.12s, width 0.12s",
                     }}
                   >
                     <Box sx={{ display: "flex", alignItems: "flex-start", gap: 0.25 }}>
