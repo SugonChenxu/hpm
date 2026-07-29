@@ -43,6 +43,15 @@ function WarehouseIcon(props) {
   );
 }
 
+// 内联笔记图标（快速笔记）
+function NoteIcon(props) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" />
+    </SvgIcon>
+  );
+}
+
 /**
  * Navigation items grouped into three sections for visual hierarchy.
  * Each group has a label and a list of route items.
@@ -70,6 +79,12 @@ const NAV_GROUPS = [
       { text: "库存管理", icon: <WarehouseIcon />, path: "/inventory" },
       { text: "故障管理", icon: <BugReport />, path: "/issues" },
       { text: "周报记录", icon: <Description />, path: "/reports" },
+      ],
+    },
+    {
+      title: "个人空间",
+      items: [
+        { text: "快速笔记", icon: <NoteIcon />, path: "/notes" },
       ],
     },
     {

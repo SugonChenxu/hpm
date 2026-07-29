@@ -10,6 +10,7 @@ import IssueListPage from "./pages/IssueListPage";
 import IssueDashboardPage from "./pages/IssueDashboardPage";
 import MaterialListPage from "./pages/MaterialListPage";
 import InventoryPage from "./pages/InventoryPage";
+import QuickNotesPage from "./pages/QuickNotesPage";
 import MeetingListPage from "./pages/MeetingListPage";
 import WeeklyReportPage from "./pages/WeeklyReportPage";
 import RedirectLegacyRoutes from "./components/layout/RedirectLegacyRoutes";
@@ -50,6 +51,7 @@ function AppInner() {
           <Route path="/issues" element={<IssueDashboardPage />} />
           <Route path="/materials" element={<MaterialListPage />} />
           <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/notes" element={<QuickNotesPage />} />
           <Route path="/meetings" element={<MeetingListPage />} />
           <Route path="/reports" element={<WeeklyReportPage />} />
           <Route path="/users" element={<UserManagementPage />} />

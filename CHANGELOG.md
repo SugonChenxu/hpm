@@ -2,6 +2,14 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-29 — 新增【快速笔记】模块（富文本随手记）
+
+- **新增模块**：落地「快速笔记」模块（M10，个人空间），提供所见即所得富文本编辑器，用于随手记录灵感/待办/要点，支持图文表格混排，对标 ProcessOn「思维笔记」模式。导航新增「个人空间 → 快速笔记」(/notes)。
+- **后端** `server/src/routes/quick-notes.js` + `db.js`：新增 `quick_notes` 表（owner_id/title/content_html/pinned/时间戳），入 `OWNER_TABLES` 启动迁移；实现 `GET /api/quick-notes`(列表，置顶优先、预览去标签)、`POST`(新建)、`GET /:id`(详情)、`PUT /:id`(更新 title/content_html/pinned)、`DELETE /:id`(删除)；全部按 `owner_id` 隔离；挂载 index.js。内容上限 5MB 保护。
+- **富文本编辑器** `client/src/components/notes/RichTextEditor.jsx`：基于 contentEditable + document.execCommand（不引入第三方库，规避 Vite8/rolldown 风险），工具栏含字号(12~48px)、文字颜色、背景高亮、加粗/斜体/下划线/删除线、左中右/两端对齐、有序/无序列表、撤销/重做、清除格式、插入图片(上传+粘贴截图)、插入表格；图片以 base64 DataURL 内嵌。
+- **页面** `client/src/pages/QuickNotesPage.jsx`：左侧笔记列表(新建/搜索/置顶/预览/删除) + 右侧编辑器，标题与内容变更 800ms 防抖自动保存，切换/新建前 flush，状态芯片显示「保存中/已保存时间」。`api/client.js` 新增 `api.quickNotes`；Sidebar(内联 NoteIcon) + App 注册路由。
+- **约束**：遵循 Vite 8 兼容规范，工具栏用 Unicode 文本、导航用内联 SvgIcon，禁用 @mui/icons-material。`vite build` 通过；`forge` 重启在线；DB 层验证 owner 隔离 CRUD 正常。
+
 ## 2026-07-24 — 新增【库存管理】模块（PLM 研发库房库存拉取）
 
 - **新增模块**：按技术方案 `PLM数据抓取技术方案.md` 落地「库存管理」模块，从 PLM 研发库房(sgDevelopmentWarehouse.jsp)拉取指定项目+库位号的库存信息。导航新增「库存管理」(/inventory)，位于「数据管理」分组。

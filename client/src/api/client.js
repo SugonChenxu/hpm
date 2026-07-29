@@ -210,6 +210,15 @@ export const api = {
     inventory: (projectId, lgort) =>
       request(`/plm/inventory?project_id=${projectId}${lgort ? "&lgort=" + encodeURIComponent(lgort) : ""}`),
   },
+  // 快速笔记
+  quickNotes: {
+    list: () => request("/quick-notes"),
+    get: (id) => request(`/quick-notes/${id}`),
+    create: (data) => request("/quick-notes", { method: "POST", body: JSON.stringify(data || {}) }),
+    update: (id, data) =>
+      request(`/quick-notes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    remove: (id) => request(`/quick-notes/${id}`, { method: "DELETE" }),
+  },
   // 缓存管理
   cache: {
     invalidate: (projectId) =>

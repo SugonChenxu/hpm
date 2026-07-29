@@ -696,6 +696,21 @@ try {
   console.warn("Migration meeting_outputs:", e.message);
 }
 
+// 快速笔记（全局，不绑定项目，按 owner 隔离）
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS quick_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT DEFAULT '无标题笔记',
+    content_html TEXT DEFAULT '',
+    pinned INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+  )`);
+} catch (e) {
+  console.warn("Migration quick_notes:", e.message);
+}
+
 // 迁移：meeting_outputs 添加 cycle 字段（每周/隔周/每月）
 try {
   const cols = db.prepare("PRAGMA table_info(meeting_outputs)").all();
@@ -756,6 +771,7 @@ const OWNER_TABLES = [
   "materials",
   "material_requirements",
   "plm_inventory",
+  "quick_notes",
 ];
 
 for (const t of OWNER_TABLES) {

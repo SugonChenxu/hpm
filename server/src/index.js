@@ -24,6 +24,7 @@ import weekMeetingsRouter from "./routes/week-meetings.js";
 import usersRouter from "./routes/users.js";
 import sapStockRouter from "./routes/sap-stock.js";
 import plmRouter from "./routes/plm.js";
+import quickNotesRouter from "./routes/quick-notes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -75,6 +76,7 @@ app.use("/api", weekMeetingsRouter);
 app.use("/api/users", usersRouter);
 app.use("/api", sapStockRouter);
 app.use("/api", plmRouter);
+app.use("/api", quickNotesRouter);
 
 // === 生产模式：托管前端静态文件 ===
 const clientDist = path.resolve(__dirname, "../../client/dist");
