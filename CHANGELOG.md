@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-07-30 — 快速笔记修复：长文工具栏卡顿/显示异常
+
+- **缺陷修复** 根因：编辑器 `onInput` 每次按键调用 `onChange(html) → setContent`（父组件 state），导致**每次按键整页重渲染**，且 `RichTextEditor`（含工具栏+3 个 MUI Select+约20 按钮）随之重渲染；文字越长 `innerHTML` 序列化+组件树重渲染开销越大，工具栏出现卡顿/下拉错位/按钮响应异常（即"字数超过一定量工具栏显示问题"）。
+- **修复** `client/src/pages/QuickNotesPage.jsx`：编辑器内容由 DOM 自身持有，改用 `contentRef` 存储，`onChange` 只写 ref + 防抖保存，不再写 state；`saveNow` 直接读 `contentRef.current`。`client/src/components/notes/RichTextEditor.jsx`：工具栏抽为 `React.memo(EditorToolbar)` 且所有回调 `useCallback` 稳定化，按键时工具栏零重渲染；Select 加 `MenuProps`(zIndex/maxHeight) 防下拉被裁切；垂直 `Divider` 改 `height:22, alignSelf:center` 避免换行时竖线撑高；`insertTaskList` 误用命令改回自定义 `handleTaskList`。
+- **影响范围**：仅快速笔记编辑器，无接口/表结构变动。
+
 ## 2026-07-29 — 会议计划重叠会议分栏并排显示（方案A）
 
 - **新增功能** `client/src/pages/WeekMeetingPage.jsx`：同天时间重复的会议不再互相遮挡、可全部显示且方便观看。新增 `assignLanes(meetings)`——按 `[start,end]` 区间构建并查集冲突组（传递闭包），组内贪心分配泳道 `lane`，组最大并发数=`lanes`；`meetingsByDay` 分组后每天调用。卡片定位由 `left:0;right:0` 改为 `left: lane*100/lanes%`、`width: calc(100/lanes% - 2px)`（lanes>1 留 2px 间隙）；`lanes=1` 时行为完全等价旧版，无回归。顺带修复同起点会议叠放、删除可能误删的隐患（每张卡片独立定位）。

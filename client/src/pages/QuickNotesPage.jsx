@@ -11,14 +11,16 @@ export default function QuickNotesPage() {
   const [notes, setNotes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
+  const [initialHtml, setInitialHtml] = useState("");
   const [pinned, setPinned] = useState(false);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const latestRef = useRef({ title, content, pinned });
-  latestRef.current = { title, content, pinned };
+  // 编辑器内容由 DOM 自身持有，不进 state，避免每次按键触发整页重渲染（长文卡顿/工具栏异常）
+  const contentRef = useRef("");
+  const latestRef = useRef({ title, content: contentRef.current, pinned });
+  latestRef.current = { title, content: contentRef.current, pinned };
   const timerRef = useRef(null);
 
   const loadList = useCallback(async () => {
@@ -30,7 +32,7 @@ export default function QuickNotesPage() {
         loadDetail(list[0].id);
       } else if (selectedId && !list.find((n) => n.id === selectedId)) {
         if (list.length) loadDetail(list[0].id);
-        else { setSelectedId(null); setTitle(""); setContent(""); }
+        else { setSelectedId(null); setTitle(""); setInitialHtml(""); contentRef.current = ""; }
       }
     } finally {
       setLoading(false);
@@ -43,7 +45,8 @@ export default function QuickNotesPage() {
       const n = r.data;
       setSelectedId(n.id);
       setTitle(n.title);
-      setContent(n.content_html || "");
+      contentRef.current = n.content_html || "";
+      setInitialHtml(n.content_html || "");
       setPinned(!!n.pinned);
     } catch {
       /* ignore */
@@ -56,7 +59,8 @@ export default function QuickNotesPage() {
 
   const saveNow = useCallback(async () => {
     if (!selectedId) return;
-    const { title, content, pinned } = latestRef.current;
+    const { title, pinned } = latestRef.current;
+    const content = contentRef.current;
     setStatus("保存中…");
     try {
       await api.quickNotes.update(selectedId, {
@@ -79,9 +83,15 @@ export default function QuickNotesPage() {
     timerRef.current = setTimeout(saveNow, 800);
   }, [saveNow]);
 
+  // 编辑器每次输入只更新 ref + 防抖保存，不写 state（避免长文重渲染卡顿）
+  const handleEditorChange = useCallback((html) => {
+    contentRef.current = html;
+    scheduleSave();
+  }, [scheduleSave]);
+
   useEffect(() => {
     scheduleSave();
-  }, [title, content, pinned, scheduleSave]);
+  }, [title, pinned, scheduleSave]);
 
   const handleSelect = async (id) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -106,7 +116,7 @@ export default function QuickNotesPage() {
     if (selectedId === id) {
       const next = notes.find((n) => n.id !== id);
       if (next) loadDetail(next.id);
-      else { setSelectedId(null); setTitle(""); setContent(""); }
+      else { setSelectedId(null); setTitle(""); setInitialHtml(""); contentRef.current = ""; }
     }
   };
 
@@ -243,8 +253,8 @@ export default function QuickNotesPage() {
                 <RichTextEditor
                   key={selectedId}
                   noteId={selectedId}
-                  initialHtml={content}
-                  onChange={setContent}
+                  initialHtml={initialHtml}
+                  onChange={handleEditorChange}
                 />
               </Box>
             </>

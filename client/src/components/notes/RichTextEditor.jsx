@@ -9,9 +9,13 @@
  *
  * 注：为兼容 Vite 8 / rolldown，不使用第三方富文本库，且工具栏按钮用 Unicode 文本。
  * 工具栏按钮统一用 ToolBtn（方形 IconButton + Tooltip），点击前阻止默认 mousedown 以保留选区。
+ *
+ * 性能要点：编辑器内容由内容区 DOM 自身持有，不进 React state。
+ * onChange 仅把最新 html 交给父级（用于自动保存），父级不应把 html 回灌进 state 触发重渲染，
+ * 否则长文每次按键都会重渲染整条工具栏。工具栏用 React.memo + 稳定回调，按键时零重渲染。
  */
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, memo } from "react";
 import { Box, Tooltip, IconButton, Divider, Select, MenuItem } from "@mui/material";
 
 const FONT_SIZES = [12, 14, 16, 18, 20, 24, 28, 32, 36, 48];
@@ -23,6 +27,18 @@ const HIGHLIGHTS = [
   "#FFFF00", "#FFD966", "#FF9999", "#C6EFCE", "#9DC3E6",
   "#CCCCCC", "#E4DFEC", "#FCE4D6", "transparent",
 ];
+
+const SELECT_SX = {
+  height: 32,
+  borderRadius: 1,
+  fontSize: "0.8rem",
+  "& fieldset": { border: "none" },
+  bgcolor: "background.paper",
+};
+
+const MENU_PROPS = {
+  PaperProps: { sx: { zIndex: 2000, maxHeight: 320 } },
+};
 
 /** 统一风格的工具栏按钮：方形 30px，阻止 mousedown 默认行为以保留编辑器选区 */
 function ToolBtn({ title, onClick, children }) {
@@ -90,6 +106,127 @@ function insertTaskItem(editor) {
   document.execCommand("insertHTML", false, html);
 }
 
+/** 工具栏：仅在传入的回调引用变化时重渲染（按键不重渲染） */
+const EditorToolbar = memo(function EditorToolbar({
+  exec,
+  handleFontSize,
+  handleTextColor,
+  handleHighlight,
+  handleInsertTable,
+  handleTaskList,
+  onImageClick,
+}) {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        rowGap: 0.4,
+        columnGap: 0.3,
+        p: 0.6,
+        flexShrink: 0,
+        border: "1px solid",
+        borderColor: "divider",
+        borderBottom: "none",
+        borderRadius: "8px 8px 0 0",
+        bgcolor: "#fafafa",
+      }}
+    >
+      {/* 字号 */}
+      <Select
+        size="small"
+        displayEmpty
+        defaultValue=""
+        onChange={handleFontSize}
+        MenuProps={MENU_PROPS}
+        sx={{ ...SELECT_SX, minWidth: 70, mr: 0.4 }}
+        renderValue={() => "字号"}
+      >
+        {FONT_SIZES.map((s) => (
+          <MenuItem key={s} value={s}>{s} px</MenuItem>
+        ))}
+      </Select>
+
+      {/* 文字颜色 */}
+      <Select
+        size="small"
+        displayEmpty
+        defaultValue=""
+        onChange={handleTextColor}
+        MenuProps={MENU_PROPS}
+        sx={{ ...SELECT_SX, minWidth: 32, mr: 0.4 }}
+        renderValue={() => (
+          <Box sx={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid #ccc", background: "linear-gradient(45deg,#f00,#00f)" }} />
+        )}
+      >
+        {TEXT_COLORS.map((c) => (
+          <MenuItem key={c} value={c}>
+            <Box sx={{ width: 16, height: 16, mr: 1, borderRadius: 2, border: "1px solid #ccc", bgcolor: c }} />
+            {c}
+          </MenuItem>
+        ))}
+      </Select>
+
+      {/* 高亮 */}
+      <Select
+        size="small"
+        displayEmpty
+        defaultValue=""
+        onChange={handleHighlight}
+        MenuProps={MENU_PROPS}
+        sx={{ ...SELECT_SX, minWidth: 32, mr: 0.4 }}
+        renderValue={() => (
+          <Box sx={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid #ccc", background: "linear-gradient(45deg,#ff0,#0f0)" }} />
+        )}
+      >
+        {HIGHLIGHTS.map((c) => (
+          <MenuItem key={c} value={c}>
+            <Box sx={{ width: 16, height: 16, mr: 1, borderRadius: 2, border: "1px solid #ccc", bgcolor: c }} />
+            {c === "transparent" ? "清除" : c}
+          </MenuItem>
+        ))}
+      </Select>
+
+      <Divider orientation="vertical" sx={{ mx: 0.3, height: 22, alignSelf: "center" }} />
+
+      <ToolBtn title="加粗" onClick={() => exec("bold")}><b>B</b></ToolBtn>
+      <ToolBtn title="斜体" onClick={() => exec("italic")}><i>I</i></ToolBtn>
+      <ToolBtn title="下划线" onClick={() => exec("underline")}><span style={{ textDecoration: "underline" }}>U</span></ToolBtn>
+      <ToolBtn title="删除线" onClick={() => exec("strikeThrough")}><span style={{ textDecoration: "line-through" }}>S</span></ToolBtn>
+
+      <Divider orientation="vertical" sx={{ mx: 0.3, height: 22, alignSelf: "center" }} />
+
+      <ToolBtn title="左对齐" onClick={() => exec("justifyLeft")}>⯇</ToolBtn>
+      <ToolBtn title="居中" onClick={() => exec("justifyCenter")}>≡</ToolBtn>
+      <ToolBtn title="右对齐" onClick={() => exec("justifyRight")}>⯈</ToolBtn>
+      <ToolBtn title="两端对齐" onClick={() => exec("justifyFull")}>▤</ToolBtn>
+
+      <Divider orientation="vertical" sx={{ mx: 0.3, height: 22, alignSelf: "center" }} />
+
+      <ToolBtn title="无序列表" onClick={() => exec("insertUnorderedList")}>•≣</ToolBtn>
+      <ToolBtn title="有序列表" onClick={() => exec("insertOrderedList")}>1.≣</ToolBtn>
+      <ToolBtn title="任务列表（可勾选）" onClick={handleTaskList}>☑≣</ToolBtn>
+
+      <Divider orientation="vertical" sx={{ mx: 0.3, height: 22, alignSelf: "center" }} />
+
+      <ToolBtn title="增加缩进" onClick={() => exec("indent")}>⇥</ToolBtn>
+      <ToolBtn title="减少缩进" onClick={() => exec("outdent")}>⇤</ToolBtn>
+
+      <Divider orientation="vertical" sx={{ mx: 0.3, height: 22, alignSelf: "center" }} />
+
+      <ToolBtn title="撤销" onClick={() => exec("undo")}>↶</ToolBtn>
+      <ToolBtn title="重做" onClick={() => exec("redo")}>↷</ToolBtn>
+      <ToolBtn title="清除格式" onClick={() => exec("removeFormat")}>⌫</ToolBtn>
+
+      <Divider orientation="vertical" sx={{ mx: 0.3, height: 22, alignSelf: "center" }} />
+
+      <ToolBtn title="插入图片（上传）" onClick={onImageClick}>🖼</ToolBtn>
+      <ToolBtn title="插入表格" onClick={handleInsertTable}>▦</ToolBtn>
+    </Box>
+  );
+});
+
 export default function RichTextEditor({ noteId, initialHtml = "", onChange }) {
   const editorRef = useRef(null);
   const fileRef = useRef(null);
@@ -100,7 +237,7 @@ export default function RichTextEditor({ noteId, initialHtml = "", onChange }) {
     if (editorRef.current) {
       editorRef.current.innerHTML = initialHtml || "";
     }
-  }, [noteId]);
+  }, [noteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 记录当前选区（点击颜色/字号等 Select 会抢走焦点，需还原）
   const saveSelection = useCallback(() => {
@@ -132,190 +269,111 @@ export default function RichTextEditor({ noteId, initialHtml = "", onChange }) {
     [emit]
   );
 
-  const handleFontSize = (e) => {
-    const px = e.target.value;
-    e.target.value = "";
-    if (!px) return;
-    restoreSelection();
-    applyFontSize(editorRef.current, Number(px));
-    emit();
-  };
+  const handleFontSize = useCallback(
+    (e) => {
+      const px = e.target.value;
+      e.target.value = "";
+      if (!px) return;
+      restoreSelection();
+      applyFontSize(editorRef.current, Number(px));
+      emit();
+    },
+    [restoreSelection, emit]
+  );
 
-  const handleTextColor = (e) => {
-    const c = e.target.value;
-    e.target.value = "";
-    if (!c) return;
-    restoreSelection();
-    editorRef.current.focus();
-    document.execCommand("styleWithCSS", false, true);
-    document.execCommand("foreColor", false, c);
-    emit();
-  };
+  const handleTextColor = useCallback(
+    (e) => {
+      const c = e.target.value;
+      e.target.value = "";
+      if (!c) return;
+      restoreSelection();
+      editorRef.current.focus();
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("foreColor", false, c);
+      emit();
+    },
+    [restoreSelection, emit]
+  );
 
-  const handleHighlight = (e) => {
-    const c = e.target.value;
-    e.target.value = "";
-    if (!c) return;
-    restoreSelection();
-    editorRef.current.focus();
-    document.execCommand("styleWithCSS", false, true);
-    // Chrome 下 hiliteColor 配合 styleWithCSS 生效
-    try {
-      document.execCommand("hiliteColor", false, c);
-    } catch {
-      document.execCommand("backColor", false, c);
-    }
-    emit();
-  };
-
-  const handleImageFile = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      exec("insertImage", reader.result);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
-  const handlePaste = (e) => {
-    const items = (e.clipboardData || window.clipboardData)?.items;
-    if (!items) return;
-    for (const it of items) {
-      if (it.type.indexOf("image") === 0) {
-        e.preventDefault();
-        const blob = it.getAsFile();
-        const reader = new FileReader();
-        reader.onload = () => exec("insertImage", reader.result);
-        reader.readAsDataURL(blob);
-        break;
+  const handleHighlight = useCallback(
+    (e) => {
+      const c = e.target.value;
+      e.target.value = "";
+      if (!c) return;
+      restoreSelection();
+      editorRef.current.focus();
+      document.execCommand("styleWithCSS", false, true);
+      // Chrome 下 hiliteColor 配合 styleWithCSS 生效
+      try {
+        document.execCommand("hiliteColor", false, c);
+      } catch {
+        document.execCommand("backColor", false, c);
       }
-    }
-  };
+      emit();
+    },
+    [restoreSelection, emit]
+  );
 
-  const handleInsertTable = () => {
+  const onImageClick = useCallback(() => {
+    fileRef.current?.click();
+  }, []);
+
+  const handleImageFile = useCallback(
+    (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        exec("insertImage", reader.result);
+      };
+      reader.readAsDataURL(file);
+      e.target.value = "";
+    },
+    [exec]
+  );
+
+  const handlePaste = useCallback(
+    (e) => {
+      const items = (e.clipboardData || window.clipboardData)?.items;
+      if (!items) return;
+      for (const it of items) {
+        if (it.type.indexOf("image") === 0) {
+          e.preventDefault();
+          const blob = it.getAsFile();
+          const reader = new FileReader();
+          reader.onload = () => exec("insertImage", reader.result);
+          reader.readAsDataURL(blob);
+          break;
+        }
+      }
+    },
+    [exec]
+  );
+
+  const handleInsertTable = useCallback(() => {
     const dims = window.prompt("输入表格行数,列数（例如 3,3）", "3,3");
     if (!dims) return;
     const [r, c] = dims.split(",").map((n) => Math.max(1, Math.min(20, parseInt(n, 10) || 3)));
     insertTable(editorRef.current, r, c);
     emit();
-  };
+  }, [emit]);
 
-  const selectSx = {
-    height: 32,
-    borderRadius: 1,
-    fontSize: "0.8rem",
-    "& fieldset": { border: "none" },
-    bgcolor: "background.paper",
-  };
+  const handleTaskList = useCallback(() => {
+    insertTaskItem(editorRef.current);
+    emit();
+  }, [emit]);
 
   return (
     <Box>
-      {/* 工具栏 */}
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: 0.3,
-          p: 0.6,
-          border: "1px solid",
-          borderColor: "divider",
-          borderBottom: "none",
-          borderRadius: "8px 8px 0 0",
-          bgcolor: "#fafafa",
-        }}
-      >
-        {/* 字号 */}
-        <Select
-          size="small"
-          displayEmpty
-          defaultValue=""
-          onChange={handleFontSize}
-          sx={{ ...selectSx, minWidth: 70, mr: 0.4 }}
-          renderValue={() => "字号"}
-        >
-          {FONT_SIZES.map((s) => (
-            <MenuItem key={s} value={s}>{s} px</MenuItem>
-          ))}
-        </Select>
-
-        {/* 文字颜色 */}
-        <Select
-          size="small"
-          displayEmpty
-          defaultValue=""
-          onChange={handleTextColor}
-          sx={{ ...selectSx, minWidth: 32, mr: 0.4 }}
-          renderValue={() => (
-            <Box sx={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid #ccc", background: "linear-gradient(45deg,#f00,#00f)" }} />
-          )}
-        >
-          {TEXT_COLORS.map((c) => (
-            <MenuItem key={c} value={c}>
-              <Box sx={{ width: 16, height: 16, mr: 1, borderRadius: 2, border: "1px solid #ccc", bgcolor: c }} />
-              {c}
-            </MenuItem>
-          ))}
-        </Select>
-
-        {/* 高亮 */}
-        <Select
-          size="small"
-          displayEmpty
-          defaultValue=""
-          onChange={handleHighlight}
-          sx={{ ...selectSx, minWidth: 32, mr: 0.4 }}
-          renderValue={() => (
-            <Box sx={{ width: 18, height: 18, borderRadius: "50%", border: "1px solid #ccc", background: "linear-gradient(45deg,#ff0,#0f0)" }} />
-          )}
-        >
-          {HIGHLIGHTS.map((c) => (
-            <MenuItem key={c} value={c}>
-              <Box sx={{ width: 16, height: 16, mr: 1, borderRadius: 2, border: "1px solid #ccc", bgcolor: c }} />
-              {c === "transparent" ? "清除" : c}
-            </MenuItem>
-          ))}
-        </Select>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3 }} />
-
-        <ToolBtn title="加粗" onClick={() => exec("bold")}><b>B</b></ToolBtn>
-        <ToolBtn title="斜体" onClick={() => exec("italic")}><i>I</i></ToolBtn>
-        <ToolBtn title="下划线" onClick={() => exec("underline")}><span style={{ textDecoration: "underline" }}>U</span></ToolBtn>
-        <ToolBtn title="删除线" onClick={() => exec("strikeThrough")}><span style={{ textDecoration: "line-through" }}>S</span></ToolBtn>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3 }} />
-
-        <ToolBtn title="左对齐" onClick={() => exec("justifyLeft")}>⯇</ToolBtn>
-        <ToolBtn title="居中" onClick={() => exec("justifyCenter")}>≡</ToolBtn>
-        <ToolBtn title="右对齐" onClick={() => exec("justifyRight")}>⯈</ToolBtn>
-        <ToolBtn title="两端对齐" onClick={() => exec("justifyFull")}>▤</ToolBtn>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3 }} />
-
-        <ToolBtn title="无序列表" onClick={() => exec("insertUnorderedList")}>•≣</ToolBtn>
-        <ToolBtn title="有序列表" onClick={() => exec("insertOrderedList")}>1.≣</ToolBtn>
-        <ToolBtn title="任务列表（可勾选）" onClick={() => insertTaskItem(editorRef.current)}>☑≣</ToolBtn>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3 }} />
-
-        <ToolBtn title="增加缩进" onClick={() => exec("indent")}>⇥</ToolBtn>
-        <ToolBtn title="减少缩进" onClick={() => exec("outdent")}>⇤</ToolBtn>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3 }} />
-
-        <ToolBtn title="撤销" onClick={() => exec("undo")}>↶</ToolBtn>
-        <ToolBtn title="重做" onClick={() => exec("redo")}>↷</ToolBtn>
-        <ToolBtn title="清除格式" onClick={() => exec("removeFormat")}>⌫</ToolBtn>
-
-        <Divider orientation="vertical" flexItem sx={{ mx: 0.3 }} />
-
-        <ToolBtn title="插入图片（上传）" onClick={() => fileRef.current?.click()}>🖼</ToolBtn>
-        <ToolBtn title="插入表格" onClick={handleInsertTable}>▦</ToolBtn>
-        <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageFile} />
-      </Box>
+      <EditorToolbar
+        exec={exec}
+        handleFontSize={handleFontSize}
+        handleTextColor={handleTextColor}
+        handleHighlight={handleHighlight}
+        handleInsertTable={handleInsertTable}
+        handleTaskList={handleTaskList}
+        onImageClick={onImageClick}
+      />
 
       {/* 编辑区 */}
       <Box
@@ -347,6 +405,7 @@ export default function RichTextEditor({ noteId, initialHtml = "", onChange }) {
         }}
         placeholder="开始记录你的笔记…"
       />
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={handleImageFile} />
     </Box>
   );
 }
