@@ -6,6 +6,7 @@ import {
 } from "@mui/material";
 import { ChevronLeft, ChevronRight, Add, DeleteOutline, EditOutlined } from "@mui/icons-material";
 import api from "../api/client";
+import { parseMeetingInvite } from "../utils/parseMeetingInvite";
 import PageHeader from "../components/common/PageHeader";
 import PageLoading from "../components/common/PageLoading";
 
@@ -132,7 +133,11 @@ export default function WeekMeetingPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [outputs, setOutputs] = useState({});
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-  const [form, setForm] = useState({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1 });
+  const [form, setForm] = useState({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1, meeting_url: "" });
+  /** 智能解析（腾讯会议 / 全时会议邀请）状态 */
+  const [inviteText, setInviteText] = useState("");
+  const [parseMsg, setParseMsg] = useState("");
+  const [parseErr, setParseErr] = useState(false);
 
   /** 行内 Popper 新建会议状态 */
   const [popper, setPopper] = useState({
@@ -206,11 +211,43 @@ export default function WeekMeetingPage() {
         severity: "success",
       });
       setAddOpen(false);
-      setForm({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1 });
+      setForm({ weekday: "周一", start_time: "09:00", end_time: "10:00", title: "", weeks: 1, meeting_url: "" });
+      setInviteText("");
+      setParseMsg("");
       loadMeetingData();
     } catch (err) {
       setSnackbar({ open: true, message: err.message, severity: "error" });
     }
+  };
+
+  /** 解析腾讯会议 / 全时会议邀请，填表并跳到对应周 */
+  const handleParseInvite = () => {
+    if (!inviteText.trim()) {
+      setParseErr(true);
+      setParseMsg("请先粘贴会议邀请文本或链接");
+      return;
+    }
+    const r = parseMeetingInvite(inviteText, new Date());
+    if (!r.ok) {
+      setParseErr(true);
+      setParseMsg(r.error || "解析失败");
+      return;
+    }
+    setForm((f) => ({
+      ...f,
+      title: r.title || f.title,
+      weekday: r.weekday || f.weekday,
+      start_time: r.start_time,
+      end_time: r.end_time,
+      meeting_url: r.meeting_url || "",
+    }));
+    if (r.date) {
+      const wk = getMonday(r.date);
+      if (wk !== weekKey) setWeekKey(wk);
+    }
+    const parts = [r.title, r.weekday, `${r.start_time}-${r.end_time}`].filter(Boolean).join("  ");
+    setParseErr(false);
+    setParseMsg(r.warnings.length ? `${parts}（${r.warnings.join("；")}）` : `已解析：${parts}`);
   };
 
   // === 删除会议 ===
@@ -565,6 +602,34 @@ export default function WeekMeetingPage() {
         <DialogTitle>添加会议</DialogTitle>
         <DialogContent>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            {/* 智能解析：粘贴腾讯会议 / 全时会议邀请，自动提取时间 */}
+            <Box sx={{ p: 1.5, border: "1px dashed", borderColor: "divider", borderRadius: 1, bgcolor: "#FAFAFB" }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                快速解析（腾讯会议 / 全时会议）：粘贴邀请全文或链接，自动提取会议时间
+              </Typography>
+              <TextField
+                multiline
+                minRows={3}
+                fullWidth
+                size="small"
+                placeholder="例如：会议主题：项目周会&#10;会议时间：2026/07/30 15:00-16:00&#10;https://meeting.tencent.com/dm/xxxx"
+                value={inviteText}
+                onChange={(e) => setInviteText(e.target.value)}
+              />
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}>
+                <Button size="small" variant="outlined" onClick={handleParseInvite}>解析并填入</Button>
+                <Button size="small" color="inherit" onClick={() => { setInviteText(""); setParseMsg(""); }}>清空</Button>
+                {parseMsg && (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: parseErr ? "error.main" : "success.main", lineHeight: 1.3 }}
+                  >
+                    {parseMsg}
+                  </Typography>
+                )}
+              </Box>
+            </Box>
+
             <TextField select label="星期" value={form.weekday} onChange={(e) => setForm({ ...form, weekday: e.target.value })}>
               {WEEKDAYS.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
             </TextField>
@@ -577,6 +642,13 @@ export default function WeekMeetingPage() {
               </TextField>
             </Box>
             <TextField label="会议名称" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} autoFocus />
+            <TextField
+              label="入会链接（选填）"
+              placeholder="腾讯会议 / 全时会议链接"
+              value={form.meeting_url}
+              onChange={(e) => setForm({ ...form, meeting_url: e.target.value })}
+              InputProps={{ sx: { fontSize: "0.8rem" } }}
+            />
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
               <Typography variant="caption" color="text.secondary">持续周数</Typography>
               <TextField
@@ -906,6 +978,18 @@ function Row({ time, rowIdx, meetingsByDay, dragState, onDelete, onCellMouseDown
                     <Typography sx={{ fontSize: "0.65rem", color: "text.secondary" }}>
                       {m.start_time}-{m.end_time}
                     </Typography>
+                    {m.meeting_url && (
+                      <a
+                        href={m.meeting_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        style={{ fontSize: "0.6rem", color: "#2563EB", textDecoration: "none", lineHeight: 1.2 }}
+                      >
+                        🔗 入会
+                      </a>
+                    )}
                   </Box>
                 </Tooltip>
               );

@@ -672,6 +672,14 @@ CREATE TABLE IF NOT EXISTS week_meeting_outputs (
 `);
 console.log("Migration week_meetings + week_meeting_outputs: done");
 
+// 迁移：week_meetings 增加 meeting_url（腾讯会议 / 全时会议入会链接）
+try {
+  db.exec(`ALTER TABLE week_meetings ADD COLUMN meeting_url TEXT DEFAULT ''`);
+  console.log("Migration week_meetings.meeting_url: done");
+} catch (e) {
+  // 列已存在，忽略
+}
+
 // 迁移：week_meeting_outputs（单 blob）→ meeting_outputs（逐条 item + 完成态）
 try {
   db.exec(`CREATE TABLE IF NOT EXISTS meeting_outputs (

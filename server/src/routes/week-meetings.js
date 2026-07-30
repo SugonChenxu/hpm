@@ -112,20 +112,20 @@ router.get("/week-meetings", (req, res) => {
 
 // POST /week-meetings
 router.post("/week-meetings", (req, res) => {
-  const { week_key, weekday, start_time, end_time, title } = req.body;
+  const { week_key, weekday, start_time, end_time, title, meeting_url } = req.body;
   const weeks = Math.max(1, Math.min(52, parseInt(req.body.weeks, 10) || 1));
   if (!week_key || !weekday || !start_time || !end_time || !title) {
     return res.status(400).json({ ok: false, error: "缺少必填字段" });
   }
   const insert = db.prepare(
-    "INSERT INTO week_meetings (week_key, weekday, start_time, end_time, title, owner_id) VALUES (?, ?, ?, ?, ?, ?)"
+    "INSERT INTO week_meetings (week_key, weekday, start_time, end_time, title, meeting_url, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
   const getOne = db.prepare("SELECT * FROM week_meetings WHERE id = ?");
   const created = [];
   const tx = db.transaction(() => {
     for (let i = 0; i < weeks; i++) {
       const wk = addDaysToWeekKey(week_key, i * 7);
-      const info = insert.run(wk, weekday, start_time, end_time, title, req.userId);
+      const info = insert.run(wk, weekday, start_time, end_time, title, meeting_url || "", req.userId);
       created.push(getOne.get(info.lastInsertRowid));
     }
   });
@@ -135,12 +135,12 @@ router.post("/week-meetings", (req, res) => {
 
 // PUT /week-meetings/:id
 router.put("/week-meetings/:id", (req, res) => {
-  const { weekday, start_time, end_time, title } = req.body;
+  const { weekday, start_time, end_time, title, meeting_url } = req.body;
   const existing = db.prepare("SELECT id FROM week_meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   if (!existing) return res.status(404).json({ ok: false, error: "周例会不存在" });
   db.prepare(
-    "UPDATE week_meetings SET weekday=?, start_time=?, end_time=?, title=?, updated_at=datetime('now','localtime') WHERE id=? AND owner_id=?"
-  ).run(weekday, start_time, end_time, title, req.params.id, req.userId);
+    "UPDATE week_meetings SET weekday=?, start_time=?, end_time=?, title=?, meeting_url=?, updated_at=datetime('now','localtime') WHERE id=? AND owner_id=?"
+  ).run(weekday, start_time, end_time, title, meeting_url || "", req.params.id, req.userId);
   const meeting = db.prepare("SELECT * FROM week_meetings WHERE id = ? AND owner_id = ?").get(req.params.id, req.userId);
   res.json({ ok: true, data: meeting });
 });
