@@ -62,26 +62,40 @@ check("阶段任务(行9)加粗", s1.getCell(9, 2).font.bold === true);
 // 叶子任务不加粗（行3 需求调研）
 check("叶子任务不加粗", s1.getCell(3, 2).font.bold !== true);
 
-// 甘特图验证
+// 甘特图验证（模板风格：表头 2 行，数据自第 3 行，色块自 C 列起）
 const gHeaders = [];
 s2.getRow(1).eachCell((c) => gHeaders.push(c.value));
 const monthCols = gHeaders.filter((h) => typeof h === "string" && /^\d{4}-\d{2}$/.test(h));
 check("甘特图表头含月份轴", monthCols.length >= 6, `共 ${monthCols.length} 个月: ${monthCols[0]}..${monthCols[monthCols.length - 1]}`);
 check("甘特图月份从 2026-01 起", monthCols[0] === "2026-01");
 check("甘特图月份到 2026-06 止", monthCols[monthCols.length - 1] === "2026-06");
-// 阶段任务(行2 阶段一: 1月~3月)色块 = 深蓝
-const phaseFill = s2.getCell(2, 6).fill;
-check("阶段任务色块深蓝", phaseFill && phaseFill.fgColor && phaseFill.fgColor.argb === "FF1976D2", phaseFill && phaseFill.fgColor ? phaseFill.fgColor.argb : "无填充");
-// 叶子任务(行3 需求调研: 1月)色块 = 浅蓝
-const leafFill = s2.getCell(3, 6).fill;
-check("叶子任务色块浅蓝", leafFill && leafFill.fgColor && leafFill.fgColor.argb === "FF90CAF9", leafFill && leafFill.fgColor ? leafFill.fgColor.argb : "无填充");
-// 阶段任务行加粗（甘特图 sheet）
-check("甘特图阶段行加粗", s2.getRow(2).getCell(2).font.bold === true);
-// 顶层普通任务(行8 结构打样: 4月~5月)应有色块（浅蓝）
+// 行2 = 日期范围表头（模板风格 m/d）
+check("甘特图行2日期范围", s2.getCell(2, 3).value === "1/1-1/31", `实际 ${s2.getCell(2, 3).value}`);
+// 冻结 A/B 列 + 前 2 行
+const v0 = s2.views[0];
+check("甘特图冻结 C3", v0 && v0.state === "frozen" && v0.xSplit === 2 && v0.ySplit === 2, JSON.stringify(v0));
+// 数据行自第 3 行：任务1(阶段一 2026-01~03) 行3 色块=深蓝
+const phaseFill = s2.getCell(3, 3).fill; // 2026-01 列
+check("阶段任务色块深蓝", phaseFill && phaseFill.fgColor && phaseFill.fgColor.argb === "FF4472C4", phaseFill && phaseFill.fgColor ? phaseFill.fgColor.argb : "无填充");
+// 叶子任务(任务2 需求调研 2026-01) 行4 = 浅蓝
+const leafFill = s2.getCell(4, 3).fill;
+check("叶子任务色块浅蓝", leafFill && leafFill.fgColor && leafFill.fgColor.argb === "FFB4C7E7", leafFill && leafFill.fgColor ? leafFill.fgColor.argb : "无填充");
+// 节点任务(任务3 方案评审 2026-02-02 单日) 行5 = 灰色里程碑单格
+const mileFill = s2.getCell(5, 4).fill; // 2026-02 列
+let mileCount = 0;
+for (let c = 3; c <= s2.columnCount; c++) {
+  const f = s2.getCell(5, c).fill;
+  if (f && f.fgColor) mileCount++;
+}
+check("节点任务灰色里程碑格", mileFill && mileFill.fgColor && mileFill.fgColor.argb === "FFA6A6A6", mileFill && mileFill.fgColor ? mileFill.fgColor.argb : "无填充");
+check("节点任务仅单格标记", mileCount === 1, `共 ${mileCount} 格`);
+// 甘特图任务名称全部加粗（模板风格）
+check("甘特图任务名加粗", s2.getCell(3, 2).font.bold === true && s2.getCell(4, 2).font.bold === true);
+// 顶层普通任务(任务7 结构打样 2026-04~05) 行9 = 浅蓝色块
 let topLeaf = false;
-for (let c = 6; c <= s2.columnCount; c++) {
-  const f = s2.getCell(8, c).fill;
-  if (f && f.fgColor && f.fgColor.argb === "FF90CAF9") { topLeaf = true; break; }
+for (let c = 3; c <= s2.columnCount; c++) {
+  const f = s2.getCell(9, c).fill;
+  if (f && f.fgColor && f.fgColor.argb === "FFB4C7E7") { topLeaf = true; break; }
 }
 check("顶层普通任务有色块", topLeaf);
 

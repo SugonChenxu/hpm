@@ -251,12 +251,21 @@ export async function buildScheduleWorkbook(tasks, project) {
 }
 
 /**
- * 构建「甘特图」工作表：每行一个任务，时间轴按月展开，
- * 任务覆盖的自然月以色块填充（阶段任务深蓝+加粗、叶子任务浅蓝）。
+ * 构建「甘特图」工作表（参考「曙光天阔 N50 Pro Schedule V12」模板风格）：
+ * - 双层表头：行1 月份序号(2026-07) + 行2 日期范围(7/1-7/31)，浅灰底纹加粗居中
+ * - 每任务一行，时间轴按月展开，任务覆盖的自然月以色块填充：
+ *   阶段任务 主题深蓝(#4472C4) / 叶子任务 浅蓝(#B4C7E7) / 节点任务(里程碑) 灰色标记(#A6A6A6)
+ * - 任务名称全部加粗（同模板 System test/ME/EE 等行）
+ * - 冻结 A/B 列与前 2 行表头（C3），滚动时任务名与表头始终可见
+ * - 不设单元格边框（同模板：色块直接铺，靠行高/深浅分层）
  * 阶段任务的起止取其后代叶子任务的最小/最大日期（递归穿透子阶段）。
  */
 function buildGanttSheet(workbook, tasks, childrenMap) {
   const gantt = workbook.addWorksheet("甘特图（月）");
+  const PHASE_BAR = "FF4472C4"; // 阶段任务：主题深蓝
+  const LEAF_BAR = "FFB4C7E7"; // 叶子任务：浅蓝
+  const MILE_BAR = "FFA6A6A6"; // 节点任务（里程碑）：灰色标记
+  const HEAD_FILL = "FFF2F2F2"; // 表头浅灰底（同模板日期行）
 
   const parseDate = (s) => {
     if (!s || typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
@@ -266,6 +275,12 @@ function buildGanttSheet(workbook, tasks, childrenMap) {
   const monthOf = (d) => d.getUTCFullYear() * 12 + d.getUTCMonth();
   const monthLabel = (m) =>
     `${Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, "0")}`; // 2026-07
+  const monthRangeLabel = (m) => {
+    const y = Math.floor(m / 12);
+    const mo = (m % 12) + 1;
+    const days = new Date(Date.UTC(y, mo, 0)).getUTCDate(); // 当月天数
+    return `${mo}/1-${mo}/${days}`; // 7/1-7/31（同模板 m/d 日期风格）
+  };
 
   // 递归收集阶段任务的全部叶子子孙（不含阶段自身）
   const collectLeafTasks = (phaseId) => {
@@ -317,77 +332,62 @@ function buildGanttSheet(workbook, tasks, childrenMap) {
   }
   const monthCount = maxM - minM + 1;
 
-  // 列布局：A 序号 / B 任务名称 / C 开始 / D 结束 / E 工期(月) / F.. 逐月
-  const prefixCols = 5; // A..E
-  const ganttHeads = ["序号", "任务名称", "开始日期", "结束日期", "工期(月)"];
-  const ganttWidths = [6, 34, 12, 12, 9];
-  ganttHeads.forEach((h, idx) => {
-    gantt.getCell(1, idx + 1).value = h;
-  });
+  // 列布局：A 序号 / B 任务名称 / C.. 逐月（同模板：左侧名称列 + 时间轴列）
+  const prefixCols = 2; // A..B
+  gantt.getCell(1, 1).value = "序号";
+  gantt.getCell(1, 2).value = "任务名称";
   for (let m = 0; m < monthCount; m++) {
-    gantt.getCell(1, prefixCols + 1 + m).value = monthLabel(minM + m);
-    ganttWidths.push(8);
+    gantt.getCell(1, prefixCols + 1 + m).value = monthLabel(minM + m); // 行1：月份
+    gantt.getCell(2, prefixCols + 1 + m).value = monthRangeLabel(minM + m); // 行2：日期范围
   }
-  ganttWidths.forEach((w, idx) => {
-    gantt.getColumn(idx + 1).width = w;
-  });
+  gantt.getColumn(1).width = 6;
+  gantt.getColumn(2).width = 30;
+  for (let m = 0; m < monthCount; m++) gantt.getColumn(prefixCols + 1 + m).width = 9;
 
-  // 阶段任务条：深蓝；叶子任务条：浅蓝
-  const PHASE_BAR = "FF1976D2";
-  const LEAF_BAR = "FF90CAF9";
-  const barFor = (t) => (t.task_type === "阶段任务" ? PHASE_BAR : LEAF_BAR);
+  // 表头 2 行：浅灰底 + 加粗 + 居中
+  for (let r = 1; r <= 2; r++) {
+    const row = gantt.getRow(r);
+    row.height = 18;
+    row.font = { bold: true };
+    row.alignment = { horizontal: "center", vertical: "middle" };
+    for (let c = 1; c <= prefixCols + monthCount; c++) {
+      const cell = gantt.getCell(r, c);
+      if (cell.value === undefined || cell.value === null) cell.value = ""; // 占位
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEAD_FILL } };
+    }
+  }
+
+  // 冻结 A/B 列 + 前 2 行表头（同模板 freeze C6 → 此处 C3）
+  gantt.views = [{ state: "frozen", xSplit: 2, ySplit: 2, topLeftCell: "C3" }];
+
+  const barFor = (t) => {
+    if (t.task_type === "阶段任务") return PHASE_BAR;
+    if (t.task_type === "节点任务") return MILE_BAR;
+    return LEAF_BAR;
+  };
 
   tasks.forEach((t, i) => {
     const r = ranges[i];
-    const rowNum = i + 2;
+    const rowNum = i + 3; // 表头 2 行 → 数据自第 3 行起
     const indent = "  ".repeat(t.depth || 0);
     const cleanSrcName = String(t.name).replace(/^(\s*)(└\s)?/, "");
     const displayName = indent + (t.depth > 0 ? "└ " : "") + cleanSrcName;
     gantt.getCell(rowNum, 1).value = t.task_order;
     gantt.getCell(rowNum, 2).value = displayName;
+    gantt.getRow(rowNum).height = 22;
+    // 任务名称全部加粗（同模板：System test / ME / EE / THM 均为粗体）
+    gantt.getCell(rowNum, 1).font = { bold: true };
+    gantt.getCell(rowNum, 2).font = { bold: true };
 
-    if (r) {
-      const startCell = gantt.getCell(rowNum, 3);
-      const endCell = gantt.getCell(rowNum, 4);
-      startCell.value = r.start;
-      startCell.numFmt = "yyyy-mm-dd";
-      endCell.value = r.end;
-      endCell.numFmt = "yyyy-mm-dd";
-      gantt.getCell(rowNum, 5).value = Math.max(1, monthOf(r.end) - monthOf(r.start) + 1);
-
-      const sM = monthOf(r.start);
-      const eM = monthOf(r.end);
-      for (let m = 0; m < monthCount; m++) {
-        const curM = minM + m;
-        if (curM < sM || curM > eM) continue;
-        const cell = gantt.getCell(rowNum, prefixCols + 1 + m);
-        cell.value = ""; // 占位：无值但有样式的单元格可能不写入文件
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: barFor(t) } };
-      }
-    }
-  });
-
-  // 表头样式 + 全表边框
-  const gHeader = gantt.getRow(1);
-  gHeader.font = { bold: true };
-  gHeader.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE3F2FD" } };
-  gHeader.alignment = { horizontal: "center", vertical: "middle" };
-  for (let i = 1; i <= tasks.length + 1; i++) {
-    const row = gantt.getRow(i);
-    row.eachCell((cell) => {
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" },
-      };
-    });
-  }
-
-  // 阶段任务行整行加粗（甘特图 sheet 与排期表保持一致的强调）
-  tasks.forEach((t, i) => {
-    if (t.task_type === "阶段任务") {
-      gantt.getRow(i + 2).font = { bold: true };
+    if (!r) return;
+    const sM = monthOf(r.start);
+    const eM = monthOf(r.end);
+    for (let m = 0; m < monthCount; m++) {
+      const curM = minM + m;
+      if (curM < sM || curM > eM) continue;
+      const cell = gantt.getCell(rowNum, prefixCols + 1 + m);
+      cell.value = ""; // 占位：无值但有样式的单元格可能不写入文件
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: barFor(t) } };
     }
   });
 }
