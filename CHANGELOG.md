@@ -2,6 +2,15 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-11 — 【项目计划】前置联动逻辑审查加固（4 项修复）
+
+- **缺陷修复（前端计算不一致）** `client/src/utils/schedule-date.js`：`updateStartDate`/`updateDuration` 计算结束日期为 `开始 + 工期`（不含首尾），与后端 `开始 + 工期 - 1`（含首尾）不一致——此前靠后端忽略 `body.planned_end` 纠正，若未来乐观更新会差 1 天。已改为 `+工期-1` 并对齐注释（start=21, dur=5 → end=25）。
+- **接口调整（触发条件精确化）** PUT 前置联动触发条件由 `body.planned_start !== undefined` 改为 `updates.planned_start !== undefined`：普通任务仅改结束时间不联动（正确）；节点任务传 `planned_end`（单日，开始=结束同时变化）也会正确联动；锁定任务本就因提前 return 不触发（复核确认无漏洞）。
+- **缺陷修复（日期比较规范化）** `linkPredecessorsToStart` 内日期统一 `slice(0,10)` 比较，防历史/导入数据带时间部分（如 `2026-08-14 00:00:00`）导致"紧贴/重叠"判断失配。
+- **新增功能（跳过提示）** 前置整体晚于 A 新开始时间（无法自动压缩）时不再静默跳过：`linkPredecessorsToStart` 返回 `{ linked, warnings }`，PUT 响应带 `warnings`，前端 snackbar 黄色提示"前置任务「X」整体晚于任务「A」的新开始时间（YYYY-MM-DD），已跳过自动调整，请手动检查排期冲突"。
+- **审查结论（已知边界，未改）** 循环依赖（A↔B 互为前置）由 `detectCycle` 阻止新建，历史导入残留属既有行为；级联对受影响集去重，不会死循环。
+- 验证：单测 `server/test-predecessor-link.mjs` 28/28（14 场景，新增：warning 返回、时间脏数据规范化、值未变不联动）；端到端 6/6（PUT warnings 透传 + 全量树）。
+
 ## 2026-08-11 — 【项目计划】前置联动补充：A 开始时间后移时顺延紧贴前置任务
 
 - **新增功能** `linkPredecessorsToStart` 增加 `oldStartA`（修改前开始时间）参数，扩展联动规则：

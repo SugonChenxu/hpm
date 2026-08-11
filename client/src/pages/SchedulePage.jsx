@@ -172,7 +172,12 @@ export default function SchedulePage() {
     try {
       const res = await api.schedule.update(taskId, data);
       setTasks(applyStatus(res.data));
-      setSnackbar({ open: true, message: "已保存", severity: "success" });
+      if (res.warnings && res.warnings.length) {
+        // 前置联动存在无法自动调整的场景（如前置整体晚于新开始时间）
+        setSnackbar({ open: true, message: res.warnings.join("；"), severity: "warning" });
+      } else {
+        setSnackbar({ open: true, message: "已保存", severity: "success" });
+      }
     } catch (err) {
       setSnackbar({
         open: true,

@@ -59,34 +59,47 @@ function daysBetween(startStr, endStr) {
  *    B 开始不变，工期重算（保持"前置恰好在前一天完成"的依赖关系）；原本远早于 A 结束的前置不变化；
  *  - B 的结束时间早于 A 的新开始时间且原本不紧贴 → 不变化。
  * 仅联动「普通任务」前置；阶段任务日期由系统聚合、节点任务为单日里程碑，均跳过；
- * 锁定任务（is_locked=1）跳过；防御：若压缩后 结束 < 开始 则跳过该前置（避免脏数据）。
+ * 锁定任务（is_locked=1）跳过；防御：若压缩后 结束 < 开始（前置整体晚于 A 新开始）则跳过
+ * 该前置并在 warnings 中提示，避免脏数据且让调用方知悉。
  * @param {string|null} oldStartA A 修改前的开始时间（用于判断"后移 + 原本紧贴"）
- * @returns {number[]} 被联动修改的前置任务 id 列表
+ * @returns {{ linked: number[], warnings: string[] }}
  */
 export function linkPredecessorsToStart(projectId, taskId, newStartA, oldStartA = null) {
   const task = db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(taskId);
-  if (!task) return [];
+  if (!task) return { linked: [], warnings: [] };
   let predIds = [];
   try { predIds = JSON.parse(task.predecessor_ids || "[]"); } catch { predIds = []; }
   const linked = [];
+  const warnings = [];
+  // 日期字符串规范化（防历史/导入数据带时间部分导致比较失配）
+  const norm = (s) => (s && typeof s === "string" ? s.slice(0, 10) : "");
+  const newStart = norm(newStartA);
+  const oldStart = oldStartA && String(oldStartA).length >= 10 ? norm(oldStartA) : null;
   for (const pid of predIds) {
     const p = db.prepare("SELECT * FROM schedule_tasks WHERE id = ? AND project_id = ?").get(pid, projectId);
     if (!p || p.task_type !== "普通任务" || p.is_locked === 1) continue;
     if (!p.planned_start || !p.planned_end) continue;
     // 是否联动：① B 结束晚于(=)新 A 开始（前移压缩 / 重叠修正）
     //          ② A 后移且 B 原本紧贴（B 结束 = 旧 A 开始 - 1）→ 顺延保持紧贴
-    const overlap = p.planned_end >= newStartA;
-    const tightFollow = oldStartA != null && p.planned_end === addDays(oldStartA, -1);
+    const pEnd = norm(p.planned_end);
+    const overlap = pEnd >= newStart;
+    const tightFollow = oldStart != null && pEnd === addDays(oldStart, -1);
     if (!overlap && !tightFollow) continue;
-    const newEnd = addDays(newStartA, -1);
-    if (newEnd < p.planned_start) continue;
+    const newEnd = addDays(newStart, -1);
+    if (newEnd < norm(p.planned_start)) {
+      // 前置整体晚于 A 的新开始时间，无法自动压缩 → 提示，跳过
+      warnings.push(
+        `前置任务「${p.name || `#${pid}`}」整体晚于任务「${task.name || `#${taskId}`}」的新开始时间（${newStart}），已跳过自动调整，请手动检查排期冲突`
+      );
+      continue;
+    }
     const newDur = Math.max(1, daysBetween(p.planned_start, newEnd));
     db.prepare(
       "UPDATE schedule_tasks SET planned_end = ?, duration_days = ?, updated_at = datetime('now','localtime') WHERE id = ?"
     ).run(newEnd, newDur, pid);
     linked.push(pid);
   }
-  return linked;
+  return { linked, warnings };
 }
 
 /**
@@ -581,6 +594,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
       }
     }
 
+    let linkWarnings = [];
     const update = db.transaction(() => {
       const updates = {};
       const fields = [];
@@ -665,9 +679,12 @@ router.put("/schedule-tasks/:id", (req, res) => {
       // ===== 前置任务联动（需求）：修改任务 A 的开始时间时，联动其前置任务 =====
       // 前移/重叠：前置结束 >= 新 A 开始 → 结束 = A 开始 - 1，开始不变，工期重算；
       // 后移：原本紧贴（结束 = 旧 A 开始 - 1）的前置 → 结束顺延 = 新 A 开始 - 1；早于且不紧贴的不变。
-      const linkedPreds = body.planned_start !== undefined
-        ? linkPredecessorsToStart(task.project_id, Number(id), body.planned_start, task.planned_start)
-        : [];
+      // 触发条件用 updates.planned_start（A 的开始时间确实被写入），锁定任务/仅改结束时间不触发。
+      const linkRes = updates.planned_start !== undefined
+        ? linkPredecessorsToStart(task.project_id, Number(id), updates.planned_start, task.planned_start)
+        : { linked: [], warnings: [] };
+      linkWarnings = linkRes.warnings;
+      const linkedPreds = linkRes.linked;
 
       // 级联传播（变更源：A + 被联动的前置任务，使依赖它们的时间链一并更新）
       let allTasks = getProjectTasks(task.project_id);
@@ -690,7 +707,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
     // 返回级联后的全量任务树（与 GET /indent/outdent 一致），前端直接 setTasks，
     // 避免「保存后二次全量加载」导致页面 loading 刷新、滚动位置跳顶。
     const tree = getProjectTasksTree(task.project_id);
-    res.json({ ok: true, data: tree });
+    res.json({ ok: true, data: tree, warnings: linkWarnings });
   } catch (err) {
     console.error("PUT schedule-task:", err);
     res.status(500).json({ ok: false, error: err.message });

@@ -30,15 +30,15 @@ export function daysBetween(startStr, endStr) {
 }
 
 /**
- * 修改开始日期 → 结束日期 = 新开始 + 工期
- * 例：start=21, duration=5 → end=26
+ * 修改开始日期 → 结束日期 = 新开始 + 工期 - 1（工期含首尾，与后端一致）
+ * 例：start=21, duration=5 → end=25
  */
 export function updateStartDate(task, newStart) {
   const duration = task.duration_days || 1;
   return {
     ...task,
     planned_start: newStart,
-    planned_end: addDays(newStart, duration),
+    planned_end: addDays(newStart, duration - 1),
   };
 }
 
@@ -57,15 +57,15 @@ export function updateEndDate(task, newEnd) {
 }
 
 /**
- * 修改工期 → 结束日期 = 开始日期 + 新工期
- * 例：start=21, newDuration=5 → end=26
+ * 修改工期 → 结束日期 = 开始日期 + 新工期 - 1（工期含首尾，与后端一致）
+ * 例：start=21, newDuration=5 → end=25
  */
 export function updateDuration(task, newDuration) {
   const dur = Math.max(1, Number(newDuration));
   return {
     ...task,
     duration_days: dur,
-    planned_end: addDays(task.planned_start, dur),
+    planned_end: addDays(task.planned_start, dur - 1),
   };
 }
 
