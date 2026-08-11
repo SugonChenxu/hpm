@@ -24,7 +24,7 @@ export async function buildScheduleWorkbook(tasks, project) {
 
   const sheet = workbook.addWorksheet("项目排期表");
 
-  // 列布局（含「任务类型」列，便于反灌时精确还原阶段/节点）
+  // 列布局（含「任务类型」列，便于反灌时精确还原阶段/节点；不含完成情况列）
   const COL = {
     order: 1,
     name: 2,
@@ -32,11 +32,10 @@ export async function buildScheduleWorkbook(tasks, project) {
     start: 4,
     end: 5,
     duration: 6,
-    status: 7,
-    pred: 8,
-    notes: 9,
+    pred: 7,
+    notes: 8,
   };
-  const colL = (n) => String.fromCharCode(64 + n); // 1->A ... 9->I
+  const colL = (n) => String.fromCharCode(64 + n); // 1->A ... 8->H
   const startCol = colL(COL.start); // D
   const endCol = colL(COL.end); // E
   const durCol = colL(COL.duration); // F
@@ -48,7 +47,6 @@ export async function buildScheduleWorkbook(tasks, project) {
     { header: "开始时间", key: "start", width: 14 },
     { header: "完成时间", key: "end", width: 14 },
     { header: "工期", key: "duration", width: 8 },
-    { header: "完成情况", key: "status", width: 12 },
     { header: "前置任务", key: "predecessors", width: 20 },
     { header: "备注", key: "notes", width: 20 },
   ];
@@ -133,7 +131,6 @@ export async function buildScheduleWorkbook(tasks, project) {
       null, // 开始时间（下方填充）
       null, // 完成时间（下方填充）
       durationVal,
-      t.completion_status || "未开始",
       predNames,
       t.notes || "",
     ];
@@ -228,7 +225,171 @@ export async function buildScheduleWorkbook(tasks, project) {
     });
   }
 
+  // ===== 行级强调样式 =====
+  // 3) 最高级别任务（depth===0，同级别顶层任务）统一同色底纹 + 文字加粗
+  // 4) 阶段任务全部字体加粗（含子阶段）
+  const TOP_FILL = "FFFFF3E0"; // 浅橙：顶层任务同色底纹
+  for (let i = 0; i < tasks.length; i++) {
+    const t = tasks[i];
+    const rowNum = i + 2;
+    const isTop = (t.depth || 0) === 0;
+    const isPhase = t.task_type === "阶段任务";
+    if (!isTop && !isPhase) continue;
+    const row = sheet.getRow(rowNum);
+    row.font = { bold: true };
+    if (isTop) {
+      row.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: TOP_FILL } };
+      });
+    }
+  }
+
+  // ===== Sheet 2：甘特图（时间轴单位：月）=====
+  buildGanttSheet(workbook, tasks, childrenMap);
+
   return workbook;
+}
+
+/**
+ * 构建「甘特图」工作表：每行一个任务，时间轴按月展开，
+ * 任务覆盖的自然月以色块填充（阶段任务深蓝+加粗、叶子任务浅蓝）。
+ * 阶段任务的起止取其后代叶子任务的最小/最大日期（递归穿透子阶段）。
+ */
+function buildGanttSheet(workbook, tasks, childrenMap) {
+  const gantt = workbook.addWorksheet("甘特图（月）");
+
+  const parseDate = (s) => {
+    if (!s || typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  };
+  const monthOf = (d) => d.getUTCFullYear() * 12 + d.getUTCMonth();
+  const monthLabel = (m) =>
+    `${Math.floor(m / 12)}-${String((m % 12) + 1).padStart(2, "0")}`; // 2026-07
+
+  // 递归收集阶段任务的全部叶子子孙（不含阶段自身）
+  const collectLeafTasks = (phaseId) => {
+    const out = [];
+    const visited = new Set();
+    const stack = [phaseId];
+    while (stack.length) {
+      const cur = stack.pop();
+      const kids = childrenMap.get(cur) || [];
+      for (const k of kids) {
+        if (k.task_type !== "阶段任务") out.push(k);
+        else if (!visited.has(k.id)) {
+          visited.add(k.id);
+          stack.push(k.id);
+        }
+      }
+    }
+    return out;
+  };
+
+  // 任务的有效起止（阶段任务聚合叶子，叶子取自身日期；无日期返回 null）
+  const effRange = (t) => {
+    if (t.task_type === "阶段任务") {
+      const leaves = collectLeafTasks(t.id);
+      const starts = leaves.map((l) => parseDate(l.planned_start)).filter(Boolean);
+      const ends = leaves.map((l) => parseDate(l.planned_end)).filter(Boolean);
+      if (!starts.length && !ends.length) return null;
+      const start = new Date(Math.min(...starts.map((d) => d.getTime())));
+      const end = new Date(Math.max(...ends.map((d) => d.getTime())));
+      if (end < start) return { start: end, end: start };
+      return { start, end };
+    }
+    const s = parseDate(t.planned_start);
+    if (!s) return null;
+    const e = parseDate(t.planned_end) || s;
+    return { start: s, end: e };
+  };
+
+  const ranges = tasks.map((t) => effRange(t));
+  let minM = Infinity;
+  let maxM = -Infinity;
+  ranges.forEach((r) => {
+    if (!r) return;
+    minM = Math.min(minM, monthOf(r.start));
+    maxM = Math.max(maxM, monthOf(r.end));
+  });
+  if (!isFinite(minM)) {
+    minM = maxM = monthOf(new Date()); // 全部无日期时兜底为当前月
+  }
+  const monthCount = maxM - minM + 1;
+
+  // 列布局：A 序号 / B 任务名称 / C 开始 / D 结束 / E 工期(月) / F.. 逐月
+  const prefixCols = 5; // A..E
+  const ganttHeads = ["序号", "任务名称", "开始日期", "结束日期", "工期(月)"];
+  const ganttWidths = [6, 34, 12, 12, 9];
+  ganttHeads.forEach((h, idx) => {
+    gantt.getCell(1, idx + 1).value = h;
+  });
+  for (let m = 0; m < monthCount; m++) {
+    gantt.getCell(1, prefixCols + 1 + m).value = monthLabel(minM + m);
+    ganttWidths.push(8);
+  }
+  ganttWidths.forEach((w, idx) => {
+    gantt.getColumn(idx + 1).width = w;
+  });
+
+  // 阶段任务条：深蓝；叶子任务条：浅蓝
+  const PHASE_BAR = "FF1976D2";
+  const LEAF_BAR = "FF90CAF9";
+  const barFor = (t) => (t.task_type === "阶段任务" ? PHASE_BAR : LEAF_BAR);
+
+  tasks.forEach((t, i) => {
+    const r = ranges[i];
+    const rowNum = i + 2;
+    const indent = "  ".repeat(t.depth || 0);
+    const cleanSrcName = String(t.name).replace(/^(\s*)(└\s)?/, "");
+    const displayName = indent + (t.depth > 0 ? "└ " : "") + cleanSrcName;
+    gantt.getCell(rowNum, 1).value = t.task_order;
+    gantt.getCell(rowNum, 2).value = displayName;
+
+    if (r) {
+      const startCell = gantt.getCell(rowNum, 3);
+      const endCell = gantt.getCell(rowNum, 4);
+      startCell.value = r.start;
+      startCell.numFmt = "yyyy-mm-dd";
+      endCell.value = r.end;
+      endCell.numFmt = "yyyy-mm-dd";
+      gantt.getCell(rowNum, 5).value = Math.max(1, monthOf(r.end) - monthOf(r.start) + 1);
+
+      const sM = monthOf(r.start);
+      const eM = monthOf(r.end);
+      for (let m = 0; m < monthCount; m++) {
+        const curM = minM + m;
+        if (curM < sM || curM > eM) continue;
+        const cell = gantt.getCell(rowNum, prefixCols + 1 + m);
+        cell.value = ""; // 占位：无值但有样式的单元格可能不写入文件
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: barFor(t) } };
+      }
+    }
+  });
+
+  // 表头样式 + 全表边框
+  const gHeader = gantt.getRow(1);
+  gHeader.font = { bold: true };
+  gHeader.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE3F2FD" } };
+  gHeader.alignment = { horizontal: "center", vertical: "middle" };
+  for (let i = 1; i <= tasks.length + 1; i++) {
+    const row = gantt.getRow(i);
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  }
+
+  // 阶段任务行整行加粗（甘特图 sheet 与排期表保持一致的强调）
+  tasks.forEach((t, i) => {
+    if (t.task_type === "阶段任务") {
+      gantt.getRow(i + 2).font = { bold: true };
+    }
+  });
 }
 
 export default buildScheduleWorkbook;
