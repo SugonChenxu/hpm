@@ -53,6 +53,36 @@ function daysBetween(startStr, endStr) {
 }
 
 /**
+ * 前置任务联动（需求）：修改任务 A 的开始时间时，
+ * 对其每个前置任务 B：
+ *  - B 的结束时间 >= A 的新开始时间 → B 结束 = A 开始 - 1 天，B 开始不变，工期重算；
+ *  - B 的结束时间 < A 的新开始时间 → 不变化。
+ * 仅联动「普通任务」前置；阶段任务日期由系统聚合、节点任务为单日里程碑，均跳过；
+ * 锁定任务（is_locked=1）跳过；防御：若压缩后 结束 < 开始 则跳过该前置（避免脏数据）。
+ * @returns {number[]} 被联动修改的前置任务 id 列表
+ */
+export function linkPredecessorsToStart(projectId, taskId, newStartA) {
+  const task = db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(taskId);
+  if (!task) return [];
+  let predIds = [];
+  try { predIds = JSON.parse(task.predecessor_ids || "[]"); } catch { predIds = []; }
+  const linked = [];
+  for (const pid of predIds) {
+    const p = db.prepare("SELECT * FROM schedule_tasks WHERE id = ? AND project_id = ?").get(pid, projectId);
+    if (!p || p.task_type !== "普通任务" || p.is_locked === 1) continue;
+    if (!p.planned_start || !p.planned_end || p.planned_end < newStartA) continue;
+    const newEnd = addDays(newStartA, -1);
+    if (newEnd < p.planned_start) continue;
+    const newDur = Math.max(1, daysBetween(p.planned_start, newEnd));
+    db.prepare(
+      "UPDATE schedule_tasks SET planned_end = ?, duration_days = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+    ).run(newEnd, newDur, pid);
+    linked.push(pid);
+  }
+  return linked;
+}
+
+/**
  * 获取项目中所有排期任务（按 task_order 排序，返回扁平列表）
  */
 function getProjectTasks(projectId) {
@@ -625,9 +655,18 @@ router.put("/schedule-tasks/:id", (req, res) => {
       const sql = `UPDATE schedule_tasks SET ${fields.join(", ")} WHERE id = ?`;
       db.prepare(sql).run(...values, id);
 
-      // 级联传播
+      // ===== 前置任务联动（需求）：修改任务 A 的开始时间时，压缩晚于新开始日期的前置任务 =====
+      // 规则：前置任务结束 >= A 新开始 → 结束 = A 开始 - 1，开始不变，工期重算；早于 A 开始的不变。
+      const linkedPreds = body.planned_start !== undefined
+        ? linkPredecessorsToStart(task.project_id, Number(id), body.planned_start)
+        : [];
+
+      // 级联传播（变更源：A + 被联动的前置任务，使依赖它们的时间链一并更新）
       let allTasks = getProjectTasks(task.project_id);
       allTasks = cascadePropagation(allTasks, Number(id));
+      for (const pid of linkedPreds) {
+        allTasks = cascadePropagation(allTasks, pid);
+      }
       allTasks = recalcPhaseAggregation(allTasks);
       allTasks = updateAllCompletionStatuses(allTasks);
 
