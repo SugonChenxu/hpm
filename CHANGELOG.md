@@ -2,6 +2,14 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-11 — 【项目计划】修复：修改时间/工期后页面整页刷新并跳顶
+
+- **缺陷修复** 根因：`handleTaskUpdate`/`handleChangeType`/`handleBgColorSave` 保存后调用 `loadSchedule()`，其内部 `setLoading(true)` 会把整个页面替换为 `<PageLoading />` 占位，表格/甘特图整树卸载重建，高度骤变导致滚动条跳到顶部、视觉"刷新"感强烈。
+- **接口调整** `PUT /api/schedule-tasks/:id` 由返回单个任务改为返回**级联后的全量任务树**（与 GET /indent/outdent 一致，含 depth/completion_status）。
+- **前端** 三处保存 handler 改为直接用返回树 `setTasks`（补 calcCompletionStatus 映射），不再走带 loading 的全量重载——数据原地更新，无刷新效果、滚动位置不变；同时省一次网络请求。
+- 结构性操作（插入/删除/导入/清空/改前置）仍保留 `loadSchedule` 全量重载（结构变化大，合理）。
+- 验证：临时服务器端到端 8/8 通过（PUT 返回数组 + 前置联动 B.end=A.start-1 生效）。
+
 ## 2026-08-11 — 【项目计划】修改任务开始时间时自动压缩前置任务（依赖反向联动）
 
 - **新增功能** 修改任务 A 的开始时间时，联动处理其前置任务：

@@ -113,6 +113,13 @@ export default function SchedulePage() {
     severity: "success",
   });
 
+  // 为任务列表统一附加前端计算的状态（与 loadSchedule 一致）
+  const applyStatus = useCallback(
+    (list) =>
+      (list || []).map((t) => ({ ...t, completion_status: calcCompletionStatus(t) })),
+    []
+  );
+
   // Load project detail and schedule data
   const loadSchedule = useCallback(async () => {
     if (!projectId) {
@@ -160,11 +167,11 @@ export default function SchedulePage() {
 
   const handleCloseContextMenu = () => setContextMenu(null);
 
-  // Task update
+  // Task update（保存后直接用后端返回的全量树 setTasks，不触发 loading 全量重载，避免页面刷新/跳顶）
   const handleTaskUpdate = async (taskId, data) => {
     try {
-      await api.schedule.update(taskId, data);
-      await loadSchedule();
+      const res = await api.schedule.update(taskId, data);
+      setTasks(applyStatus(res.data));
       setSnackbar({ open: true, message: "已保存", severity: "success" });
     } catch (err) {
       setSnackbar({
@@ -254,8 +261,8 @@ export default function SchedulePage() {
   // Change task type
   const handleChangeType = async (taskId, newType) => {
     try {
-      await api.schedule.update(taskId, { task_type: newType });
-      await loadSchedule();
+      const res = await api.schedule.update(taskId, { task_type: newType });
+      setTasks(applyStatus(res.data));
       setSnackbar({
         open: true,
         message: `已改为${newType}`,
@@ -374,8 +381,8 @@ export default function SchedulePage() {
   // Background color save
   const handleBgColorSave = async (taskId, color) => {
     try {
-      await api.schedule.update(taskId, { bg_color: color });
-      await loadSchedule();
+      const res = await api.schedule.update(taskId, { bg_color: color });
+      setTasks(applyStatus(res.data));
       setSnackbar({
         open: true,
         message: "背景色已更新",

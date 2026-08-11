@@ -678,8 +678,11 @@ router.put("/schedule-tasks/:id", (req, res) => {
       return db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(id);
     });
 
-    const updated = update();
-    res.json({ ok: true, data: updated });
+    update();
+    // 返回级联后的全量任务树（与 GET /indent/outdent 一致），前端直接 setTasks，
+    // 避免「保存后二次全量加载」导致页面 loading 刷新、滚动位置跳顶。
+    const tree = getProjectTasksTree(task.project_id);
+    res.json({ ok: true, data: tree });
   } catch (err) {
     console.error("PUT schedule-task:", err);
     res.status(500).json({ ok: false, error: err.message });
