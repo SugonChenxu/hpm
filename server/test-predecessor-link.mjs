@@ -101,6 +101,48 @@ try {
     check("场景8 无前置不触发", linked.length === 0);
   }
 
+  // ===== 场景9：A 后移，前置 B 原本紧贴（B.end = 旧A.start - 1）→ B 结束顺延 = 新A.start - 1 =====
+  {
+    const B = mk("B9", "普通任务", "2026-08-01", "2026-08-14", 14, []); // 紧贴 A 原开始 8-15
+    const A = mk("A9", "普通任务", "2026-08-15", "2026-08-26", 12, [B]);
+    const linked = linkPredecessorsToStart(pid, A, "2026-09-01", "2026-08-15"); // A 后移到 9-01
+    const b = q("SELECT * FROM schedule_tasks WHERE id=?", B);
+    check("场景9 触发顺延", linked.length === 1 && linked[0] === B);
+    check("场景9 B.end = 新A.start-1 = 8-31", b.planned_end === "2026-08-31", b.planned_end);
+    check("场景9 B.start 不变", b.planned_start === "2026-08-01");
+    check("场景9 B.工期重算=31", b.duration_days === 31, String(b.duration_days));
+  }
+
+  // ===== 场景10：A 后移，前置 B 远早于（B.end < 旧A.start - 1）→ 不动 =====
+  {
+    const B = mk("B10", "普通任务", "2026-06-01", "2026-06-20", 20, []);
+    const A = mk("A10", "普通任务", "2026-08-15", "2026-08-26", 12, [B]);
+    const linked = linkPredecessorsToStart(pid, A, "2026-09-01", "2026-08-15");
+    const b = q("SELECT * FROM schedule_tasks WHERE id=?", B);
+    check("场景10 远早不联动", linked.length === 0);
+    check("场景10 B 原样", b.planned_end === "2026-06-20" && b.duration_days === 20);
+  }
+
+  // ===== 场景11：A 后移但前置 B 仍重叠（B.end >= 新A.start）→ 压缩到 新A.start - 1 =====
+  {
+    const B = mk("B11", "普通任务", "2026-08-01", "2026-09-10", 41, []); // B 很长，结束晚于新 A 开始
+    const A = mk("A11", "普通任务", "2026-08-15", "2026-08-26", 12, [B]);
+    const linked = linkPredecessorsToStart(pid, A, "2026-09-05", "2026-08-15"); // A 后移到 9-05
+    const b = q("SELECT * FROM schedule_tasks WHERE id=?", B);
+    check("场景11 重叠压缩", linked.length === 1 && b.planned_end === "2026-09-04", `${b.planned_end}`);
+    check("场景11 B.start 不变 工期=35", b.planned_start === "2026-08-01" && b.duration_days === 35);
+  }
+
+  // ===== 场景12：A 前移，原本紧贴的 B 被压缩（回归上轮行为）=====
+  {
+    const B = mk("B12", "普通任务", "2026-08-01", "2026-08-14", 14, []); // 紧贴旧 A 开始 8-15
+    const A = mk("A12", "普通任务", "2026-08-15", "2026-08-26", 12, [B]);
+    const linked = linkPredecessorsToStart(pid, A, "2026-08-10", "2026-08-15"); // A 前移到 8-10
+    const b = q("SELECT * FROM schedule_tasks WHERE id=?", B);
+    check("场景12 前移压缩 B.end=8-09", linked.length === 1 && b.planned_end === "2026-08-09", b.planned_end);
+    check("场景12 B.工期=9", b.duration_days === 9, String(b.duration_days));
+  }
+
   console.log(`\n===== ${pass} PASS / ${fail} FAIL =====`);
 } finally {
   db.exec("ROLLBACK");

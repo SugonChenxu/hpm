@@ -53,15 +53,17 @@ function daysBetween(startStr, endStr) {
 }
 
 /**
- * 前置任务联动（需求）：修改任务 A 的开始时间时，
- * 对其每个前置任务 B：
- *  - B 的结束时间 >= A 的新开始时间 → B 结束 = A 开始 - 1 天，B 开始不变，工期重算；
- *  - B 的结束时间 < A 的新开始时间 → 不变化。
+ * 前置任务联动（需求）：修改任务 A 的开始时间时，对其每个前置任务 B：
+ *  - A 前移/重叠：B 的结束时间 >= A 的新开始时间 → B 结束 = A 开始 - 1 天，B 开始不变，工期重算；
+ *  - A 后移（推迟）：B 原本与 A 紧贴（B 结束 = 旧 A 开始 - 1）→ B 结束顺延 = 新 A 开始 - 1 天，
+ *    B 开始不变，工期重算（保持"前置恰好在前一天完成"的依赖关系）；原本远早于 A 结束的前置不变化；
+ *  - B 的结束时间早于 A 的新开始时间且原本不紧贴 → 不变化。
  * 仅联动「普通任务」前置；阶段任务日期由系统聚合、节点任务为单日里程碑，均跳过；
  * 锁定任务（is_locked=1）跳过；防御：若压缩后 结束 < 开始 则跳过该前置（避免脏数据）。
+ * @param {string|null} oldStartA A 修改前的开始时间（用于判断"后移 + 原本紧贴"）
  * @returns {number[]} 被联动修改的前置任务 id 列表
  */
-export function linkPredecessorsToStart(projectId, taskId, newStartA) {
+export function linkPredecessorsToStart(projectId, taskId, newStartA, oldStartA = null) {
   const task = db.prepare("SELECT * FROM schedule_tasks WHERE id = ?").get(taskId);
   if (!task) return [];
   let predIds = [];
@@ -70,7 +72,12 @@ export function linkPredecessorsToStart(projectId, taskId, newStartA) {
   for (const pid of predIds) {
     const p = db.prepare("SELECT * FROM schedule_tasks WHERE id = ? AND project_id = ?").get(pid, projectId);
     if (!p || p.task_type !== "普通任务" || p.is_locked === 1) continue;
-    if (!p.planned_start || !p.planned_end || p.planned_end < newStartA) continue;
+    if (!p.planned_start || !p.planned_end) continue;
+    // 是否联动：① B 结束晚于(=)新 A 开始（前移压缩 / 重叠修正）
+    //          ② A 后移且 B 原本紧贴（B 结束 = 旧 A 开始 - 1）→ 顺延保持紧贴
+    const overlap = p.planned_end >= newStartA;
+    const tightFollow = oldStartA != null && p.planned_end === addDays(oldStartA, -1);
+    if (!overlap && !tightFollow) continue;
     const newEnd = addDays(newStartA, -1);
     if (newEnd < p.planned_start) continue;
     const newDur = Math.max(1, daysBetween(p.planned_start, newEnd));
@@ -655,10 +662,11 @@ router.put("/schedule-tasks/:id", (req, res) => {
       const sql = `UPDATE schedule_tasks SET ${fields.join(", ")} WHERE id = ?`;
       db.prepare(sql).run(...values, id);
 
-      // ===== 前置任务联动（需求）：修改任务 A 的开始时间时，压缩晚于新开始日期的前置任务 =====
-      // 规则：前置任务结束 >= A 新开始 → 结束 = A 开始 - 1，开始不变，工期重算；早于 A 开始的不变。
+      // ===== 前置任务联动（需求）：修改任务 A 的开始时间时，联动其前置任务 =====
+      // 前移/重叠：前置结束 >= 新 A 开始 → 结束 = A 开始 - 1，开始不变，工期重算；
+      // 后移：原本紧贴（结束 = 旧 A 开始 - 1）的前置 → 结束顺延 = 新 A 开始 - 1；早于且不紧贴的不变。
       const linkedPreds = body.planned_start !== undefined
-        ? linkPredecessorsToStart(task.project_id, Number(id), body.planned_start)
+        ? linkPredecessorsToStart(task.project_id, Number(id), body.planned_start, task.planned_start)
         : [];
 
       // 级联传播（变更源：A + 被联动的前置任务，使依赖它们的时间链一并更新）

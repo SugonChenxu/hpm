@@ -2,6 +2,15 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-11 — 【项目计划】前置联动补充：A 开始时间后移时顺延紧贴前置任务
+
+- **新增功能** `linkPredecessorsToStart` 增加 `oldStartA`（修改前开始时间）参数，扩展联动规则：
+  - **A 后移（推迟）**：原本与 A 紧贴的前置（结束 = 旧 A 开始 - 1，典型为上轮联动产物）→ 结束时间**顺延** = 新 A 开始 - 1，开始不变，工期重算（保持"前置恰好在前一天完成"的依赖关系）；原本远早于 A 结束的前置不变化。
+  - **A 后移但仍与前权重叠**（结束 >= 新 A 开始）→ 压缩到新 A 开始 - 1（原有规则）。
+  - **A 前移**：行为与上轮一致（结束 >= 新 A 开始的压缩；紧贴前置也被压缩）。
+- **接口** `PUT /api/schedule-tasks/:id` 传 `planned_start` 即触发；`linkPredecessorsToStart(projectId, taskId, newStartA, oldStartA)` 返回被联动的前置 id 列表（仍作为额外级联源传播）。
+- 单测 `server/test-predecessor-link.mjs` 25/25 通过（12 场景：含后移顺延/远早不动/重叠压缩/前移回归）。
+
 ## 2026-08-11 — 【项目计划】修复：修改时间/工期后页面整页刷新并跳顶
 
 - **缺陷修复** 根因：`handleTaskUpdate`/`handleChangeType`/`handleBgColorSave` 保存后调用 `loadSchedule()`，其内部 `setLoading(true)` 会把整个页面替换为 `<PageLoading />` 占位，表格/甘特图整树卸载重建，高度骤变导致滚动条跳到顶部、视觉"刷新"感强烈。
