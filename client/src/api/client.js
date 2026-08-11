@@ -219,6 +219,14 @@ export const api = {
       request(`/quick-notes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id) => request(`/quick-notes/${id}`, { method: "DELETE" }),
   },
+  // 腾讯文档关联（项目计划 → 在线表格；同步动作由 WorkBuddy 手动触发）
+  tencentDocs: {
+    link: (projectId) => request(`/tencent-docs/link?project_id=${projectId}`),
+    saveLink: (data) =>
+      request("/tencent-docs/link", { method: "PUT", body: JSON.stringify(data) }),
+    removeLink: (projectId) =>
+      request(`/tencent-docs/link?project_id=${projectId}`, { method: "DELETE" }),
+  },
   // 缓存管理
   cache: {
     invalidate: (projectId) =>

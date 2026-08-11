@@ -2,6 +2,14 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-11 — 【项目计划】腾讯文档关联配置（排期同步到在线表格，保留公式）
+
+- **新增功能** Forge 项目计划支持关联腾讯文档在线表格：项目计划页工具栏新增「腾讯文档」按钮 → Dialog 粘贴文档链接（+可选子表名）保存关联，已关联显示 ✓ 与上次同步时间，可解除。
+- **数据模型** 新表 `tencent_docs_link`（owner_id/project_id/file_url/file_id/sheet_name/last_sync_at/last_sync_status），注册 OWNER_TABLES 启动补 owner_id。
+- **接口** `GET/PUT/DELETE /api/tencent-docs/link`（owner 隔离，从链接自动解析 file_id）。
+- **架构说明** 腾讯文档写入能力由 WorkBuddy 连接器提供（票据不进 Forge），故同步动作为**手动触发**：对 WorkBuddy 说「同步「项目名」到腾讯文档」即执行。执行流程已技术验证（连接器 READY）：快照脚本 `server/scripts/schedule-snapshot.mjs` 输出项目排期 JSON → `get_sheet_info` 选子表 → `get_cell_data`（include_formula）识别公式单元格 → 按任务名称匹配行 → `set_range_value` 批量写「开始时间/工期」数据单元格，**公式单元格（完成时间联动、阶段 MIN/MAX 聚合）跳过不写，公式自动重算 → 天然保留公式**。
+- 待办：用户提供真实腾讯文档链接后，执行首次同步实测并沉淀同步 skill。
+
 ## 2026-08-11 — 【项目计划】前置联动逻辑审查加固（4 项修复）
 
 - **缺陷修复（前端计算不一致）** `client/src/utils/schedule-date.js`：`updateStartDate`/`updateDuration` 计算结束日期为 `开始 + 工期`（不含首尾），与后端 `开始 + 工期 - 1`（含首尾）不一致——此前靠后端忽略 `body.planned_end` 纠正，若未来乐观更新会差 1 天。已改为 `+工期-1` 并对齐注释（start=21, dur=5 → end=25）。

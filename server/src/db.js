@@ -135,6 +135,21 @@ CREATE TABLE IF NOT EXISTS plm_connection (
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
+-- 项目计划 — 腾讯文档关联（每项目一条，记录在线表格位置；同步动作由 WorkBuddy 执行）
+CREATE TABLE IF NOT EXISTS tencent_docs_link (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    project_id INTEGER NOT NULL,
+    file_url TEXT DEFAULT '',       -- 腾讯文档在线表格链接
+    file_id TEXT DEFAULT '',        -- 解析出的文档 ID（可空，首次同步时回填）
+    sheet_id TEXT DEFAULT '',       -- 子表 ID（可空，默认第一个子表）
+    sheet_name TEXT DEFAULT '',     -- 子表名（可空）
+    last_sync_at TEXT,
+    last_sync_status TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
 -- 库存管理 — 从 PLM 研发库房拉取的库存明细（按 owner + 项目隔离）
 CREATE TABLE IF NOT EXISTS plm_inventory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -780,6 +795,7 @@ const OWNER_TABLES = [
   "material_requirements",
   "plm_inventory",
   "quick_notes",
+  "tencent_docs_link",
 ];
 
 for (const t of OWNER_TABLES) {

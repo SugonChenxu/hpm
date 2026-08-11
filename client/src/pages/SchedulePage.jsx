@@ -16,6 +16,7 @@ import {
   Card,
   ToggleButtonGroup,
   ToggleButton,
+  TextField,
   SvgIcon,
 } from "@mui/material";
 import {
@@ -113,6 +114,13 @@ export default function SchedulePage() {
     severity: "success",
   });
 
+  // 腾讯文档关联（项目计划 → 在线表格；同步动作由 WorkBuddy 手动触发）
+  const [tdOpen, setTdOpen] = useState(false);
+  const [tdLink, setTdLink] = useState(null);
+  const [tdUrl, setTdUrl] = useState("");
+  const [tdSheet, setTdSheet] = useState("");
+  const [tdSaving, setTdSaving] = useState(false);
+
   // 为任务列表统一附加前端计算的状态（与 loadSchedule 一致）
   const applyStatus = useCallback(
     (list) =>
@@ -154,6 +162,14 @@ export default function SchedulePage() {
   useEffect(() => {
     loadSchedule();
   }, [loadSchedule]);
+
+  // 加载腾讯文档关联配置（项目切换时）
+  useEffect(() => {
+    if (!projectId) { setTdLink(null); return; }
+    api.tencentDocs.link(Number(projectId))
+      .then((res) => setTdLink(res.data || null))
+      .catch(() => setTdLink(null));
+  }, [projectId]);
 
   // Context menu handlers
   const handleContextMenu = (event, task) => {
@@ -459,6 +475,45 @@ export default function SchedulePage() {
     setSnackbar({ open: true, message: "已导出 Excel（含月单位甘特图 sheet，开始/完成时间已写入联动公式）", severity: "info" });
   };
 
+  // ==== 腾讯文档关联（项目计划 → 在线表格） ====
+  const handleTdOpen = () => {
+    setTdUrl(tdLink?.file_url || "");
+    setTdSheet(tdLink?.sheet_name || "");
+    setTdOpen(true);
+  };
+
+  const handleTdSave = async () => {
+    if (!projectId || !tdUrl.trim()) {
+      setSnackbar({ open: true, message: "请粘贴腾讯文档在线表格链接", severity: "warning" });
+      return;
+    }
+    setTdSaving(true);
+    try {
+      const res = await api.tencentDocs.saveLink({
+        project_id: Number(projectId),
+        file_url: tdUrl.trim(),
+        sheet_name: tdSheet.trim(),
+      });
+      setTdLink(res.data || null);
+      setSnackbar({ open: true, message: "腾讯文档关联已保存", severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "保存失败", severity: "error" });
+    } finally {
+      setTdSaving(false);
+    }
+  };
+
+  const handleTdRemove = async () => {
+    if (!projectId) return;
+    try {
+      await api.tencentDocs.removeLink(Number(projectId));
+      setTdLink(null);
+      setSnackbar({ open: true, message: "已解除腾讯文档关联", severity: "success" });
+    } catch (err) {
+      setSnackbar({ open: true, message: err.message || "取消失败", severity: "error" });
+    }
+  };
+
   // Save version
   const handleSaveVersion = async () => {
     setSaving(true);
@@ -571,6 +626,15 @@ export default function SchedulePage() {
           disabled={tasks.length === 0}
         >
           导出 Excel
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          color={tdLink ? "success" : "primary"}
+          onClick={handleTdOpen}
+          title={tdLink ? "已关联腾讯文档，点击管理" : "配置项目计划同步到腾讯文档在线表格"}
+        >
+          腾讯文档{tdLink ? " ✓" : ""}
         </Button>
         <Button
           size="small"
@@ -756,6 +820,51 @@ export default function SchedulePage() {
           <Button onClick={() => setTemplateConfirmOpen(false)}>取消</Button>
           <Button onClick={confirmTemplateImport} color="secondary" variant="contained">
             覆盖导入
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 腾讯文档关联设置 */}
+      <Dialog open={tdOpen} onClose={() => setTdOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>腾讯文档同步设置</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <TextField
+              label="腾讯文档在线表格链接"
+              value={tdUrl}
+              onChange={(e) => setTdUrl(e.target.value)}
+              placeholder="https://docs.qq.com/sheet/XXXXXXXX"
+              helperText="把腾讯文档里的项目计划表链接粘贴到这里（需为 Forge 导出的表格格式，含公式可保留）"
+              fullWidth
+            />
+            <TextField
+              label="子表名（可选）"
+              value={tdSheet}
+              onChange={(e) => setTdSheet(e.target.value)}
+              placeholder="默认第一个子表"
+              fullWidth
+            />
+            <Alert severity="info">
+              保存关联后，同步动作由 WorkBuddy 手动触发——对 WorkBuddy 说「同步「{project?.name || projectId}」到腾讯文档」即可。
+              同步只更新「开始时间 / 工期」数据单元格，公式单元格（完成时间联动、阶段聚合）自动重算保留。
+            </Alert>
+            {tdLink && (
+              <Alert severity="success">
+                已关联：{tdLink.file_url}
+                {tdLink.last_sync_at ? `（上次同步 ${tdLink.last_sync_at}）` : ""}
+              </Alert>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          {tdLink && (
+            <Button color="error" onClick={handleTdRemove} disabled={tdSaving}>
+              解除关联
+            </Button>
+          )}
+          <Button onClick={() => setTdOpen(false)}>关闭</Button>
+          <Button onClick={handleTdSave} variant="contained" disabled={tdSaving}>
+            {tdSaving ? "保存中…" : "保存关联"}
           </Button>
         </DialogActions>
       </Dialog>
