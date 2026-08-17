@@ -797,6 +797,7 @@ CREATE TABLE IF NOT EXISTS quick_schedule_milestones (
     date TEXT NOT NULL,
     symbol TEXT DEFAULT 'circle',
     color TEXT DEFAULT '#D32F2F',
+    text_color TEXT DEFAULT '#000000',
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
@@ -814,6 +815,15 @@ try {
 } catch (e) {
   if (!e.message.includes("duplicate column")) {
     console.warn("Migration quick_schedule_bars.style:", e.message);
+  }
+}
+
+// 迁移：quick_schedule_milestones.text_color（关键节点文字颜色，默认黑色）
+try {
+  db.exec(`ALTER TABLE quick_schedule_milestones ADD COLUMN text_color TEXT DEFAULT '#000000'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column")) {
+    console.warn("Migration quick_schedule_milestones.text_color:", e.message);
   }
 }
 

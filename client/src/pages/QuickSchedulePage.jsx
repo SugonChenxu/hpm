@@ -28,6 +28,12 @@ const PRESET_COLORS = [
   "#1565C0", "#6A1B9A", "#00838F", "#455A64",
 ];
 
+// 关键节点文字颜色（默认黑色优先）
+const TEXT_COLORS = [
+  "#000000", "#555555", "#D32F2F", "#E65100",
+  "#388E3C", "#1565C0", "#6A1B9A", "#00838F",
+];
+
 function fmt(d) {
   return dayjs(d).format("YYYY-MM-DD");
 }
@@ -113,26 +119,30 @@ function MilestoneSymbol({ symbol, color, size = 14 }) {
   switch (symbol) {
     case "circle":
       return <circle cx={half} cy={half} r={half - 1} fill={color} />;
-    case "square":
-      return <rect x={1} y={1} width={s - 2} height={s - 2} fill={color} />;
+    case "square": {
+      // 矩形：高度不变（≈s），宽度减小（竖矩形）
+      const w = s * 0.58;
+      return <rect x={half - w / 2} y={0.5} width={w} height={s - 1} fill={color} />;
+    }
     case "diamond":
       return <polygon points={`${half},1 ${s - 1},${half} ${half},${s - 1} 1,${half}`} fill={color} />;
     case "triangle":
-      return <polygon points={`${half},1 ${s - 1},${s - 1} 1,${s - 1}`} fill={color} />;
+      return <polygon points={`${half},0.5 ${s - 0.5},${s - 0.5} 0.5,${s - 0.5}`} fill={color} />;
     case "star": {
       const pts = [];
       for (let i = 0; i < 10; i++) {
-        const r = i % 2 === 0 ? half - 1 : half / 2;
+        const r = i % 2 === 0 ? half : half * 0.48;
         const ang = (Math.PI / 5) * i - Math.PI / 2;
         pts.push(`${half + r * Math.cos(ang)},${half + r * Math.sin(ang)}`);
       }
       return <polygon points={pts.join(" ")} fill={color} />;
     }
     case "flag":
+      // 旗帜放大：旗杆占满高度，旗面为向右展开的大三角
       return (
         <>
-          <path d={`M${half},${s - 1} L${half},${half / 2}`} stroke={color} strokeWidth={2} />
-          <path d={`M${half},${half / 2} L${s - 2},${half * 0.7} L${half},${half}`} fill={color} />
+          <path d={`M${half},0.5 L${half},${s - 0.5}`} stroke={color} strokeWidth={2} />
+          <polygon points={`${half},0.5 ${s - 0.5},${half * 0.5} ${half},${s * 0.72}`} fill={color} />
         </>
       );
     default:
@@ -430,7 +440,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
             fontSize: "0.6rem",
             fontWeight: 600,
             lineHeight: 1.15,
-            color: ms.color || "text.secondary",
+            color: ms.text_color || "#000000",
             textAlign: "center",
             whiteSpace: "nowrap",
             maxWidth: 80,
@@ -672,24 +682,43 @@ function EditBarDialog({ open, bar, onClose, onSave, onDelete }) {
   );
 }
 
-function EditMilestoneDialog({ open, ms, onClose, onSave, onDelete }) {
+function EditMilestoneDialog({ open, ms, defaultDate, onClose, onSave, onDelete }) {
+  const isEdit = !!ms;
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [symbol, setSymbol] = useState("circle");
   const [color, setColor] = useState("#D32F2F");
+  const [textColor, setTextColor] = useState("#000000");
 
   useEffect(() => {
-    if (ms) {
-      setTitle(ms.title || "");
-      setDate(ms.date || "");
-      setSymbol(ms.symbol || "circle");
-      setColor(ms.color || "#D32F2F");
+    if (open) {
+      if (ms) {
+        setTitle(ms.title || "");
+        setDate(ms.date || "");
+        setSymbol(ms.symbol || "circle");
+        setColor(ms.color || "#D32F2F");
+        setTextColor(ms.text_color || "#000000");
+      } else {
+        setTitle("");
+        setDate(defaultDate || "");
+        setSymbol("circle");
+        setColor("#D32F2F");
+        setTextColor("#000000");
+      }
     }
-  }, [ms]);
+  }, [open, ms, defaultDate]);
+
+  const handleSave = () => {
+    if (!date) {
+      alert("请选择日期");
+      return;
+    }
+    onSave({ title, date, symbol, color, text_color: textColor });
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>编辑关键节点</DialogTitle>
+      <DialogTitle>{isEdit ? "编辑关键节点" : "新增关键节点"}</DialogTitle>
       <DialogContent>
         <TextField fullWidth size="small" label="名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
         <TextField fullWidth size="small" type="date" label="日期" InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ mb: 2 }} />
@@ -697,29 +726,49 @@ function EditMilestoneDialog({ open, ms, onClose, onSave, onDelete }) {
           <InputLabel>符号</InputLabel>
           <Select value={symbol} label="符号" onChange={(e) => setSymbol(e.target.value)}>
             {SYMBOLS.map((s) => (
-              <MenuItem key={s.key} value={s.key}>{s.label}</MenuItem>
+              <MenuItem key={s.key} value={s.key}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <svg width={16} height={16}>
+                    <MilestoneSymbol symbol={s.key} color="#333" size={16} />
+                  </svg>
+                  {s.label}
+                </Box>
+              </MenuItem>
             ))}
           </Select>
         </FormControl>
-        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>颜色</Typography>
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>符号颜色</Typography>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
           {PRESET_COLORS.map((c) => (
             <Box
               key={c}
               onClick={() => setColor(c)}
               sx={{
-                width: 28, height: 28, borderRadius: "50%", bgcolor: c, cursor: "pointer",
+                width: 26, height: 26, borderRadius: "50%", bgcolor: c, cursor: "pointer",
                 border: c === color ? "3px solid #000" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
+              }}
+            />
+          ))}
+        </Box>
+        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>文字颜色</Typography>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          {TEXT_COLORS.map((c) => (
+            <Box
+              key={c}
+              onClick={() => setTextColor(c)}
+              sx={{
+                width: 26, height: 26, borderRadius: "50%", bgcolor: c, cursor: "pointer",
+                border: c === textColor ? "3px solid #7C3AED" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
               }}
             />
           ))}
         </Box>
       </DialogContent>
       <DialogActions sx={{ justifyContent: "space-between" }}>
-        <Button color="error" onClick={onDelete}>删除</Button>
+        {isEdit ? <Button color="error" onClick={onDelete}>删除</Button> : <Box />}
         <Box>
           <Button onClick={onClose}>取消</Button>
-          <Button variant="contained" onClick={() => onSave({ title, date, symbol, color })}>保存</Button>
+          <Button variant="contained" onClick={handleSave}>保存</Button>
         </Box>
       </DialogActions>
     </Dialog>
@@ -806,6 +855,7 @@ export default function QuickSchedulePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editBar, setEditBar] = useState(null);
   const [editMilestone, setEditMilestone] = useState(null);
+  const [creatingMilestone, setCreatingMilestone] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [dragTrackId, setDragTrackId] = useState(null);
@@ -983,18 +1033,22 @@ export default function QuickSchedulePage() {
     setEditBar(null);
   };
 
-  const handleAddMilestone = async (trackId) => {
+  const handleAddMilestone = (trackId) => {
     if (!schedule) return;
-    const title = window.prompt("关键节点名称", "");
-    if (title === null) return;
+    setCreatingMilestone(trackId);
+  };
+
+  const handleCreateMilestone = async (data) => {
     const r = await api.quickSchedules.milestones.create(schedule.id, {
-      track_id: trackId,
-      title,
-      date: schedule.start_date,
-      symbol: "circle",
-      color: "#D32F2F",
+      track_id: creatingMilestone,
+      title: data.title,
+      date: data.date,
+      symbol: data.symbol,
+      color: data.color,
+      text_color: data.text_color,
     });
     setSchedule(r.data.schedule);
+    setCreatingMilestone(null);
   };
 
   const handleUpdateMilestone = async (milestoneId, data) => {
@@ -1163,6 +1217,13 @@ export default function QuickSchedulePage() {
       {editMilestone && (
         <EditMilestoneDialog open={!!editMilestone} ms={editMilestone} onClose={() => setEditMilestone(null)} onSave={handleSaveMilestoneDialog} onDelete={handleDeleteMilestone} />
       )}
+      <EditMilestoneDialog
+        open={creatingMilestone !== null}
+        ms={null}
+        defaultDate={schedule ? schedule.start_date : ""}
+        onClose={() => setCreatingMilestone(null)}
+        onSave={handleCreateMilestone}
+      />
     </Box>
   );
 }

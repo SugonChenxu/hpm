@@ -372,12 +372,13 @@ router.post("/quick-schedules/:id/milestones", (req, res) => {
   const title = String(req.body.title || "").slice(0, 200);
   const symbol = safeSymbol(req.body.symbol);
   const color = safeColor(req.body.color, "#D32F2F");
+  const textColor = safeColor(req.body.text_color, "#000000");
 
   const info = db
     .prepare(
-      "INSERT INTO quick_schedule_milestones (schedule_id, track_id, bar_id, owner_id, title, date, symbol, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO quick_schedule_milestones (schedule_id, track_id, bar_id, owner_id, title, date, symbol, color, text_color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(req.params.id, req.body.track_id, barId, req.userId, title, date, symbol, color, max.m + 1);
+    .run(req.params.id, req.body.track_id, barId, req.userId, title, date, symbol, color, textColor, max.m + 1);
 
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: { milestone_id: info.lastInsertRowid, schedule: detail } });
@@ -403,6 +404,7 @@ router.put("/quick-schedules/:id/milestones/:milestoneId", (req, res) => {
   const title = req.body.title !== undefined ? String(req.body.title).slice(0, 200) : ms.title;
   const symbol = req.body.symbol !== undefined ? safeSymbol(req.body.symbol) : ms.symbol;
   const color = req.body.color !== undefined ? safeColor(req.body.color) : ms.color;
+  const textColor = req.body.text_color !== undefined ? safeColor(req.body.text_color, "#000000") : ms.text_color;
   const trackId = req.body.track_id !== undefined ? Number(req.body.track_id) : ms.track_id;
   let barId = req.body.bar_id !== undefined ? (req.body.bar_id ? Number(req.body.bar_id) : null) : ms.bar_id;
   if (barId) {
@@ -413,8 +415,8 @@ router.put("/quick-schedules/:id/milestones/:milestoneId", (req, res) => {
   }
 
   db.prepare(
-    "UPDATE quick_schedule_milestones SET track_id = ?, bar_id = ?, title = ?, date = ?, symbol = ?, color = ?, updated_at = datetime('now','localtime') WHERE id = ?"
-  ).run(trackId, barId, title, date, symbol, color, req.params.milestoneId);
+    "UPDATE quick_schedule_milestones SET track_id = ?, bar_id = ?, title = ?, date = ?, symbol = ?, color = ?, text_color = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+  ).run(trackId, barId, title, date, symbol, color, textColor, req.params.milestoneId);
 
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: detail });
