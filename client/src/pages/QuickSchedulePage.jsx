@@ -260,21 +260,22 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
           position: "absolute",
           left,
           width,
-          top: 31,
-          height: 10,
+          top: 22,
+          height: 20,
           cursor: dragging ? "grabbing" : "grab",
           zIndex: 2,
           userSelect: "none",
         }}
       >
+        {/* 线体：绝对 top 31，中线 32，与节点符号中心对齐 */}
         <Box
           onMouseDown={(e) => startDrag("move", e)}
-          sx={{ position: "absolute", left: 8, right: 12, top: 4, height: 2, bgcolor: color }}
+          sx={{ position: "absolute", left: 8, right: 12, top: 9, height: 2, bgcolor: color }}
         />
         <Box
           onMouseDown={(e) => startDrag("start", e)}
           sx={{
-            position: "absolute", left: 0, top: 0, width: 14, height: 10,
+            position: "absolute", left: 0, top: 5, width: 14, height: 10,
             cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center",
           }}
         >
@@ -282,21 +283,12 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
         </Box>
         <Box
           onMouseDown={(e) => startDrag("end", e)}
-          sx={{ position: "absolute", right: 0, top: -2, width: 16, height: 14, cursor: "ew-resize" }}
+          sx={{ position: "absolute", right: 0, top: 3, width: 16, height: 14, cursor: "ew-resize" }}
         >
           <svg width={16} height={14}>
             <polygon points="1,1 16,7 1,13" fill={color} />
           </svg>
         </Box>
-        <Typography
-          variant="caption"
-          sx={{
-            position: "absolute", left: 22, top: 7, color, fontWeight: 600,
-            fontSize: "0.68rem", whiteSpace: "nowrap", pointerEvents: "none",
-          }}
-        >
-          {bar.title}
-        </Typography>
       </Box>
     </Tooltip>
   );
@@ -412,18 +404,39 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
         onDoubleClick={() => onEdit(ms)}
         sx={{
           position: "absolute",
-          left: left - 9,
-          top: 23, // 节点中心对齐轨道线（线在 top 31，中线 32 → 节点 18px 高 top=32-9=23）
-          width: 18,
-          height: 18,
+          left: left - 40,
+          top: 23, // 符号 18px 高，top 23 → 中心 32，与轨道线中线对齐
+          width: 80,
+          height: 44,
           cursor: dragging ? "grabbing" : "grab",
           zIndex: 3,
           userSelect: "none",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
         }}
       >
-        <svg width={18} height={18}>
+        <svg width={18} height={18} style={{ flexShrink: 0 }}>
           <MilestoneSymbol symbol={ms.symbol} color={ms.color} size={18} />
         </svg>
+        <Typography
+          variant="caption"
+          sx={{
+            mt: 0.5,
+            fontSize: "0.6rem",
+            fontWeight: 600,
+            lineHeight: 1.15,
+            color: ms.color || "text.secondary",
+            textAlign: "center",
+            whiteSpace: "nowrap",
+            maxWidth: 80,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            pointerEvents: "none",
+          }}
+        >
+          {ms.title}
+        </Typography>
       </Box>
     </Tooltip>
   );
@@ -434,9 +447,19 @@ function TrackRow({
   onUpdateBar, onUpdateMilestone,
   onAddBar, onAddMilestone,
   onEditBar, onEditMilestone,
-  onEditTrack, onDeleteTrack,
+  onUpdateTrack, onDeleteTrack,
 }) {
   const totalWidth = months.length * monthWidth;
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(track.title);
+  const [colorAnchor, setColorAnchor] = useState(null);
+
+  const commitName = () => {
+    setEditingName(false);
+    const t = nameDraft.trim();
+    if (t && t !== track.title) onUpdateTrack(track.id, { title: t });
+  };
+
   return (
     <Box sx={{ display: "flex", height: ROW_HEIGHT, borderBottom: "1px dashed", borderColor: "divider" }}>
       <Box
@@ -451,15 +474,62 @@ function TrackRow({
           bgcolor: alpha(track.label_color || "#1565C0", 0.08),
         }}
       >
-        <Tooltip title="编辑轨道">
+        <Tooltip title="修改颜色">
           <Box
-            onClick={() => onEditTrack(track)}
-            sx={{ width: 8, height: 36, borderRadius: "4px", bgcolor: track.label_color || "#1565C0", mr: 1.5, cursor: "pointer" }}
+            onClick={(e) => setColorAnchor(e.currentTarget)}
+            sx={{
+              width: 10, height: 36, borderRadius: "4px",
+              bgcolor: track.label_color || "#1565C0", mr: 1.5, cursor: "pointer",
+              "&:hover": { boxShadow: "0 0 0 2px rgba(0,0,0,0.15)" },
+            }}
           />
         </Tooltip>
-        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {track.title}
-        </Typography>
+        <Popover
+          open={Boolean(colorAnchor)}
+          anchorEl={colorAnchor}
+          onClose={() => setColorAnchor(null)}
+          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        >
+          <Box sx={{ p: 1, display: "flex", gap: 0.5 }}>
+            {PRESET_COLORS.map((c) => (
+              <Box
+                key={c}
+                onClick={() => { onUpdateTrack(track.id, { label_color: c }); setColorAnchor(null); }}
+                sx={{
+                  width: 24, height: 24, borderRadius: "50%", bgcolor: c, cursor: "pointer",
+                  border: c === track.label_color ? "3px solid #000" : "2px solid #fff",
+                  boxShadow: "0 0 0 1px #ccc",
+                }}
+              />
+            ))}
+          </Box>
+        </Popover>
+        {editingName ? (
+          <TextField
+            autoFocus
+            size="small"
+            value={nameDraft}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitName();
+              else if (e.key === "Escape") setEditingName(false);
+            }}
+            sx={{ flex: 1, "& .MuiInputBase-input": { fontSize: "0.8rem", fontWeight: 700, py: 0.25 } }}
+          />
+        ) : (
+          <Typography
+            variant="body2"
+            onClick={() => { setNameDraft(track.title); setEditingName(true); }}
+            sx={{
+              fontWeight: 700, fontSize: "0.8rem", flex: 1,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              cursor: "text", "&:hover": { color: "primary.main" },
+            }}
+          >
+            {track.title}
+          </Typography>
+        )}
         <Tooltip title="删除轨道">
           <IconButton size="small" onClick={() => onDeleteTrack(track.id)} sx={{ p: 0.25 }}>
             <Box component="span" sx={{ fontSize: "0.7rem", color: "text.secondary" }}>✕</Box>
@@ -529,47 +599,6 @@ function TrackRow({
         </Box>
       </Box>
     </Box>
-  );
-}
-
-function EditTrackDialog({ open, track, onClose, onSave, onDelete }) {
-  const [title, setTitle] = useState("");
-  const [color, setColor] = useState("#1565C0");
-
-  useEffect(() => {
-    if (track) {
-      setTitle(track.title || "");
-      setColor(track.label_color || "#1565C0");
-    }
-  }, [track]);
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>编辑轨道</DialogTitle>
-      <DialogContent>
-        <TextField fullWidth size="small" label="轨道名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
-        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>左侧色标</Typography>
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-          {PRESET_COLORS.map((c) => (
-            <Box
-              key={c}
-              onClick={() => setColor(c)}
-              sx={{
-                width: 28, height: 28, borderRadius: "50%", bgcolor: c, cursor: "pointer",
-                border: c === color ? "3px solid #000" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
-              }}
-            />
-          ))}
-        </Box>
-      </DialogContent>
-      <DialogActions sx={{ justifyContent: "space-between" }}>
-        <Button color="error" onClick={onDelete}>删除轨道</Button>
-        <Box>
-          <Button onClick={onClose}>取消</Button>
-          <Button variant="contained" onClick={() => onSave({ title, label_color: color })}>保存</Button>
-        </Box>
-      </DialogActions>
-    </Dialog>
   );
 }
 
@@ -763,7 +792,6 @@ export default function QuickSchedulePage() {
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
-  const [editTrack, setEditTrack] = useState(null);
   const [editBar, setEditBar] = useState(null);
   const [editMilestone, setEditMilestone] = useState(null);
 
@@ -857,14 +885,12 @@ export default function QuickSchedulePage() {
   const handleUpdateTrack = async (trackId, data) => {
     const r = await api.quickSchedules.tracks.update(schedule.id, trackId, data);
     setSchedule(r.data);
-    setEditTrack(null);
   };
 
   const handleDeleteTrack = async (trackId) => {
     if (!window.confirm("确定删除该轨道？")) return;
     const r = await api.quickSchedules.tracks.remove(schedule.id, trackId);
     setSchedule(r.data);
-    setEditTrack(null);
   };
 
   const handleAddBar = async (trackId) => {
@@ -1018,7 +1044,7 @@ export default function QuickSchedulePage() {
                     onAddMilestone={handleAddMilestone}
                     onEditBar={setEditBar}
                     onEditMilestone={setEditMilestone}
-                    onEditTrack={setEditTrack}
+                    onUpdateTrack={handleUpdateTrack}
                     onDeleteTrack={handleDeleteTrack}
                   />
                 ))
@@ -1053,9 +1079,6 @@ export default function QuickSchedulePage() {
       )}
 
       <CreateScheduleDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreate={handleCreate} />
-      {editTrack && (
-        <EditTrackDialog open={!!editTrack} track={editTrack} onClose={() => setEditTrack(null)} onSave={(d) => handleUpdateTrack(editTrack.id, d)} onDelete={() => handleDeleteTrack(editTrack.id)} />
-      )}
       {editBar && (
         <EditBarDialog open={!!editBar} bar={editBar} onClose={() => setEditBar(null)} onSave={handleSaveBarDialog} onDelete={handleDeleteBar} />
       )}
