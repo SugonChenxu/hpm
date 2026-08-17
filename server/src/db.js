@@ -781,6 +781,7 @@ CREATE TABLE IF NOT EXISTS quick_schedule_bars (
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,
     color TEXT DEFAULT '#1565C0',
+    style TEXT DEFAULT 'bar',
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now','localtime')),
     updated_at TEXT DEFAULT (datetime('now','localtime'))
@@ -806,6 +807,15 @@ CREATE INDEX IF NOT EXISTS idx_quick_tracks_schedule ON quick_schedule_tracks(sc
 CREATE INDEX IF NOT EXISTS idx_quick_bars_schedule ON quick_schedule_bars(schedule_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_quick_milestones_schedule ON quick_schedule_milestones(schedule_id, date);
 `);
+
+// 迁移：quick_schedule_bars.style（'bar' 矩形进度条 / 'arrow' 带箭头直线）
+try {
+  db.exec(`ALTER TABLE quick_schedule_bars ADD COLUMN style TEXT DEFAULT 'bar'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column")) {
+    console.warn("Migration quick_schedule_bars.style:", e.message);
+  }
+}
 
 // 迁移：meeting_outputs 区分「周期模板」与「每周实例」
 // is_template=1 为周期模板（定义，不直接展示）；source_id 指向模板 id（实例创建后回填）

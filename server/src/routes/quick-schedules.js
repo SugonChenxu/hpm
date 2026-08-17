@@ -66,11 +66,17 @@ function buildScheduleDetail(scheduleId, ownerId) {
   const trackMap = new Map();
   for (const t of tracks) {
     t.bars = [];
+    t.milestones = []; // 该轨道所有节点（含未挂 bar 的独立节点）
     trackMap.set(t.id, t);
   }
   for (const b of bars) {
     if (trackMap.has(b.track_id)) {
       trackMap.get(b.track_id).bars.push(b);
+    }
+  }
+  for (const m of milestones) {
+    if (trackMap.has(m.track_id)) {
+      trackMap.get(m.track_id).milestones.push(m);
     }
   }
 
@@ -171,7 +177,7 @@ router.delete("/quick-schedules/:id", (req, res) => {
 // ═══════════════════════════════════════════════
 router.post("/quick-schedules/:id/tracks", (req, res) => {
   const schedule = db
-    .prepare("SELECT id FROM quick_schedules WHERE id = ? AND owner_id = ?")
+    .prepare("SELECT * FROM quick_schedules WHERE id = ? AND owner_id = ?")
     .get(req.params.id, req.userId);
   if (!schedule) return res.status(404).json({ ok: false, error: "排期不存在" });
 
@@ -188,8 +194,14 @@ router.post("/quick-schedules/:id/tracks", (req, res) => {
     )
     .run(req.params.id, req.userId, title, max.m + 1, labelColor);
 
+  // 创建轨道后，自动生成一条带箭头直线贯穿整个排期时间段
+  const trackId = info.lastInsertRowid;
+  db.prepare(
+    "INSERT INTO quick_schedule_bars (schedule_id, track_id, owner_id, title, start_date, end_date, color, style, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, 'arrow', 0)"
+  ).run(req.params.id, trackId, req.userId, title, schedule.start_date, schedule.end_date, labelColor);
+
   const detail = buildScheduleDetail(req.params.id, req.userId);
-  res.json({ ok: true, data: { track_id: info.lastInsertRowid, schedule: detail } });
+  res.json({ ok: true, data: { track_id: trackId, schedule: detail } });
 });
 
 // ═══════════════════════════════════════════════
@@ -229,7 +241,7 @@ router.delete("/quick-schedules/:id/tracks/:trackId", (req, res) => {
 
 // ═══════════════════════════════════════════════
 // POST /quick-schedules/:id/bars — 添加进度条
-// Body: { track_id, title, start_date, end_date, color }
+// Body: { track_id, title, start_date, end_date, color, style }
 // ═══════════════════════════════════════════════
 router.post("/quick-schedules/:id/bars", (req, res) => {
   const schedule = db
@@ -254,12 +266,13 @@ router.post("/quick-schedules/:id/bars", (req, res) => {
 
   const title = String(req.body.title || "").slice(0, 200);
   const color = safeColor(req.body.color, "#1565C0");
+  const style = req.body.style === "arrow" ? "arrow" : "bar";
 
   const info = db
     .prepare(
-      "INSERT INTO quick_schedule_bars (schedule_id, track_id, owner_id, title, start_date, end_date, color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO quick_schedule_bars (schedule_id, track_id, owner_id, title, start_date, end_date, color, style, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(req.params.id, req.body.track_id, req.userId, title, start, end, color, max.m + 1);
+    .run(req.params.id, req.body.track_id, req.userId, title, start, end, color, style, max.m + 1);
 
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: { bar_id: info.lastInsertRowid, schedule: detail } });
@@ -276,25 +289,31 @@ router.put("/quick-schedules/:id/bars/:barId", (req, res) => {
 
   const schedule = db.prepare("SELECT start_date, end_date FROM quick_schedules WHERE id = ?").get(req.params.id);
 
-  let start = req.body.start_date !== undefined ? normalizeDate(req.body.start_date) : bar.start_date;
-  let end = req.body.end_date !== undefined ? normalizeDate(req.body.end_date) : bar.end_date;
+  let start = bar.start_date;
+  let end = bar.end_date;
+  if (req.body.start_date !== undefined) start = normalizeDate(req.body.start_date) || bar.start_date;
+  if (req.body.end_date !== undefined) end = normalizeDate(req.body.end_date) || bar.end_date;
 
-  // 拖拽时如果只传了一个端点，保持至少 1 天长度
-  if (start && !end) end = start;
-  if (end && !start) start = end;
-  if (start > end) [start, end] = [end, start];
+  // 单端点拖拽越界时，用新值作锚点，另一端跟随保证至少 1 天长度
+  if (start > end) {
+    if (req.body.start_date !== undefined && req.body.end_date === undefined) end = start;
+    else if (req.body.end_date !== undefined && req.body.start_date === undefined) start = end;
+    else [start, end] = [end, start];
+  }
 
   // 限制在排期时间范围内
   if (start < schedule.start_date) start = schedule.start_date;
   if (end > schedule.end_date) end = schedule.end_date;
+  if (start > end) end = start;
 
   const title = req.body.title !== undefined ? String(req.body.title).slice(0, 200) : bar.title;
   const color = req.body.color !== undefined ? safeColor(req.body.color) : bar.color;
   const trackId = req.body.track_id !== undefined ? Number(req.body.track_id) : bar.track_id;
+  const style = req.body.style !== undefined ? (req.body.style === "arrow" ? "arrow" : "bar") : bar.style;
 
   db.prepare(
-    "UPDATE quick_schedule_bars SET track_id = ?, title = ?, start_date = ?, end_date = ?, color = ?, updated_at = datetime('now','localtime') WHERE id = ?"
-  ).run(trackId, title, start, end, color, req.params.barId);
+    "UPDATE quick_schedule_bars SET track_id = ?, title = ?, start_date = ?, end_date = ?, color = ?, style = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+  ).run(trackId, title, start, end, color, style, req.params.barId);
 
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: detail });
