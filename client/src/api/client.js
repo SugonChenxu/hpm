@@ -219,6 +219,39 @@ export const api = {
       request(`/quick-notes/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id) => request(`/quick-notes/${id}`, { method: "DELETE" }),
   },
+  // 快速排期
+  quickSchedules: {
+    list: () => request("/quick-schedules"),
+    get: (id) => request(`/quick-schedules/${id}`),
+    create: (data) => request("/quick-schedules", { method: "POST", body: JSON.stringify(data) }),
+    update: (id, data) =>
+      request(`/quick-schedules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    remove: (id) => request(`/quick-schedules/${id}`, { method: "DELETE" }),
+    tracks: {
+      create: (scheduleId, data) =>
+        request(`/quick-schedules/${scheduleId}/tracks`, { method: "POST", body: JSON.stringify(data) }),
+      update: (scheduleId, trackId, data) =>
+        request(`/quick-schedules/${scheduleId}/tracks/${trackId}`, { method: "PUT", body: JSON.stringify(data) }),
+      remove: (scheduleId, trackId) =>
+        request(`/quick-schedules/${scheduleId}/tracks/${trackId}`, { method: "DELETE" }),
+    },
+    bars: {
+      create: (scheduleId, data) =>
+        request(`/quick-schedules/${scheduleId}/bars`, { method: "POST", body: JSON.stringify(data) }),
+      update: (scheduleId, barId, data) =>
+        request(`/quick-schedules/${scheduleId}/bars/${barId}`, { method: "PUT", body: JSON.stringify(data) }),
+      remove: (scheduleId, barId) =>
+        request(`/quick-schedules/${scheduleId}/bars/${barId}`, { method: "DELETE" }),
+    },
+    milestones: {
+      create: (scheduleId, data) =>
+        request(`/quick-schedules/${scheduleId}/milestones`, { method: "POST", body: JSON.stringify(data) }),
+      update: (scheduleId, milestoneId, data) =>
+        request(`/quick-schedules/${scheduleId}/milestones/${milestoneId}`, { method: "PUT", body: JSON.stringify(data) }),
+      remove: (scheduleId, milestoneId) =>
+        request(`/quick-schedules/${scheduleId}/milestones/${milestoneId}`, { method: "DELETE" }),
+    },
+  },
   // 腾讯文档关联（项目计划 → 在线表格；同步动作由 WorkBuddy 手动触发）
   tencentDocs: {
     link: (projectId) => request(`/tencent-docs/link?project_id=${projectId}`),

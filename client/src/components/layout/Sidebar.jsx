@@ -52,6 +52,15 @@ function NoteIcon(props) {
   );
 }
 
+// 内联时间轴图标（快速排期）
+function TimelineIcon(props) {
+  return (
+    <SvgIcon {...props} viewBox="0 0 24 24">
+      <path d="M3 5h13v2H3V5zm0 6h9v2H3v-2zm0 6h13v2H3v-2zm15.5-9.5L22 11l-3.5 3.5-1.41-1.41L19.17 11l-2.08-2.08 1.41-1.42z" />
+    </SvgIcon>
+  );
+}
+
 /**
  * Navigation items grouped into three sections for visual hierarchy.
  * Each group has a label and a list of route items.
@@ -85,6 +94,7 @@ const NAV_GROUPS = [
       title: "个人空间",
       items: [
         { text: "快速笔记", icon: <NoteIcon />, path: "/notes" },
+        { text: "快速排期", icon: <TimelineIcon />, path: "/quick-schedules" },
       ],
     },
     {

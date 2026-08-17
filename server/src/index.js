@@ -25,6 +25,7 @@ import usersRouter from "./routes/users.js";
 import sapStockRouter from "./routes/sap-stock.js";
 import plmRouter from "./routes/plm.js";
 import quickNotesRouter from "./routes/quick-notes.js";
+import quickSchedulesRouter from "./routes/quick-schedules.js";
 import tencentDocsRouter from "./routes/tencent-docs.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -80,6 +81,7 @@ app.use("/api/users", usersRouter);
 app.use("/api", sapStockRouter);
 app.use("/api", plmRouter);
 app.use("/api", quickNotesRouter);
+app.use("/api", quickSchedulesRouter);
 app.use("/api", tencentDocsRouter);
 
 // === 生产模式：托管前端静态文件 ===

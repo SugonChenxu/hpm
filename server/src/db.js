@@ -745,6 +745,68 @@ try {
   console.warn("Migration meeting_outputs.cycle:", e.message);
 }
 
+// =====================================================
+// 快速排期模块（个人空间）
+// 用于会议时快速进行项目排期模拟，以甘特图形式展示
+// =====================================================
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS quick_schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '未命名排期',
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS quick_schedule_tracks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL REFERENCES quick_schedules(id) ON DELETE CASCADE,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '进度条',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    label_color TEXT DEFAULT '#1565C0',
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS quick_schedule_bars (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL REFERENCES quick_schedules(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES quick_schedule_tracks(id) ON DELETE CASCADE,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '',
+    start_date TEXT NOT NULL,
+    end_date TEXT NOT NULL,
+    color TEXT DEFAULT '#1565C0',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE TABLE IF NOT EXISTS quick_schedule_milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL REFERENCES quick_schedules(id) ON DELETE CASCADE,
+    track_id INTEGER NOT NULL REFERENCES quick_schedule_tracks(id) ON DELETE CASCADE,
+    bar_id INTEGER REFERENCES quick_schedule_bars(id) ON DELETE SET NULL,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '',
+    date TEXT NOT NULL,
+    symbol TEXT DEFAULT 'circle',
+    color TEXT DEFAULT '#D32F2F',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_quick_schedules_owner ON quick_schedules(owner_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_quick_tracks_schedule ON quick_schedule_tracks(schedule_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_quick_bars_schedule ON quick_schedule_bars(schedule_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_quick_milestones_schedule ON quick_schedule_milestones(schedule_id, date);
+`);
+
 // 迁移：meeting_outputs 区分「周期模板」与「每周实例」
 // is_template=1 为周期模板（定义，不直接展示）；source_id 指向模板 id（实例创建后回填）
 try {
@@ -796,6 +858,10 @@ const OWNER_TABLES = [
   "plm_inventory",
   "quick_notes",
   "tencent_docs_link",
+  "quick_schedules",
+  "quick_schedule_tracks",
+  "quick_schedule_bars",
+  "quick_schedule_milestones",
 ];
 
 for (const t of OWNER_TABLES) {
