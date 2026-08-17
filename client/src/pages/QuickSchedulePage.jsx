@@ -255,7 +255,6 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
   return (
     <Tooltip title={`${bar.title || "(未命名)"} · ${bar.start_date} ~ ${bar.end_date}`} arrow placement="top">
       <Box
-        onDoubleClick={() => onEdit(bar)}
         sx={{
           position: "absolute",
           left,
@@ -263,13 +262,15 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
           top: 0,
           height: ROW_HEIGHT,
           zIndex: 2,
+          pointerEvents: "none",
           userSelect: "none",
         }}
       >
         {/* 线体：点击区 10px 高（27~37），视觉线 2px 居中，中线 32，与节点符号中心对齐 */}
         <Box
           onMouseDown={(e) => startDrag("move", e)}
-          sx={{ position: "absolute", left: 8, right: 12, top: 27, height: 10, cursor: dragging ? "grabbing" : "grab" }}
+          onDoubleClick={() => onEdit(bar)}
+          sx={{ position: "absolute", left: 8, right: 12, top: 27, height: 10, pointerEvents: "auto" }}
         >
           <Box sx={{ position: "absolute", left: 0, right: 0, top: 4, height: 2, bgcolor: color }} />
         </Box>
@@ -278,6 +279,7 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
           sx={{
             position: "absolute", left: 0, top: 27, width: 14, height: 10,
             cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center",
+            pointerEvents: "auto",
           }}
         >
           <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.2)" }} />
@@ -285,7 +287,7 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
         {/* 右端箭头：绝对 top 25，箭头尖中线 32（svg display:block 消除 baseline 偏移） */}
         <Box
           onMouseDown={(e) => startDrag("end", e)}
-          sx={{ position: "absolute", right: 0, top: 25, width: 16, height: 14, cursor: "ew-resize" }}
+          sx={{ position: "absolute", right: 0, top: 25, width: 16, height: 14, cursor: "ew-resize", pointerEvents: "auto" }}
         >
           <svg width={16} height={14} style={{ display: "block" }}>
             <polygon points="1,1 16,7 1,13" fill={color} />
@@ -602,7 +604,7 @@ function TrackRow({
             onEdit={onEditMilestone}
           />
         ))}
-        <Box sx={{ position: "absolute", right: 4, bottom: 2, display: "flex", gap: 0.25 }}>
+        <Box sx={{ position: "absolute", right: 4, bottom: 2, display: "flex", gap: 0.25, zIndex: 6 }}>
           <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddMilestone(track.id)}>
             ＋节点
           </Button>
