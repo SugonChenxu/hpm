@@ -260,8 +260,8 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
           position: "absolute",
           left,
           width,
-          top: 22,
-          height: 20,
+          top: 0,
+          height: ROW_HEIGHT,
           cursor: dragging ? "grabbing" : "grab",
           zIndex: 2,
           userSelect: "none",
@@ -270,22 +270,23 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
         {/* 线体：绝对 top 31，中线 32，与节点符号中心对齐 */}
         <Box
           onMouseDown={(e) => startDrag("move", e)}
-          sx={{ position: "absolute", left: 8, right: 12, top: 9, height: 2, bgcolor: color }}
+          sx={{ position: "absolute", left: 8, right: 12, top: 31, height: 2, bgcolor: color }}
         />
         <Box
           onMouseDown={(e) => startDrag("start", e)}
           sx={{
-            position: "absolute", left: 0, top: 5, width: 14, height: 10,
+            position: "absolute", left: 0, top: 27, width: 14, height: 10,
             cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center",
           }}
         >
           <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.2)" }} />
         </Box>
+        {/* 右端箭头：绝对 top 25，箭头尖中线 32（svg display:block 消除 baseline 偏移） */}
         <Box
           onMouseDown={(e) => startDrag("end", e)}
-          sx={{ position: "absolute", right: 0, top: 3, width: 16, height: 14, cursor: "ew-resize" }}
+          sx={{ position: "absolute", right: 0, top: 25, width: 16, height: 14, cursor: "ew-resize" }}
         >
-          <svg width={16} height={14}>
+          <svg width={16} height={14} style={{ display: "block" }}>
             <polygon points="1,1 16,7 1,13" fill={color} />
           </svg>
         </Box>
@@ -344,7 +345,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
           position: "absolute",
           left,
           width,
-          top: 6,
+          top: 23, // 中心 32，与轨道名称文字中心、箭头直线对齐
           height: 18,
           bgcolor: bar.color || "#1565C0",
           borderRadius: "4px",
@@ -445,7 +446,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
 function TrackRow({
   track, months, monthWidth, minDate, maxDate,
   onUpdateBar, onUpdateMilestone,
-  onAddBar, onAddMilestone,
+  onAddMilestone,
   onEditBar, onEditMilestone,
   onUpdateTrack, onDeleteTrack,
 }) {
@@ -590,9 +591,6 @@ function TrackRow({
           />
         ))}
         <Box sx={{ position: "absolute", right: 4, bottom: 2, display: "flex", gap: 0.25 }}>
-          <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddBar(track.id)}>
-            ＋条
-          </Button>
           <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddMilestone(track.id)}>
             ＋节点
           </Button>
@@ -895,20 +893,6 @@ export default function QuickSchedulePage() {
     setSchedule(r.data);
   };
 
-  const handleAddBar = async (trackId) => {
-    if (!schedule) return;
-    const title = window.prompt("进度条名称", "");
-    if (title === null) return;
-    const r = await api.quickSchedules.bars.create(schedule.id, {
-      track_id: trackId,
-      title,
-      start_date: schedule.start_date,
-      end_date: fmt(dayjs(schedule.start_date).add(1, "month")),
-      style: "bar",
-    });
-    setSchedule(r.data.schedule);
-  };
-
   const handleUpdateBar = async (barId, data) => {
     setSchedule((prev) => {
       if (!prev) return prev;
@@ -1070,7 +1054,6 @@ export default function QuickSchedulePage() {
                     maxDate={schedule.end_date}
                     onUpdateBar={handleUpdateBar}
                     onUpdateMilestone={handleUpdateMilestone}
-                    onAddBar={handleAddBar}
                     onAddMilestone={handleAddMilestone}
                     onEditBar={setEditBar}
                     onEditMilestone={setEditMilestone}

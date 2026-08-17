@@ -221,6 +221,13 @@ router.put("/quick-schedules/:id/tracks/:trackId", (req, res) => {
     "UPDATE quick_schedule_tracks SET title = ?, label_color = ?, sort_order = ?, updated_at = datetime('now','localtime') WHERE id = ?"
   ).run(title, labelColor, sortOrder, req.params.trackId);
 
+  // 轨道色变化时，同步更新该轨道所有箭头直线的颜色（保持视觉一致）
+  if (req.body.label_color !== undefined && labelColor !== track.label_color) {
+    db.prepare(
+      "UPDATE quick_schedule_bars SET color = ?, updated_at = datetime('now','localtime') WHERE track_id = ? AND style = 'arrow'"
+    ).run(labelColor, req.params.trackId);
+  }
+
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: detail });
 });
