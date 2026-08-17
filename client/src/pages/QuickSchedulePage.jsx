@@ -589,11 +589,11 @@ function TrackRow({
             onEdit={onEditMilestone}
           />
         ))}
-        <Box sx={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", display: "flex", gap: 0.5 }}>
-          <Button size="small" variant="outlined" sx={{ fontSize: "0.65rem", minWidth: 0, px: 1, py: 0.25 }} onClick={() => onAddBar(track.id)}>
+        <Box sx={{ position: "absolute", right: 4, bottom: 2, display: "flex", gap: 0.25 }}>
+          <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddBar(track.id)}>
             ＋条
           </Button>
-          <Button size="small" variant="outlined" sx={{ fontSize: "0.65rem", minWidth: 0, px: 1, py: 0.25 }} onClick={() => onAddMilestone(track.id)}>
+          <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddMilestone(track.id)}>
             ＋节点
           </Button>
         </Box>
@@ -794,6 +794,8 @@ export default function QuickSchedulePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editBar, setEditBar] = useState(null);
   const [editMilestone, setEditMilestone] = useState(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   // 甘特区宽度测量 → 时间轴自适应
   const ganttRef = useRef(null);
@@ -1003,6 +1005,15 @@ export default function QuickSchedulePage() {
     setSchedule(r.data);
   };
 
+  const commitTitle = async () => {
+    setEditingTitle(false);
+    const t = titleDraft.trim();
+    if (t && t !== schedule.title) {
+      const r = await api.quickSchedules.update(schedule.id, { title: t });
+      setSchedule(r.data);
+    }
+  };
+
   return (
     <Box sx={{ p: 3, height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
@@ -1013,9 +1024,28 @@ export default function QuickSchedulePage() {
       {schedule ? (
         <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
           <Box sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1, borderBottom: "1px solid", borderColor: "divider", flexWrap: "wrap" }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1 }}>
-              {schedule.title}
-            </Typography>
+            {editingTitle ? (
+              <TextField
+                autoFocus
+                size="small"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitTitle();
+                  else if (e.key === "Escape") setEditingTitle(false);
+                }}
+                sx={{ flex: 1, minWidth: 160, "& .MuiInputBase-input": { fontWeight: 700, fontSize: "1rem" } }}
+              />
+            ) : (
+              <Typography
+                variant="subtitle1"
+                onClick={() => { setTitleDraft(schedule.title); setEditingTitle(true); }}
+                sx={{ fontWeight: 700, flex: 1, cursor: "text", "&:hover": { color: "primary.main" } }}
+              >
+                {schedule.title}
+              </Typography>
+            )}
             <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
             <Typography variant="body2" sx={{ color: "text.secondary" }}>~</Typography>
             <DateFieldPopover label="结束" value={schedule.end_date} onChange={handleUpdateEnd} />
