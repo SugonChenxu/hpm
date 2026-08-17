@@ -2,17 +2,17 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box, Typography, Button, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Tooltip, Stack, Chip, MenuItem, Select,
-  FormControl, InputLabel, alpha,
+  FormControl, InputLabel, alpha, Popover,
 } from "@mui/material";
 import dayjs from "dayjs";
 import api from "../api/client";
 import PageHeader from "../components/common/PageHeader";
 
-const MONTH_WIDTH = 72;
 const ROW_HEIGHT = 64;
 const HEADER_HEIGHT = 72;
 const LABEL_WIDTH = 160;
 const MIN_SCHEDULE_MONTHS = 6;
+const MIN_MONTH_WIDTH = 24; // 月份过多时兜底最小宽度（避免标签完全挤压）
 
 const SYMBOLS = [
   { key: "circle", label: "圆点" },
@@ -75,35 +75,35 @@ function buildQuarters(months) {
   return quarters;
 }
 
-function dateToPixels(date, months) {
+function dateToPixels(date, months, monthWidth) {
   if (months.length === 0) return 0;
   const d = dayjs(date);
   const first = dayjs(months[0].start);
   const lastIdx = months.length - 1;
   const lastEnd = dayjs(months[lastIdx].end);
   if (d.isBefore(first)) return 0;
-  if (d.isAfter(lastEnd)) return months.length * MONTH_WIDTH;
+  if (d.isAfter(lastEnd)) return months.length * monthWidth;
   const monthIdx = months.findIndex((m) => d.format("YYYY-MM") === m.key);
   const safeIdx = monthIdx >= 0 ? monthIdx : 0;
   const monthStart = dayjs(months[safeIdx].start);
   const monthEnd = dayjs(months[safeIdx].end);
   const totalDays = monthEnd.diff(monthStart, "day") + 1;
   const passed = d.diff(monthStart, "day");
-  return safeIdx * MONTH_WIDTH + (passed / totalDays) * MONTH_WIDTH;
+  return safeIdx * monthWidth + (passed / totalDays) * monthWidth;
 }
 
-function pixelsToDate(px, months) {
+function pixelsToDate(px, months, monthWidth) {
   if (months.length === 0) return null;
   if (px <= 0) return months[0].start;
-  const total = months.length * MONTH_WIDTH;
+  const total = months.length * monthWidth;
   if (px >= total) return months[months.length - 1].end;
-  const idx = Math.min(months.length - 1, Math.floor(px / MONTH_WIDTH));
-  const offset = px - idx * MONTH_WIDTH;
+  const idx = Math.min(months.length - 1, Math.floor(px / monthWidth));
+  const offset = px - idx * monthWidth;
   const month = months[idx];
   const monthStart = dayjs(month.start);
   const monthEnd = dayjs(month.end);
   const totalDays = monthEnd.diff(monthStart, "day") + 1;
-  const days = Math.round((offset / MONTH_WIDTH) * totalDays);
+  const days = Math.round((offset / monthWidth) * totalDays);
   return fmt(monthStart.add(days, "day"));
 }
 
@@ -140,8 +140,8 @@ function MilestoneSymbol({ symbol, color, size = 14 }) {
   }
 }
 
-function TimelineHeader({ months, quarters }) {
-  const totalWidth = months.length * MONTH_WIDTH;
+function TimelineHeader({ months, quarters, monthWidth }) {
+  const totalWidth = months.length * monthWidth;
   return (
     <Box sx={{ display: "flex", height: HEADER_HEIGHT, position: "sticky", top: 0, zIndex: 5, bgcolor: "background.paper" }}>
       <Box sx={{ width: LABEL_WIDTH, flexShrink: 0, borderRight: "1px solid", borderColor: "divider", borderBottom: "1px solid", borderColor: "divider" }} />
@@ -151,8 +151,8 @@ function TimelineHeader({ months, quarters }) {
             key={`q-${i}`}
             sx={{
               position: "absolute",
-              left: q.startIdx * MONTH_WIDTH,
-              width: q.count * MONTH_WIDTH,
+              left: q.startIdx * monthWidth,
+              width: q.count * monthWidth,
               height: HEADER_HEIGHT / 2,
               bgcolor: "#A94442",
               color: "#fff",
@@ -160,7 +160,9 @@ function TimelineHeader({ months, quarters }) {
               alignItems: "center",
               justifyContent: "center",
               fontWeight: 700,
-              fontSize: "0.8rem",
+              fontSize: "0.75rem",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
               borderRight: "1px solid rgba(255,255,255,0.3)",
             }}
           >
@@ -172,9 +174,9 @@ function TimelineHeader({ months, quarters }) {
             key={m.key}
             sx={{
               position: "absolute",
-              left: i * MONTH_WIDTH,
+              left: i * monthWidth,
               top: HEADER_HEIGHT / 2,
-              width: MONTH_WIDTH,
+              width: monthWidth,
               height: HEADER_HEIGHT / 2,
               bgcolor: "#D9A6A5",
               color: "#fff",
@@ -182,11 +184,13 @@ function TimelineHeader({ months, quarters }) {
               alignItems: "center",
               justifyContent: "center",
               fontWeight: 600,
-              fontSize: "0.75rem",
+              fontSize: "0.7rem",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
               borderRight: "1px solid rgba(255,255,255,0.3)",
             }}
           >
-            {m.month}月
+            {monthWidth < 34 ? m.month : `${m.month}月`}
           </Box>
         ))}
       </Box>
@@ -195,15 +199,15 @@ function TimelineHeader({ months, quarters }) {
 }
 
 /** 箭头直线：轨道主体，两端可拖拽调整起止，线体可拖拽平移 */
-function ArrowBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
+function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const dragModeRef = useRef("move");
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
   const rightRef = useRef(0);
 
-  const left = dateToPixels(bar.start_date, months);
-  const right = dateToPixels(bar.end_date, months);
+  const left = dateToPixels(bar.start_date, months, monthWidth);
+  const right = dateToPixels(bar.end_date, months, monthWidth);
   const width = Math.max(24, right - left);
   const color = bar.color || "#1565C0";
 
@@ -219,16 +223,15 @@ function ArrowBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
       const dx = ev.clientX - startXRef.current;
       if (dragModeRef.current === "start") {
         const newLeft = Math.max(0, startLeftRef.current + dx);
-        const newStart = clampDate(pixelsToDate(newLeft, months), minDate, bar.end_date);
+        const newStart = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, bar.end_date);
         onUpdate(bar.id, { start_date: newStart });
       } else if (dragModeRef.current === "end") {
         const newRight = startLeftRef.current + width + dx;
-        const newEnd = clampDate(pixelsToDate(newRight, months), bar.start_date, maxDate);
+        const newEnd = clampDate(pixelsToDate(newRight, months, monthWidth), bar.start_date, maxDate);
         onUpdate(bar.id, { end_date: newEnd });
       } else {
-        // move：保持跨度平移
         const newLeft = Math.max(0, startLeftRef.current + dx);
-        let newStart = pixelsToDate(newLeft, months);
+        let newStart = pixelsToDate(newLeft, months, monthWidth);
         const duration = dayjs(bar.end_date).diff(dayjs(bar.start_date), "day");
         let newEnd = fmt(dayjs(newStart).add(duration, "day"));
         if (maxDate && newEnd > maxDate) {
@@ -264,63 +267,32 @@ function ArrowBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
           userSelect: "none",
         }}
       >
-        {/* 线体 */}
         <Box
           onMouseDown={(e) => startDrag("move", e)}
-          sx={{
-            position: "absolute",
-            left: 8,
-            right: 12,
-            top: 4,
-            height: 2,
-            bgcolor: color,
-          }}
+          sx={{ position: "absolute", left: 8, right: 12, top: 4, height: 2, bgcolor: color }}
         />
-        {/* 左端手柄 */}
         <Box
           onMouseDown={(e) => startDrag("start", e)}
           sx={{
-            position: "absolute",
-            left: 0,
-            top: 0,
-            width: 14,
-            height: 10,
-            cursor: "ew-resize",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            position: "absolute", left: 0, top: 0, width: 14, height: 10,
+            cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "center",
           }}
         >
           <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.2)" }} />
         </Box>
-        {/* 右端箭头手柄 */}
         <Box
           onMouseDown={(e) => startDrag("end", e)}
-          sx={{
-            position: "absolute",
-            right: 0,
-            top: -2,
-            width: 16,
-            height: 14,
-            cursor: "ew-resize",
-          }}
+          sx={{ position: "absolute", right: 0, top: -2, width: 16, height: 14, cursor: "ew-resize" }}
         >
           <svg width={16} height={14}>
             <polygon points="1,1 16,7 1,13" fill={color} />
           </svg>
         </Box>
-        {/* 轨道名 */}
         <Typography
           variant="caption"
           sx={{
-            position: "absolute",
-            left: 22,
-            top: 7,
-            color: color,
-            fontWeight: 600,
-            fontSize: "0.68rem",
-            whiteSpace: "nowrap",
-            pointerEvents: "none",
+            position: "absolute", left: 22, top: 7, color, fontWeight: 600,
+            fontSize: "0.68rem", whiteSpace: "nowrap", pointerEvents: "none",
           }}
         >
           {bar.title}
@@ -331,14 +303,14 @@ function ArrowBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
 }
 
 /** 普通矩形进度条：整条平移 */
-function RectBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
+function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
   const durationRef = useRef(0);
 
-  const left = dateToPixels(bar.start_date, months);
-  const right = dateToPixels(bar.end_date, months);
+  const left = dateToPixels(bar.start_date, months, monthWidth);
+  const right = dateToPixels(bar.end_date, months, monthWidth);
   const width = Math.max(4, right - left);
 
   const handleMouseDown = (e) => {
@@ -351,7 +323,7 @@ function RectBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
       const newLeft = Math.max(0, startLeftRef.current + dx);
-      let newStart = pixelsToDate(newLeft, months) || bar.start_date;
+      let newStart = pixelsToDate(newLeft, months, monthWidth) || bar.start_date;
       newStart = clampDate(newStart, minDate, maxDate);
       let newEnd = fmt(dayjs(newStart).add(durationRef.current, "day"));
       if (maxDate && newEnd > maxDate) {
@@ -403,12 +375,12 @@ function RectBar({ bar, months, minDate, maxDate, onUpdate, onEdit }) {
   );
 }
 
-function DraggableMilestone({ ms, months, minDate, maxDate, onUpdate, onEdit }) {
+function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
 
-  const left = dateToPixels(ms.date, months);
+  const left = dateToPixels(ms.date, months, monthWidth);
 
   const handleMouseDown = (e) => {
     e.stopPropagation();
@@ -419,7 +391,7 @@ function DraggableMilestone({ ms, months, minDate, maxDate, onUpdate, onEdit }) 
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
       const newLeft = Math.max(0, startLeftRef.current + dx);
-      const newDate = clampDate(pixelsToDate(newLeft, months), minDate, maxDate) || ms.date;
+      const newDate = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate) || ms.date;
       onUpdate(ms.id, { date: newDate });
     };
 
@@ -441,7 +413,7 @@ function DraggableMilestone({ ms, months, minDate, maxDate, onUpdate, onEdit }) 
         sx={{
           position: "absolute",
           left: left - 9,
-          top: 44,
+          top: 23, // 节点中心对齐轨道线（线在 top 31，中线 32 → 节点 18px 高 top=32-9=23）
           width: 18,
           height: 18,
           cursor: dragging ? "grabbing" : "grab",
@@ -458,12 +430,13 @@ function DraggableMilestone({ ms, months, minDate, maxDate, onUpdate, onEdit }) 
 }
 
 function TrackRow({
-  track, months, minDate, maxDate,
+  track, months, monthWidth, minDate, maxDate,
   onUpdateBar, onUpdateMilestone,
   onAddBar, onAddMilestone,
   onEditBar, onEditMilestone,
   onEditTrack, onDeleteTrack,
 }) {
+  const totalWidth = months.length * monthWidth;
   return (
     <Box sx={{ display: "flex", height: ROW_HEIGHT, borderBottom: "1px dashed", borderColor: "divider" }}>
       <Box
@@ -481,14 +454,7 @@ function TrackRow({
         <Tooltip title="编辑轨道">
           <Box
             onClick={() => onEditTrack(track)}
-            sx={{
-              width: 8,
-              height: 36,
-              borderRadius: "4px",
-              bgcolor: track.label_color || "#1565C0",
-              mr: 1.5,
-              cursor: "pointer",
-            }}
+            sx={{ width: 8, height: 36, borderRadius: "4px", bgcolor: track.label_color || "#1565C0", mr: 1.5, cursor: "pointer" }}
           />
         </Tooltip>
         <Typography variant="body2" sx={{ fontWeight: 700, fontSize: "0.8rem", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -500,15 +466,15 @@ function TrackRow({
           </IconButton>
         </Tooltip>
       </Box>
-      <Box sx={{ position: "relative", flex: 1, minWidth: months.length * MONTH_WIDTH }}>
+      <Box sx={{ position: "relative", flex: 1, minWidth: totalWidth }}>
         {months.map((m, i) => (
           <Box
             key={m.key}
             sx={{
               position: "absolute",
-              left: i * MONTH_WIDTH,
+              left: i * monthWidth,
               top: 0,
-              width: MONTH_WIDTH,
+              width: monthWidth,
               height: "100%",
               borderRight: "1px solid",
               borderColor: "divider",
@@ -522,6 +488,7 @@ function TrackRow({
               key={bar.id}
               bar={bar}
               months={months}
+              monthWidth={monthWidth}
               minDate={minDate}
               maxDate={maxDate}
               onUpdate={onUpdateBar}
@@ -532,6 +499,7 @@ function TrackRow({
               key={bar.id}
               bar={bar}
               months={months}
+              monthWidth={monthWidth}
               minDate={minDate}
               maxDate={maxDate}
               onUpdate={onUpdateBar}
@@ -544,6 +512,7 @@ function TrackRow({
             key={ms.id}
             ms={ms}
             months={months}
+            monthWidth={monthWidth}
             minDate={minDate}
             maxDate={maxDate}
             onUpdate={onUpdateMilestone}
@@ -578,11 +547,7 @@ function EditTrackDialog({ open, track, onClose, onSave, onDelete }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>编辑轨道</DialogTitle>
       <DialogContent>
-        <TextField
-          fullWidth size="small" label="轨道名称"
-          value={title} onChange={(e) => setTitle(e.target.value)}
-          sx={{ mt: 1, mb: 2 }}
-        />
+        <TextField fullWidth size="small" label="轨道名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
         <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>左侧色标</Typography>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
           {PRESET_COLORS.map((c) => (
@@ -591,8 +556,7 @@ function EditTrackDialog({ open, track, onClose, onSave, onDelete }) {
               onClick={() => setColor(c)}
               sx={{
                 width: 28, height: 28, borderRadius: "50%", bgcolor: c, cursor: "pointer",
-                border: c === color ? "3px solid #000" : "2px solid #fff",
-                boxShadow: "0 0 0 1px #ccc",
+                border: c === color ? "3px solid #000" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
               }}
             />
           ))}
@@ -630,11 +594,7 @@ function EditBarDialog({ open, bar, onClose, onSave, onDelete }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>编辑进度条</DialogTitle>
       <DialogContent>
-        <TextField
-          fullWidth size="small" label="名称"
-          value={title} onChange={(e) => setTitle(e.target.value)}
-          sx={{ mt: 1, mb: 2 }}
-        />
+        <TextField fullWidth size="small" label="名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <TextField size="small" type="date" label="开始" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} />
           <TextField size="small" type="date" label="结束" InputLabelProps={{ shrink: true }} value={end} onChange={(e) => setEnd(e.target.value)} />
@@ -654,8 +614,7 @@ function EditBarDialog({ open, bar, onClose, onSave, onDelete }) {
               onClick={() => setColor(c)}
               sx={{
                 width: 28, height: 28, borderRadius: "50%", bgcolor: c, cursor: "pointer",
-                border: c === color ? "3px solid #000" : "2px solid #fff",
-                boxShadow: "0 0 0 1px #ccc",
+                border: c === color ? "3px solid #000" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
               }}
             />
           ))}
@@ -691,17 +650,8 @@ function EditMilestoneDialog({ open, ms, onClose, onSave, onDelete }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>编辑关键节点</DialogTitle>
       <DialogContent>
-        <TextField
-          fullWidth size="small" label="名称"
-          value={title} onChange={(e) => setTitle(e.target.value)}
-          sx={{ mt: 1, mb: 2 }}
-        />
-        <TextField
-          fullWidth size="small" type="date" label="日期"
-          InputLabelProps={{ shrink: true }}
-          value={date} onChange={(e) => setDate(e.target.value)}
-          sx={{ mb: 2 }}
-        />
+        <TextField fullWidth size="small" label="名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
+        <TextField fullWidth size="small" type="date" label="日期" InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ mb: 2 }} />
         <FormControl fullWidth size="small" sx={{ mb: 2 }}>
           <InputLabel>符号</InputLabel>
           <Select value={symbol} label="符号" onChange={(e) => setSymbol(e.target.value)}>
@@ -718,8 +668,7 @@ function EditMilestoneDialog({ open, ms, onClose, onSave, onDelete }) {
               onClick={() => setColor(c)}
               sx={{
                 width: 28, height: 28, borderRadius: "50%", bgcolor: c, cursor: "pointer",
-                border: c === color ? "3px solid #000" : "2px solid #fff",
-                boxShadow: "0 0 0 1px #ccc",
+                border: c === color ? "3px solid #000" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
               }}
             />
           ))}
@@ -754,23 +703,10 @@ function CreateScheduleDialog({ open, onClose, onCreate }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>创建排期</DialogTitle>
       <DialogContent>
-        <TextField
-          fullWidth size="small" label="排期名称"
-          value={title} onChange={(e) => setTitle(e.target.value)}
-          placeholder="如：XXX 项目初步排期"
-          sx={{ mt: 1, mb: 2 }}
-        />
+        <TextField fullWidth size="small" label="排期名称" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="如：XXX 项目初步排期" sx={{ mt: 1, mb: 2 }} />
         <Stack direction="row" spacing={1}>
-          <TextField
-            fullWidth size="small" type="date" label="开始日期"
-            InputLabelProps={{ shrink: true }}
-            value={start} onChange={(e) => setStart(e.target.value)}
-          />
-          <TextField
-            fullWidth size="small" type="date" label="结束日期"
-            InputLabelProps={{ shrink: true }}
-            value={end} onChange={(e) => setEnd(e.target.value)}
-          />
+          <TextField fullWidth size="small" type="date" label="开始日期" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} />
+          <TextField fullWidth size="small" type="date" label="结束日期" InputLabelProps={{ shrink: true }} value={end} onChange={(e) => setEnd(e.target.value)} />
         </Stack>
         <Typography variant="caption" sx={{ color: "text.secondary", mt: 1, display: "block" }}>
           时间轴将以「季度 + 月」为单位，创建后可以再调整时间段。
@@ -784,6 +720,45 @@ function CreateScheduleDialog({ open, onClose, onCreate }) {
   );
 }
 
+/** 顶部日期字段：点击弹出日历（date input），选择后立即保存 */
+function DateFieldPopover({ label, value, onChange }) {
+  const [anchor, setAnchor] = useState(null);
+  const open = Boolean(anchor);
+
+  return (
+    <>
+      <Button
+        size="small"
+        variant="outlined"
+        onClick={(e) => setAnchor(e.currentTarget)}
+        sx={{ textTransform: "none", fontVariantNumeric: "tabular-nums", fontWeight: 600, fontSize: "0.8rem" }}
+      >
+        {label ? `${label} ${value}` : value}
+      </Button>
+      <Popover
+        open={open}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      >
+        <Box sx={{ p: 1 }}>
+          <TextField
+            autoFocus
+            size="small"
+            type="date"
+            value={value}
+            onChange={(e) => {
+              const v = e.target.value;
+              setAnchor(null);
+              if (v) onChange(v);
+            }}
+          />
+        </Box>
+      </Popover>
+    </>
+  );
+}
+
 export default function QuickSchedulePage() {
   const [schedule, setSchedule] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -791,6 +766,10 @@ export default function QuickSchedulePage() {
   const [editTrack, setEditTrack] = useState(null);
   const [editBar, setEditBar] = useState(null);
   const [editMilestone, setEditMilestone] = useState(null);
+
+  // 甘特区宽度测量 → 时间轴自适应
+  const ganttRef = useRef(null);
+  const [ganttWidth, setGanttWidth] = useState(0);
 
   const loadLatest = useCallback(async () => {
     try {
@@ -812,6 +791,50 @@ export default function QuickSchedulePage() {
   useEffect(() => {
     loadLatest();
   }, [loadLatest]);
+
+  // 监听甘特区宽度变化，动态重算时间轴每列宽度
+  useEffect(() => {
+    const el = ganttRef.current;
+    if (!el) return;
+    const measure = () => setGanttWidth(el.clientWidth);
+    measure();
+    let ro;
+    if (typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(measure);
+      ro.observe(el);
+    }
+    return () => ro && ro.disconnect();
+  }, [schedule]);
+
+  const months = useMemo(() => {
+    if (!schedule) return [];
+    const list = buildMonths(schedule.start_date, schedule.end_date);
+    if (list.length < MIN_SCHEDULE_MONTHS) {
+      let last = dayjs(list[list.length - 1].end);
+      while (list.length < MIN_SCHEDULE_MONTHS) {
+        const next = last.add(1, "month").startOf("month");
+        list.push({
+          year: next.year(),
+          month: next.month() + 1,
+          key: next.format("YYYY-MM"),
+          start: next.startOf("month").format("YYYY-MM-DD"),
+          end: next.endOf("month").format("YYYY-MM-DD"),
+        });
+        last = next;
+      }
+    }
+    return list;
+  }, [schedule]);
+
+  const quarters = useMemo(() => buildQuarters(months), [months]);
+
+  // 自适应月宽：可用宽度减去左侧标签列，平均分给所有月份，全量显示
+  const monthWidth = useMemo(() => {
+    if (months.length === 0) return 60;
+    const avail = ganttWidth - LABEL_WIDTH;
+    if (avail <= 0) return MIN_MONTH_WIDTH;
+    return Math.max(MIN_MONTH_WIDTH, Math.floor(avail / months.length));
+  }, [ganttWidth, months]);
 
   const handleCreate = async (data) => {
     try {
@@ -934,45 +957,30 @@ export default function QuickSchedulePage() {
     setEditMilestone(null);
   };
 
-  const handleUpdateRange = async () => {
+  const handleUpdateStart = async (start) => {
     if (!schedule) return;
-    const start = window.prompt("开始日期", schedule.start_date);
-    if (start === null) return;
-    const end = window.prompt("结束日期", schedule.end_date);
-    if (end === null) return;
-    const r = await api.quickSchedules.update(schedule.id, { start_date: start, end_date: end });
+    if (start > schedule.end_date) {
+      alert("开始日期不能晚于结束日期");
+      return;
+    }
+    const r = await api.quickSchedules.update(schedule.id, { start_date: start });
     setSchedule(r.data);
   };
 
-  const months = useMemo(() => {
-    if (!schedule) return [];
-    const list = buildMonths(schedule.start_date, schedule.end_date);
-    if (list.length < MIN_SCHEDULE_MONTHS) {
-      let last = dayjs(list[list.length - 1].end);
-      while (list.length < MIN_SCHEDULE_MONTHS) {
-        const next = last.add(1, "month").startOf("month");
-        list.push({
-          year: next.year(),
-          month: next.month() + 1,
-          key: next.format("YYYY-MM"),
-          start: next.startOf("month").format("YYYY-MM-DD"),
-          end: next.endOf("month").format("YYYY-MM-DD"),
-        });
-        last = next;
-      }
+  const handleUpdateEnd = async (end) => {
+    if (!schedule) return;
+    if (end < schedule.start_date) {
+      alert("结束日期不能早于开始日期");
+      return;
     }
-    return list;
-  }, [schedule]);
-
-  const quarters = useMemo(() => buildQuarters(months), [months]);
+    const r = await api.quickSchedules.update(schedule.id, { end_date: end });
+    setSchedule(r.data);
+  };
 
   return (
     <Box sx={{ p: 3, height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <PageHeader
-          title="快速排期"
-          subtitle="会议时快速搭建多轨道项目排期模拟，拖拽即可调整进度与关键节点"
-        />
+        <PageHeader title="快速排期" subtitle="会议时快速搭建多轨道项目排期模拟，拖拽即可调整进度与关键节点" />
         <Button variant="contained" onClick={() => setCreateOpen(true)}>＋ 创建排期</Button>
       </Box>
 
@@ -982,18 +990,15 @@ export default function QuickSchedulePage() {
             <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1 }}>
               {schedule.title}
             </Typography>
-            <Chip
-              size="small"
-              label={`${schedule.start_date} ~ ${schedule.end_date}`}
-              onClick={handleUpdateRange}
-              sx={{ cursor: "pointer" }}
-            />
+            <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
+            <Typography variant="body2" sx={{ color: "text.secondary" }}>~</Typography>
+            <DateFieldPopover label="结束" value={schedule.end_date} onChange={handleUpdateEnd} />
             <Button size="small" variant="outlined" onClick={handleAddTrack}>＋ 新增轨道</Button>
           </Box>
 
-          <Box sx={{ flex: 1, overflow: "auto", minHeight: 0 }}>
-            <Box sx={{ minWidth: LABEL_WIDTH + months.length * MONTH_WIDTH }}>
-              <TimelineHeader months={months} quarters={quarters} />
+          <Box ref={ganttRef} sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0 }}>
+            <Box sx={{ minWidth: LABEL_WIDTH + months.length * monthWidth }}>
+              <TimelineHeader months={months} quarters={quarters} monthWidth={monthWidth} />
               {schedule.tracks.length === 0 ? (
                 <Box sx={{ p: 4, textAlign: "center", color: "text.secondary" }}>
                   暂无轨道，点「＋ 新增轨道」开始搭建
@@ -1004,6 +1009,7 @@ export default function QuickSchedulePage() {
                     key={track.id}
                     track={track}
                     months={months}
+                    monthWidth={monthWidth}
                     minDate={schedule.start_date}
                     maxDate={schedule.end_date}
                     onUpdateBar={handleUpdateBar}
@@ -1023,7 +1029,7 @@ export default function QuickSchedulePage() {
           <Box sx={{ p: 1, borderTop: "1px solid", borderColor: "divider", display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>提示：</Typography>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽直线两端调整起止日期</Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽节点符号调整时间</Typography>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽节点符号沿轨道调整时间</Typography>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>· 双击可编辑</Typography>
             <Typography variant="caption" sx={{ color: "text.secondary", ml: "auto" }}>共 {schedule.tracks.length} 个轨道</Typography>
           </Box>
@@ -1048,31 +1054,13 @@ export default function QuickSchedulePage() {
 
       <CreateScheduleDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreate={handleCreate} />
       {editTrack && (
-        <EditTrackDialog
-          open={!!editTrack}
-          track={editTrack}
-          onClose={() => setEditTrack(null)}
-          onSave={(d) => handleUpdateTrack(editTrack.id, d)}
-          onDelete={() => handleDeleteTrack(editTrack.id)}
-        />
+        <EditTrackDialog open={!!editTrack} track={editTrack} onClose={() => setEditTrack(null)} onSave={(d) => handleUpdateTrack(editTrack.id, d)} onDelete={() => handleDeleteTrack(editTrack.id)} />
       )}
       {editBar && (
-        <EditBarDialog
-          open={!!editBar}
-          bar={editBar}
-          onClose={() => setEditBar(null)}
-          onSave={handleSaveBarDialog}
-          onDelete={handleDeleteBar}
-        />
+        <EditBarDialog open={!!editBar} bar={editBar} onClose={() => setEditBar(null)} onSave={handleSaveBarDialog} onDelete={handleDeleteBar} />
       )}
       {editMilestone && (
-        <EditMilestoneDialog
-          open={!!editMilestone}
-          ms={editMilestone}
-          onClose={() => setEditMilestone(null)}
-          onSave={handleSaveMilestoneDialog}
-          onDelete={handleDeleteMilestone}
-        />
+        <EditMilestoneDialog open={!!editMilestone} ms={editMilestone} onClose={() => setEditMilestone(null)} onSave={handleSaveMilestoneDialog} onDelete={handleDeleteMilestone} />
       )}
     </Box>
   );
