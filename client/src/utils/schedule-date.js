@@ -38,7 +38,7 @@ export function updateStartDate(task, newStart) {
   return {
     ...task,
     planned_start: newStart,
-    planned_end: addDays(newStart, duration - 1),
+    planned_end: addDays(newStart, duration),
   };
 }
 
@@ -65,7 +65,7 @@ export function updateDuration(task, newDuration) {
   return {
     ...task,
     duration_days: dur,
-    planned_end: addDays(task.planned_start, dur - 1),
+    planned_end: addDays(task.planned_start, dur),
   };
 }
 

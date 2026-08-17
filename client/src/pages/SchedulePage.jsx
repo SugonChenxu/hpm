@@ -84,6 +84,7 @@ export default function SchedulePage() {
   // 导入 / 清空
   const fileInputRef = useRef(null);
   const templateInputRef = useRef(null);
+  const savedScrollY = useRef(0);
   const [importing, setImporting] = useState(false);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [templateConfirmOpen, setTemplateConfirmOpen] = useState(false);
@@ -242,14 +243,16 @@ export default function SchedulePage() {
     }
   };
 
-  // Insert task
+  // Insert task（返回全量树，原地 setTasks 更新，避免整页重载跳顶）
   const handleInsert = async (position, refTask) => {
     try {
-      await api.schedule.insert(Number(projectId), {
+      savedScrollY.current = window.scrollY;
+      const res = await api.schedule.insert(Number(projectId), {
         position,
         reference_id: refTask.id,
       });
-      await loadSchedule();
+      setTasks(applyStatus(res.data));
+      window.scrollTo(0, savedScrollY.current);
       setSnackbar({
         open: true,
         message: "已插入新任务",
@@ -264,11 +267,13 @@ export default function SchedulePage() {
     }
   };
 
-  // Delete task
+  // Delete task（返回全量树，原地 setTasks 更新，避免整页重载跳顶）
   const handleDelete = async (taskId) => {
     try {
-      await api.schedule.remove(taskId);
-      await loadSchedule();
+      savedScrollY.current = window.scrollY;
+      const res = await api.schedule.remove(taskId);
+      setTasks(applyStatus(res.data));
+      window.scrollTo(0, savedScrollY.current);
       setSnackbar({ open: true, message: "已删除", severity: "success" });
     } catch (err) {
       setSnackbar({

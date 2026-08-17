@@ -83,9 +83,9 @@ export function linkPredecessorsToStart(projectId, taskId, newStartA, oldStartA 
     //          ② A 后移且 B 原本紧贴（B 结束 = 旧 A 开始 - 1）→ 顺延保持紧贴
     const pEnd = norm(p.planned_end);
     const overlap = pEnd >= newStart;
-    const tightFollow = oldStart != null && pEnd === addDays(oldStart, -1);
+    const tightFollow = oldStart != null && pEnd === addDays(oldStart, 0);
     if (!overlap && !tightFollow) continue;
-    const newEnd = addDays(newStart, -1);
+    const newEnd = addDays(newStart, 0);
     if (newEnd < norm(p.planned_start)) {
       // 前置整体晚于 A 的新开始时间，无法自动压缩 → 提示，跳过
       warnings.push(
@@ -291,8 +291,8 @@ function cascadePropagation(tasks, changedTaskId) {
 
       if (predEnds.length > 0) {
         const maxEnd = predEnds.sort().reverse()[0];
-        task.planned_start = addDays(maxEnd, 1);
-        task.planned_end = addDays(task.planned_start, Math.max(0, task.duration_days - 1));
+        task.planned_start = addDays(maxEnd, 2);
+        task.planned_end = addDays(task.planned_start, Math.max(1, task.duration_days));
       }
     }
   }
@@ -447,7 +447,7 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
         // 对于阶段任务，duration_days 暂时设为 0，后续聚合计算
         const effectiveDuration = taskType === "阶段任务" ? 0 : Math.max(1, durationDays);
         const plannedStart = baseDate;
-        const plannedEnd = taskType === "阶段任务" ? baseDate : addDays(plannedStart, Math.max(0, effectiveDuration - 1));
+        const plannedEnd = taskType === "阶段任务" ? baseDate : addDays(plannedStart, Math.max(1, effectiveDuration));
 
         const result = insertStmt.run(
           id, tmpl.name, i + 1, taskType,
@@ -506,8 +506,8 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
             .filter(Boolean);
           if (predEnds.length > 0) {
             const maxEnd = predEnds.sort().reverse()[0];
-            task.planned_start = addDays(maxEnd, 1);
-            task.planned_end = addDays(task.planned_start, Math.max(0, task.duration_days - 1));
+            task.planned_start = addDays(maxEnd, 2);
+            task.planned_end = addDays(task.planned_start, Math.max(1, task.duration_days));
           }
         }
       }
@@ -647,7 +647,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
           updates.planned_start = body.planned_start;
           fields.push("planned_start = ?");
           const dur = body.duration_days !== undefined ? body.duration_days : task.duration_days;
-          updates.planned_end = addDays(body.planned_start, Math.max(0, dur - 1));
+          updates.planned_end = addDays(body.planned_start, Math.max(1, dur));
           fields.push("planned_end = ?");
         }
         if (body.planned_end !== undefined && body.planned_start === undefined) {
@@ -661,7 +661,7 @@ router.put("/schedule-tasks/:id", (req, res) => {
           const dur = Math.max(1, body.duration_days);
           updates.duration_days = dur;
           fields.push("duration_days = ?");
-          updates.planned_end = addDays(task.planned_start, Math.max(0, dur - 1));
+          updates.planned_end = addDays(task.planned_start, Math.max(1, dur));
           fields.push("planned_end = ?");
         }
       }
@@ -769,7 +769,8 @@ router.post("/projects/:id/schedule/insert", (req, res) => {
     });
 
     const newTask = insert();
-    res.json({ ok: true, data: newTask });
+    // 返回全量树（与 update 端点一致），前端直接 setTasks 原地更新，避免整页重载跳顶
+    res.json({ ok: true, data: getProjectTasksTree(id) });
   } catch (err) {
     console.error("POST insert:", err);
     res.status(500).json({ ok: false, error: err.message });
@@ -823,7 +824,8 @@ router.delete("/schedule-tasks/:id", (req, res) => {
     });
 
     remove();
-    res.json({ ok: true });
+    // 返回全量树（与 update 端点一致），前端直接 setTasks 原地更新，避免整页重载跳顶
+    res.json({ ok: true, data: getProjectTasksTree(projectId) });
   } catch (err) {
     console.error("DELETE schedule-task:", err);
     res.status(500).json({ ok: false, error: err.message });
@@ -1012,8 +1014,8 @@ router.put("/schedule-tasks/:id/predecessors", (req, res) => {
 
         if (predEnds.length > 0) {
           const maxEnd = predEnds.sort().reverse()[0];
-          const newStart = addDays(maxEnd, 1);
-          const newEnd = addDays(newStart, Math.max(0, task.duration_days - 1));
+          const newStart = addDays(maxEnd, 2);
+          const newEnd = addDays(newStart, Math.max(1, task.duration_days));
 
           db.prepare(`
             UPDATE schedule_tasks SET planned_start = ?, planned_end = ?, updated_at = datetime('now','localtime')
@@ -1322,11 +1324,11 @@ function insertScheduleTasks(projectId, taskList) {
     } else if (!start && !end) {
       // 仅给出工期（或三者皆空）的情况：锚定到项目起始日，保证可渲染
       start = baseDate;
-      end = addDays(baseDate, Math.max(0, (duration || 1) - 1));
+      end = addDays(baseDate, Math.max(1, duration || 1));
     } else if (start && !end && duration) {
-      end = addDays(start, Math.max(0, duration - 1));
+      end = addDays(start, Math.max(1, duration));
     } else if (end && !start && duration) {
-      start = addDays(end, -(duration - 1));
+      start = addDays(end, 2 - duration);
     } else if (start && !end) {
       end = start;
     } else if (end && !start) {
