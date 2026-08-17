@@ -262,16 +262,17 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
           width,
           top: 0,
           height: ROW_HEIGHT,
-          cursor: dragging ? "grabbing" : "grab",
           zIndex: 2,
           userSelect: "none",
         }}
       >
-        {/* 线体：绝对 top 31，中线 32，与节点符号中心对齐 */}
+        {/* 线体：点击区 10px 高（27~37），视觉线 2px 居中，中线 32，与节点符号中心对齐 */}
         <Box
           onMouseDown={(e) => startDrag("move", e)}
-          sx={{ position: "absolute", left: 8, right: 12, top: 31, height: 2, bgcolor: color }}
-        />
+          sx={{ position: "absolute", left: 8, right: 12, top: 27, height: 10, cursor: dragging ? "grabbing" : "grab" }}
+        >
+          <Box sx={{ position: "absolute", left: 0, right: 0, top: 4, height: 2, bgcolor: color }} />
+        </Box>
         <Box
           onMouseDown={(e) => startDrag("start", e)}
           sx={{
@@ -449,6 +450,8 @@ function TrackRow({
   onAddMilestone,
   onEditBar, onEditMilestone,
   onUpdateTrack, onDeleteTrack,
+  dragTrackId, dragOverTrackId,
+  onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
   const totalWidth = months.length * monthWidth;
   const [editingName, setEditingName] = useState(false);
@@ -464,6 +467,11 @@ function TrackRow({
   return (
     <Box sx={{ display: "flex", height: ROW_HEIGHT, borderBottom: "1px dashed", borderColor: "divider" }}>
       <Box
+        draggable={!editingName}
+        onDragStart={(e) => onDragStart(e, track.id)}
+        onDragOver={(e) => onDragOver(e, track.id)}
+        onDrop={(e) => onDrop(track.id)}
+        onDragEnd={onDragEnd}
         sx={{
           width: LABEL_WIDTH,
           flexShrink: 0,
@@ -472,7 +480,11 @@ function TrackRow({
           px: 1.5,
           borderRight: "1px solid",
           borderColor: "divider",
-          bgcolor: alpha(track.label_color || "#1565C0", 0.08),
+          cursor: "grab",
+          opacity: dragTrackId === track.id ? 0.5 : 1,
+          bgcolor: dragOverTrackId === track.id
+            ? alpha(track.label_color || "#1565C0", 0.22)
+            : alpha(track.label_color || "#1565C0", 0.08),
         }}
       >
         <Tooltip title="修改颜色">
@@ -794,6 +806,8 @@ export default function QuickSchedulePage() {
   const [editMilestone, setEditMilestone] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [dragTrackId, setDragTrackId] = useState(null);
+  const [dragOverTrackId, setDragOverTrackId] = useState(null);
 
   // 甘特区宽度测量 → 时间轴自适应
   const ganttRef = useRef(null);
@@ -891,6 +905,49 @@ export default function QuickSchedulePage() {
     if (!window.confirm("确定删除该轨道？")) return;
     const r = await api.quickSchedules.tracks.remove(schedule.id, trackId);
     setSchedule(r.data);
+  };
+
+  const handleDragStart = (e, trackId) => {
+    setDragTrackId(trackId);
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", String(trackId)); } catch { /* ignore */ }
+  };
+
+  const handleDragOver = (e, trackId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverTrackId !== trackId) setDragOverTrackId(trackId);
+  };
+
+  const handleDrop = async (targetTrackId) => {
+    const fromId = dragTrackId;
+    setDragTrackId(null);
+    setDragOverTrackId(null);
+    if (!fromId || fromId === targetTrackId || !schedule) return;
+
+    const tracks = [...schedule.tracks];
+    const fromIdx = tracks.findIndex((t) => t.id === fromId);
+    const toIdx = tracks.findIndex((t) => t.id === targetTrackId);
+    if (fromIdx < 0 || toIdx < 0) return;
+
+    const [moved] = tracks.splice(fromIdx, 1);
+    tracks.splice(toIdx, 0, moved);
+    const reordered = tracks.map((t, i) => ({ ...t, sort_order: i }));
+    setSchedule({ ...schedule, tracks: reordered });
+
+    // 后台逐个持久化 sort_order（乐观重排已生效）
+    for (const t of reordered) {
+      try {
+        await api.quickSchedules.tracks.update(schedule.id, t.id, { sort_order: t.sort_order });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDragTrackId(null);
+    setDragOverTrackId(null);
   };
 
   const handleUpdateBar = async (barId, data) => {
@@ -1059,6 +1116,12 @@ export default function QuickSchedulePage() {
                     onEditMilestone={setEditMilestone}
                     onUpdateTrack={handleUpdateTrack}
                     onDeleteTrack={handleDeleteTrack}
+                    dragTrackId={dragTrackId}
+                    dragOverTrackId={dragOverTrackId}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                    onDragEnd={handleDragEnd}
                   />
                 ))
               )}
