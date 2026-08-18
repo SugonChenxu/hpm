@@ -831,6 +831,15 @@ try {
   }
 }
 
+// 迁移：quick_schedule_bars.shadow（进度条阴影样式：black 黑色斜纹 / white 白色斜纹 / none 纯色）
+try {
+  db.exec(`ALTER TABLE quick_schedule_bars ADD COLUMN shadow TEXT DEFAULT 'white'`);
+} catch (e) {
+  if (!e.message.includes("duplicate column")) {
+    console.warn("Migration quick_schedule_bars.shadow:", e.message);
+  }
+}
+
 // 迁移：quick_schedule_milestones.text_color（关键节点文字颜色，默认黑色）
 try {
   db.exec(`ALTER TABLE quick_schedule_milestones ADD COLUMN text_color TEXT DEFAULT '#000000'`);

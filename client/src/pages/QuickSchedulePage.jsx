@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box, Typography, Button, TextField, Dialog, DialogTitle, DialogContent,
   DialogActions, IconButton, Tooltip, Stack, Chip, MenuItem, Select,
-  FormControl, InputLabel, alpha, Popover,
+  FormControl, InputLabel, alpha, Popover, Menu,
 } from "@mui/material";
 import dayjs from "dayjs";
 import api from "../api/client";
@@ -328,6 +328,13 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onSave, 
   const right = dateToPixels(bar.end_date, months, monthWidth);
   const width = Math.max(16, right - left);
   const color = bar.color || "#1565C0";
+  // 阴影样式：white 白斜纹 / black 黑斜纹 / none 纯色
+  const shadowMap = {
+    white: "repeating-linear-gradient(45deg, rgba(255,255,255,0) 0px, rgba(255,255,255,0) 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 10px)",
+    black: "repeating-linear-gradient(45deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 5px, rgba(0,0,0,0.35) 5px, rgba(0,0,0,0.35) 10px)",
+    none: "none",
+  };
+  const barShadow = shadowMap[bar.shadow] || shadowMap.white;
 
   const BAR_TOP = 19; // 底边 19+12=31，正好压在箭头线顶边（箭头线视觉线 31~33）
   const BAR_HEIGHT = 12; // 原 18 的 2/3
@@ -403,8 +410,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onSave, 
             top: BAR_TOP,
             height: BAR_HEIGHT,
             bgcolor: color,
-            backgroundImage:
-              "repeating-linear-gradient(45deg, rgba(255,255,255,0) 0px, rgba(255,255,255,0) 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 10px)",
+            backgroundImage: barShadow,
             borderRadius: "3px",
             boxShadow: "0 1px 3px rgba(0,0,0,0.22)",
             pointerEvents: "auto",
@@ -670,6 +676,7 @@ function TrackRow({
   const totalWidth = months.length * monthWidth;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(track.title);
+  const [menuPos, setMenuPos] = useState(null);
   const [colorAnchor, setColorAnchor] = useState(null);
 
   const commitName = () => {
@@ -763,7 +770,13 @@ function TrackRow({
           </IconButton>
         </Tooltip>
       </Box>
-      <Box sx={{ position: "relative", flex: 1, minWidth: totalWidth }}>
+      <Box
+        sx={{ position: "relative", flex: 1, minWidth: totalWidth }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMenuPos({ mouseX: e.clientX, mouseY: e.clientY });
+        }}
+      >
         {months.map((m, i) => (
           <Box
             key={m.key}
@@ -819,14 +832,15 @@ function TrackRow({
             onEdit={onEditMilestone}
           />
         ))}
-        <Box sx={{ position: "absolute", right: 4, bottom: 2, display: "flex", gap: 0.25, zIndex: 6 }}>
-          <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddBar(track.id)}>
-            ＋进度条
-          </Button>
-          <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddMilestone(track.id)}>
-            ＋节点
-          </Button>
-        </Box>
+        <Menu
+          open={menuPos !== null}
+          onClose={() => setMenuPos(null)}
+          anchorReference="anchorPosition"
+          anchorPosition={menuPos ? { top: menuPos.mouseY, left: menuPos.mouseX } : undefined}
+        >
+          <MenuItem onClick={() => { onAddBar(track.id); setMenuPos(null); }}>＋ 新增进度条</MenuItem>
+          <MenuItem onClick={() => { onAddMilestone(track.id); setMenuPos(null); }}>＋ 新增节点</MenuItem>
+        </Menu>
       </Box>
     </Box>
   );
@@ -839,6 +853,7 @@ function EditBarDialog({ open, bar, defaultStart, defaultEnd, onClose, onSave, o
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [style, setStyle] = useState("bar");
+  const [shadow, setShadow] = useState("white");
 
   useEffect(() => {
     if (open) {
@@ -848,12 +863,14 @@ function EditBarDialog({ open, bar, defaultStart, defaultEnd, onClose, onSave, o
         setStart(bar.start_date || "");
         setEnd(bar.end_date || "");
         setStyle(bar.style || "bar");
+        setShadow(bar.shadow || "white");
       } else {
         setTitle("");
         setColor("#1565C0");
         setStart(defaultStart || "");
         setEnd(defaultEnd || "");
         setStyle("bar");
+        setShadow("white");
       }
     }
   }, [open, bar, defaultStart, defaultEnd]);
@@ -863,7 +880,7 @@ function EditBarDialog({ open, bar, defaultStart, defaultEnd, onClose, onSave, o
       alert("请检查起止日期");
       return;
     }
-    onSave({ title, color, start_date: start, end_date: end, style });
+    onSave({ title, color, start_date: start, end_date: end, style, shadow });
   };
 
   return (
@@ -884,6 +901,14 @@ function EditBarDialog({ open, bar, defaultStart, defaultEnd, onClose, onSave, o
             </Select>
           </FormControl>
         )}
+        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+          <InputLabel>阴影</InputLabel>
+          <Select value={shadow} label="阴影" onChange={(e) => setShadow(e.target.value)}>
+            <MenuItem value="white">白色阴影</MenuItem>
+            <MenuItem value="black">黑色阴影</MenuItem>
+            <MenuItem value="none">纯色（无阴影）</MenuItem>
+          </Select>
+        </FormControl>
         <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>颜色</Typography>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
           {PRESET_COLORS.map((c) => (
@@ -1342,6 +1367,7 @@ export default function QuickSchedulePage() {
       end_date: data.end_date,
       color: data.color,
       style: "bar",
+      shadow: data.shadow || "white",
     });
     setSchedule(r.data.schedule);
     setCreatingBar(null);

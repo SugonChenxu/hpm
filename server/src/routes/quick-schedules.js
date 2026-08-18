@@ -281,12 +281,13 @@ router.post("/quick-schedules/:id/bars", (req, res) => {
   const title = String(req.body.title || "").slice(0, 200);
   const color = safeColor(req.body.color, "#1565C0");
   const style = req.body.style === "arrow" ? "arrow" : "bar";
+  const shadow = req.body.shadow === "black" ? "black" : req.body.shadow === "none" ? "none" : "white";
 
   const info = db
     .prepare(
-      "INSERT INTO quick_schedule_bars (schedule_id, track_id, owner_id, title, start_date, end_date, color, style, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO quick_schedule_bars (schedule_id, track_id, owner_id, title, start_date, end_date, color, style, shadow, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
-    .run(req.params.id, req.body.track_id, req.userId, title, start, end, color, style, max.m + 1);
+    .run(req.params.id, req.body.track_id, req.userId, title, start, end, color, style, shadow, max.m + 1);
 
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: { bar_id: info.lastInsertRowid, schedule: detail } });
@@ -324,10 +325,13 @@ router.put("/quick-schedules/:id/bars/:barId", (req, res) => {
   const color = req.body.color !== undefined ? safeColor(req.body.color) : bar.color;
   const trackId = req.body.track_id !== undefined ? Number(req.body.track_id) : bar.track_id;
   const style = req.body.style !== undefined ? (req.body.style === "arrow" ? "arrow" : "bar") : bar.style;
+  const shadow = req.body.shadow !== undefined
+    ? (req.body.shadow === "black" ? "black" : req.body.shadow === "none" ? "none" : "white")
+    : bar.shadow;
 
   db.prepare(
-    "UPDATE quick_schedule_bars SET track_id = ?, title = ?, start_date = ?, end_date = ?, color = ?, style = ?, updated_at = datetime('now','localtime') WHERE id = ?"
-  ).run(trackId, title, start, end, color, style, req.params.barId);
+    "UPDATE quick_schedule_bars SET track_id = ?, title = ?, start_date = ?, end_date = ?, color = ?, style = ?, shadow = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+  ).run(trackId, title, start, end, color, style, shadow, req.params.barId);
 
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: detail });
