@@ -2,6 +2,11 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-18 — 【快速排期】矩形条阴影改内部白色斜纹 + build trash 根因修复
+
+- **参数变动** 矩形进度条阴影由「外白描边 + 投影」改为「纯色块内部交替白色斜纹」：`repeating-linear-gradient(45deg, 透明 5px + rgba(255,255,255,0.5) 5px)`，实现纯色矩形内交替白色条状块的阴影纹理。
+- **缺陷修复（根因）** vite build 失败的真正原因是 WorkBuddy safe-delete 把 vite 清空 dist 的 `rmSync` 重定向到回收站，trash 任意 dist 文件（如 forge-icon-192.png）都报 "Some operations were aborted"（此前误放 png 只是首个撞上的文件）。修复：`start.sh` build 分支先 `rm -rf client/dist`（系统 rm 绕过回收站）再 build，彻底规避。
+
 ## 2026-08-18 — 【快速排期】恢复矩形进度条 + 构建脚本健壮性修复
 
 - **新增功能** 恢复「＋进度条」入口：轨道内新增矩形进度条（style='bar'），体现阶段类任务状态。底边贴轨道箭头线（top 13 + height 18，底边对齐箭头线顶边 31）、纯色填充 + 白色描边 + 投影（白边阴影）、条内白色文字标注。

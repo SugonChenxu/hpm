@@ -392,9 +392,10 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
             top: BAR_TOP,
             height: BAR_HEIGHT,
             bgcolor: color,
-            border: "2px solid #fff",
-            boxShadow: "0 2px 5px rgba(0,0,0,0.28)",
+            backgroundImage:
+              "repeating-linear-gradient(45deg, rgba(255,255,255,0) 0px, rgba(255,255,255,0) 5px, rgba(255,255,255,0.5) 5px, rgba(255,255,255,0.5) 10px)",
             borderRadius: "3px",
+            boxShadow: "0 1px 3px rgba(0,0,0,0.22)",
             pointerEvents: "auto",
             cursor: dragging ? "grabbing" : "grab",
             display: "flex",
