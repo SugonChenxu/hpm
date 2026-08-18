@@ -2,6 +2,13 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-18 — 【快速排期】新增竖虚线（时间参考线）
+
+- **新增功能** 快速排期新增「竖虚线」时间参考线：点「＋虚线」在排期中间创建，贯穿所有轨道（垂直虚线 + 顶部圆形手柄 + 可标注标题）；可左右拖拽移动；拖拽靠近节点（8px 内）自动吸附对齐到该节点日期（吸附时手柄/虚线变橙色高亮）；双击弹面板改标题/日期/颜色/删除。
+- **数据模型** 新表 `quick_schedule_vlines`（schedule_id/owner_id/title/date/color/sort_order），注册 OWNER_TABLES，加索引 idx_quick_vlines_schedule。
+- **接口** `POST/PUT/DELETE /api/quick-schedules/:id/vlines[/:vlineId]`；`buildScheduleDetail` 返回 vlines。
+- **实现** 前端 `DraggableVline`（拖拽中仅乐观更新、松手保存，吸附用像素距离 ≤8px 匹配最近节点日期）+ `EditVlineDialog`；api client 增加 vlines 方法。
+
 ## 2026-08-18 — 【快速排期】修复导出 PPT 组合后节点相对时间轴错位
 
 - **缺陷修复** 自动成组 post-process 时，误把子形状坐标减去包围盒左上角（转相对坐标），而 `<p:grpSp>` 的 `chOff` 又设为包围盒左上角，导致子形状双重偏移、节点符号相对时间轴整体错位。修复：子形状保持**绝对坐标**（PowerPoint 的 group 子形状本就使用绝对坐标，`chOff` 仅记录子坐标系原点），不再做坐标转换。

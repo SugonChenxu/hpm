@@ -803,10 +803,23 @@ CREATE TABLE IF NOT EXISTS quick_schedule_milestones (
     updated_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
+CREATE TABLE IF NOT EXISTS quick_schedule_vlines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    schedule_id INTEGER NOT NULL REFERENCES quick_schedules(id) ON DELETE CASCADE,
+    owner_id INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '',
+    date TEXT NOT NULL,
+    color TEXT DEFAULT '#D32F2F',
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_quick_schedules_owner ON quick_schedules(owner_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_quick_tracks_schedule ON quick_schedule_tracks(schedule_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_quick_bars_schedule ON quick_schedule_bars(schedule_id, sort_order);
 CREATE INDEX IF NOT EXISTS idx_quick_milestones_schedule ON quick_schedule_milestones(schedule_id, date);
+CREATE INDEX IF NOT EXISTS idx_quick_vlines_schedule ON quick_schedule_vlines(schedule_id, date);
 `);
 
 // 迁移：quick_schedule_bars.style（'bar' 矩形进度条 / 'arrow' 带箭头直线）
@@ -882,6 +895,7 @@ const OWNER_TABLES = [
   "quick_schedule_tracks",
   "quick_schedule_bars",
   "quick_schedule_milestones",
+  "quick_schedule_vlines",
 ];
 
 for (const t of OWNER_TABLES) {

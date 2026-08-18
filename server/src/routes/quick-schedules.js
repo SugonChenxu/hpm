@@ -53,6 +53,12 @@ function buildScheduleDetail(scheduleId, ownerId) {
     )
     .all(scheduleId, ownerId);
 
+  const vlines = db
+    .prepare(
+      "SELECT * FROM quick_schedule_vlines WHERE schedule_id = ? AND owner_id = ? ORDER BY date, id"
+    )
+    .all(scheduleId, ownerId);
+
   const barMap = new Map();
   for (const b of bars) {
     b.milestones = [];
@@ -81,7 +87,7 @@ function buildScheduleDetail(scheduleId, ownerId) {
     }
   }
 
-  return { ...schedule, tracks };
+  return { ...schedule, tracks, vlines };
 }
 
 // ═══════════════════════════════════════════════
@@ -459,6 +465,78 @@ router.get("/quick-schedules/:id/export/pptx", async (req, res) => {
     console.error("[quick-schedules] pptx 导出失败:", err);
     res.status(500).json({ ok: false, error: err.message || "导出失败" });
   }
+});
+
+// ═══════════════════════════════════════════════
+// 竖虚线（时间参考线）CRUD
+// ═══════════════════════════════════════════════
+// POST /quick-schedules/:id/vlines — 添加竖虚线
+router.post("/quick-schedules/:id/vlines", (req, res) => {
+  const schedule = db
+    .prepare("SELECT * FROM quick_schedules WHERE id = ? AND owner_id = ?")
+    .get(req.params.id, req.userId);
+  if (!schedule) return res.status(404).json({ ok: false, error: "排期不存在" });
+
+  let date = normalizeDate(req.body.date) || schedule.start_date;
+  if (date < schedule.start_date) date = schedule.start_date;
+  if (date > schedule.end_date) date = schedule.end_date;
+
+  const max = db
+    .prepare("SELECT COALESCE(MAX(sort_order), 0) as m FROM quick_schedule_vlines WHERE schedule_id = ?")
+    .get(req.params.id);
+
+  const title = String(req.body.title || "").slice(0, 100);
+  const color = safeColor(req.body.color, "#D32F2F");
+
+  const info = db
+    .prepare(
+      "INSERT INTO quick_schedule_vlines (schedule_id, owner_id, title, date, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)"
+    )
+    .run(req.params.id, req.userId, title, date, color, max.m + 1);
+
+  const detail = buildScheduleDetail(req.params.id, req.userId);
+  res.json({ ok: true, data: { vline_id: info.lastInsertRowid, schedule: detail } });
+});
+
+// PUT /quick-schedules/:id/vlines/:vlineId — 更新竖虚线（拖拽改日期/标题/颜色）
+router.put("/quick-schedules/:id/vlines/:vlineId", (req, res) => {
+  const vline = db
+    .prepare(
+      "SELECT * FROM quick_schedule_vlines WHERE id = ? AND schedule_id = ? AND owner_id = ?"
+    )
+    .get(req.params.vlineId, req.params.id, req.userId);
+  if (!vline) return res.status(404).json({ ok: false, error: "竖虚线不存在" });
+
+  const schedule = db.prepare("SELECT start_date, end_date FROM quick_schedules WHERE id = ?").get(req.params.id);
+
+  let date = req.body.date !== undefined ? normalizeDate(req.body.date) : vline.date;
+  if (!date) date = vline.date;
+  if (date < schedule.start_date) date = schedule.start_date;
+  if (date > schedule.end_date) date = schedule.end_date;
+
+  const title = req.body.title !== undefined ? String(req.body.title).slice(0, 100) : vline.title;
+  const color = req.body.color !== undefined ? safeColor(req.body.color) : vline.color;
+
+  db.prepare(
+    "UPDATE quick_schedule_vlines SET title = ?, date = ?, color = ?, updated_at = datetime('now','localtime') WHERE id = ?"
+  ).run(title, date, color, req.params.vlineId);
+
+  const detail = buildScheduleDetail(req.params.id, req.userId);
+  res.json({ ok: true, data: detail });
+});
+
+// DELETE /quick-schedules/:id/vlines/:vlineId — 删除竖虚线
+router.delete("/quick-schedules/:id/vlines/:vlineId", (req, res) => {
+  const vline = db
+    .prepare(
+      "SELECT id FROM quick_schedule_vlines WHERE id = ? AND schedule_id = ? AND owner_id = ?"
+    )
+    .get(req.params.vlineId, req.params.id, req.userId);
+  if (!vline) return res.status(404).json({ ok: false, error: "竖虚线不存在" });
+
+  db.prepare("DELETE FROM quick_schedule_vlines WHERE id = ?").run(req.params.vlineId);
+  const detail = buildScheduleDetail(req.params.id, req.userId);
+  res.json({ ok: true, data: detail });
 });
 
 export default router;

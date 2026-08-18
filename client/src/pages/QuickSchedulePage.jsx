@@ -558,6 +558,98 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
   );
 }
 
+/** 竖虚线：贯穿所有轨道的时间参考线，可拖拽，靠近节点时吸附对齐 */
+function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeight, allMilestones, onUpdate, onSave, onEdit }) {
+  const [dragging, setDragging] = useState(false);
+  const [snapped, setSnapped] = useState(false);
+  const startXRef = useRef(0);
+  const startLeftRef = useRef(0);
+  const latestRef = useRef(null);
+
+  const left = dateToPixels(vline.date, months, monthWidth);
+  const color = vline.color || "#D32F2F";
+
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    setDragging(true);
+    startXRef.current = e.clientX;
+    startLeftRef.current = left;
+    latestRef.current = vline.date;
+
+    const handleMove = (ev) => {
+      const dx = ev.clientX - startXRef.current;
+      const newLeft = Math.max(0, startLeftRef.current + dx);
+      let newDate = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate) || vline.date;
+
+      // 吸附：靠近节点（8px 内）自动对齐到该节点日期
+      let snappedDate = null;
+      let bestDist = 8;
+      for (const ms of allMilestones) {
+        const nodeLeft = dateToPixels(ms.date, months, monthWidth);
+        const dist = Math.abs(newLeft - nodeLeft);
+        if (dist < bestDist) { bestDist = dist; snappedDate = ms.date; }
+      }
+      if (snappedDate) { newDate = snappedDate; setSnapped(true); } else { setSnapped(false); }
+
+      latestRef.current = newDate;
+      onUpdate(vline.id, { date: newDate });
+    };
+
+    const handleUp = () => {
+      setDragging(false);
+      setSnapped(false);
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+      onSave(vline.id, { date: latestRef.current });
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+  };
+
+  return (
+    <Box
+      onMouseDown={handleMouseDown}
+      onDoubleClick={() => onEdit(vline)}
+      sx={{
+        position: "absolute",
+        left: left - 1,
+        top: 0,
+        width: 3,
+        height: totalHeight,
+        zIndex: 5,
+        cursor: "col-resize",
+        pointerEvents: "auto",
+        userSelect: "none",
+      }}
+    >
+      {/* 虚线本体 */}
+      <Box sx={{ position: "absolute", left: 1, top: 0, bottom: 0, width: 0, borderLeft: `2px dashed ${snapped ? "#FF9800" : color}` }} />
+      {/* 顶部手柄 */}
+      <Box
+        sx={{
+          position: "absolute", left: -5, top: -2, width: 12, height: 12, borderRadius: "50%",
+          bgcolor: snapped ? "#FF9800" : color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
+        }}
+      />
+      {/* 标题 */}
+      {vline.title ? (
+        <Typography
+          variant="caption"
+          sx={{
+            position: "absolute", left: 9, top: -6, fontSize: "0.6rem", color, fontWeight: 700,
+            whiteSpace: "nowrap", pointerEvents: "none", bgcolor: "rgba(255,255,255,0.85)",
+            px: 0.4, borderRadius: "2px", lineHeight: 1.4,
+          }}
+        >
+          {vline.title}
+        </Typography>
+      ) : null}
+    </Box>
+  );
+}
+
 function TrackRow({
   track, months, monthWidth, minDate, maxDate,
   onUpdateBar, onSaveBar, onUpdateMilestone, onSaveMilestone,
@@ -902,6 +994,62 @@ function EditMilestoneDialog({ open, ms, defaultDate, onClose, onSave, onDelete 
   );
 }
 
+function EditVlineDialog({ open, vline, onClose, onSave, onDelete }) {
+  const isEdit = !!vline;
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [color, setColor] = useState("#D32F2F");
+
+  useEffect(() => {
+    if (open) {
+      if (vline) {
+        setTitle(vline.title || "");
+        setDate(vline.date || "");
+        setColor(vline.color || "#D32F2F");
+      } else {
+        setTitle("");
+        setDate("");
+        setColor("#D32F2F");
+      }
+    }
+  }, [open, vline]);
+
+  const handleSave = () => {
+    if (!date) { alert("请选择日期"); return; }
+    onSave({ title, date, color });
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{isEdit ? "编辑竖虚线" : "新增竖虚线"}</DialogTitle>
+      <DialogContent>
+        <TextField fullWidth size="small" label="名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
+        <TextField fullWidth size="small" type="date" label="日期" InputLabelProps={{ shrink: true }} value={date} onChange={(e) => setDate(e.target.value)} sx={{ mb: 2 }} />
+        <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>颜色</Typography>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          {PRESET_COLORS.map((c) => (
+            <Box
+              key={c}
+              onClick={() => setColor(c)}
+              sx={{
+                width: 26, height: 26, borderRadius: "50%", bgcolor: c, cursor: "pointer",
+                border: c === color ? "3px solid #000" : "2px solid #fff", boxShadow: "0 0 0 1px #ccc",
+              }}
+            />
+          ))}
+        </Box>
+      </DialogContent>
+      <DialogActions sx={{ justifyContent: "space-between" }}>
+        {isEdit ? <Button color="error" onClick={onDelete}>删除</Button> : <Box />}
+        <Box>
+          <Button onClick={onClose}>取消</Button>
+          <Button variant="contained" onClick={handleSave}>保存</Button>
+        </Box>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function CreateScheduleDialog({ open, onClose, onCreate }) {
   const [title, setTitle] = useState("");
   const [start, setStart] = useState(fmt(dayjs().startOf("year")));
@@ -984,6 +1132,7 @@ export default function QuickSchedulePage() {
   const [editMilestone, setEditMilestone] = useState(null);
   const [creatingMilestone, setCreatingMilestone] = useState(null);
   const [creatingBar, setCreatingBar] = useState(null);
+  const [editVline, setEditVline] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [dragTrackId, setDragTrackId] = useState(null);
@@ -1049,6 +1198,12 @@ export default function QuickSchedulePage() {
   }, [schedule]);
 
   const quarters = useMemo(() => buildQuarters(months), [months]);
+
+  // 所有节点（用于竖虚线吸附对齐）
+  const allMilestones = useMemo(() => {
+    if (!schedule) return [];
+    return (schedule.tracks || []).flatMap((t) => t.milestones || []);
+  }, [schedule]);
 
   // 自适应月宽：可用宽度减去左侧标签列，平均分给所有月份，全量显示
   const monthWidth = useMemo(() => {
@@ -1202,6 +1357,45 @@ export default function QuickSchedulePage() {
     setCreatingMilestone(null);
   };
 
+  const handleAddVline = async () => {
+    if (!schedule) return;
+    const midDate = fmt(dayjs(schedule.start_date).add(Math.floor(dayjs(schedule.end_date).diff(dayjs(schedule.start_date), "day") / 2), "day"));
+    try {
+      const r = await api.quickSchedules.vlines.create(schedule.id, { date: midDate });
+      setSchedule(r.data.schedule);
+    } catch (err) {
+      alert(err.message || "添加失败");
+    }
+  };
+
+  const handleUpdateVline = (vlineId, data) => {
+    setSchedule((prev) => {
+      if (!prev) return prev;
+      return { ...prev, vlines: (prev.vlines || []).map((v) => (v.id === vlineId ? { ...v, ...data } : v)) };
+    });
+  };
+
+  const handleSaveVline = async (vlineId, data) => {
+    try {
+      const r = await api.quickSchedules.vlines.update(schedule.id, vlineId, data);
+      setSchedule(r.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveVlineDialog = async (data) => {
+    const r = await api.quickSchedules.vlines.update(schedule.id, editVline.id, data);
+    setSchedule(r.data);
+    setEditVline(null);
+  };
+
+  const handleDeleteVline = async () => {
+    const r = await api.quickSchedules.vlines.remove(schedule.id, editVline.id);
+    setSchedule(r.data);
+    setEditVline(null);
+  };
+
   const handleUpdateMilestone = (milestoneId, data) => {
     setSchedule((prev) => {
       if (!prev) return prev;
@@ -1328,6 +1522,7 @@ export default function QuickSchedulePage() {
             <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
             <Typography variant="body2" sx={{ color: "text.secondary" }}>~</Typography>
             <DateFieldPopover label="结束" value={schedule.end_date} onChange={handleUpdateEnd} />
+            <Button size="small" variant="outlined" onClick={handleAddVline}>＋ 虚线</Button>
             <Button size="small" variant="outlined" onClick={handleAddTrack}>＋ 新增轨道</Button>
           </Box>
 
@@ -1339,32 +1534,49 @@ export default function QuickSchedulePage() {
                   暂无轨道，点「＋ 新增轨道」开始搭建
                 </Box>
               ) : (
-                schedule.tracks.map((track) => (
-                  <TrackRow
-                    key={track.id}
-                    track={track}
-                    months={months}
-                    monthWidth={monthWidth}
-                    minDate={schedule.start_date}
-                    maxDate={schedule.end_date}
-                    onUpdateBar={handleUpdateBar}
-                    onSaveBar={handleSaveBar}
-                    onUpdateMilestone={handleUpdateMilestone}
-                    onSaveMilestone={handleSaveMilestone}
-                    onAddBar={handleAddBar}
-                    onAddMilestone={handleAddMilestone}
-                    onEditBar={setEditBar}
-                    onEditMilestone={setEditMilestone}
-                    onUpdateTrack={handleUpdateTrack}
-                    onDeleteTrack={handleDeleteTrack}
-                    dragTrackId={dragTrackId}
-                    dragOverTrackId={dragOverTrackId}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
-                  />
-                ))
+                <Box sx={{ position: "relative" }}>
+                  {schedule.tracks.map((track) => (
+                    <TrackRow
+                      key={track.id}
+                      track={track}
+                      months={months}
+                      monthWidth={monthWidth}
+                      minDate={schedule.start_date}
+                      maxDate={schedule.end_date}
+                      onUpdateBar={handleUpdateBar}
+                      onSaveBar={handleSaveBar}
+                      onUpdateMilestone={handleUpdateMilestone}
+                      onSaveMilestone={handleSaveMilestone}
+                      onAddBar={handleAddBar}
+                      onAddMilestone={handleAddMilestone}
+                      onEditBar={setEditBar}
+                      onEditMilestone={setEditMilestone}
+                      onUpdateTrack={handleUpdateTrack}
+                      onDeleteTrack={handleDeleteTrack}
+                      dragTrackId={dragTrackId}
+                      dragOverTrackId={dragOverTrackId}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                      onDragEnd={handleDragEnd}
+                    />
+                  ))}
+                  {(schedule.vlines || []).map((vline) => (
+                    <DraggableVline
+                      key={vline.id}
+                      vline={vline}
+                      months={months}
+                      monthWidth={monthWidth}
+                      minDate={schedule.start_date}
+                      maxDate={schedule.end_date}
+                      totalHeight={schedule.tracks.length * ROW_HEIGHT}
+                      allMilestones={allMilestones}
+                      onUpdate={handleUpdateVline}
+                      onSave={handleSaveVline}
+                      onEdit={setEditVline}
+                    />
+                  ))}
+                </Box>
               )}
             </Box>
           </Box>
@@ -1417,6 +1629,9 @@ export default function QuickSchedulePage() {
         onClose={() => setCreatingMilestone(null)}
         onSave={handleCreateMilestone}
       />
+      {editVline && (
+        <EditVlineDialog open={!!editVline} vline={editVline} onClose={() => setEditVline(null)} onSave={handleSaveVlineDialog} onDelete={handleDeleteVline} />
+      )}
     </Box>
   );
 }

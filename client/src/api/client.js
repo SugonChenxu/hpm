@@ -251,6 +251,14 @@ export const api = {
       remove: (scheduleId, milestoneId) =>
         request(`/quick-schedules/${scheduleId}/milestones/${milestoneId}`, { method: "DELETE" }),
     },
+    vlines: {
+      create: (scheduleId, data) =>
+        request(`/quick-schedules/${scheduleId}/vlines`, { method: "POST", body: JSON.stringify(data) }),
+      update: (scheduleId, vlineId, data) =>
+        request(`/quick-schedules/${scheduleId}/vlines/${vlineId}`, { method: "PUT", body: JSON.stringify(data) }),
+      remove: (scheduleId, vlineId) =>
+        request(`/quick-schedules/${scheduleId}/vlines/${vlineId}`, { method: "DELETE" }),
+    },
   },
   // 腾讯文档关联（项目计划 → 在线表格；同步动作由 WorkBuddy 手动触发）
   tencentDocs: {
