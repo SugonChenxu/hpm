@@ -433,7 +433,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
             pointerEvents: "auto",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
+            justifyContent: "flex-start",
             zIndex: 1,
           }}
         >
@@ -452,7 +452,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
             pointerEvents: "auto",
             display: "flex",
             alignItems: "center",
-            justifyContent: "center",
+            justifyContent: "flex-end",
             zIndex: 1,
           }}
         >
@@ -496,23 +496,27 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
   return (
     <Tooltip title={`${ms.title || "(未命名)"} · ${ms.date}`} arrow placement="top">
       <Box
-        onMouseDown={handleMouseDown}
-        onDoubleClick={() => onEdit(ms)}
         sx={{
           position: "absolute",
           left: left - 40,
           top: 23, // 符号 18px 高，top 23 → 中心 32，与轨道线中线对齐
           width: 80,
           height: 44,
-          cursor: dragging ? "grabbing" : "grab",
           zIndex: 4, // 节点永远显示在最上方，盖过矩形进度条与箭头线
+          pointerEvents: "none", // 容器不拦截，仅符号区域响应拖拽/编辑
           userSelect: "none",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
         }}
       >
-        <svg width={18} height={18} style={{ flexShrink: 0 }}>
+        <svg
+          width={18}
+          height={18}
+          onMouseDown={handleMouseDown}
+          onDoubleClick={() => onEdit(ms)}
+          style={{ flexShrink: 0, cursor: dragging ? "grabbing" : "grab", pointerEvents: "auto" }}
+        >
           <MilestoneSymbol symbol={ms.symbol} color={ms.color} size={18} />
         </svg>
         <Typography
