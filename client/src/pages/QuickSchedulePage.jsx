@@ -209,12 +209,13 @@ function TimelineHeader({ months, quarters, monthWidth }) {
 }
 
 /** 箭头直线：轨道主体，两端可拖拽调整起止，线体可拖拽平移 */
-function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
+function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onSave, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const dragModeRef = useRef("move");
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
   const rightRef = useRef(0);
+  const latestRef = useRef(null);
 
   const left = dateToPixels(bar.start_date, months, monthWidth);
   const right = dateToPixels(bar.end_date, months, monthWidth);
@@ -228,16 +229,19 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
     startXRef.current = e.clientX;
     startLeftRef.current = left;
     rightRef.current = right;
+    latestRef.current = { start_date: bar.start_date, end_date: bar.end_date };
 
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
       if (dragModeRef.current === "start") {
         const newLeft = Math.max(0, startLeftRef.current + dx);
         const newStart = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, bar.end_date);
+        latestRef.current = { ...latestRef.current, start_date: newStart };
         onUpdate(bar.id, { start_date: newStart });
       } else if (dragModeRef.current === "end") {
         const newRight = startLeftRef.current + width + dx;
         const newEnd = clampDate(pixelsToDate(newRight, months, monthWidth), bar.start_date, maxDate);
+        latestRef.current = { ...latestRef.current, end_date: newEnd };
         onUpdate(bar.id, { end_date: newEnd });
       } else {
         const newLeft = Math.max(0, startLeftRef.current + dx);
@@ -248,6 +252,7 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
           newEnd = maxDate;
           newStart = clampDate(fmt(dayjs(newEnd).subtract(duration, "day")), minDate, maxDate);
         }
+        latestRef.current = { start_date: newStart, end_date: newEnd };
         onUpdate(bar.id, { start_date: newStart, end_date: newEnd });
       }
     };
@@ -256,6 +261,7 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
       setDragging(false);
       window.removeEventListener("mousemove", handleMove);
       window.removeEventListener("mouseup", handleUp);
+      onSave(bar.id, latestRef.current);
     };
 
     window.addEventListener("mousemove", handleMove);
@@ -309,13 +315,14 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
 }
 
 /** 矩形进度条：底边贴箭头线，纯色填充+白边阴影；两端可拖拽改起止，整条可平移 */
-function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
+function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onSave, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const dragModeRef = useRef("move");
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
   const rightRef = useRef(0);
   const durationRef = useRef(0);
+  const latestRef = useRef(null);
 
   const left = dateToPixels(bar.start_date, months, monthWidth);
   const right = dateToPixels(bar.end_date, months, monthWidth);
@@ -333,16 +340,19 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
     startLeftRef.current = left;
     rightRef.current = right;
     durationRef.current = Math.max(0, dayjs(bar.end_date).diff(dayjs(bar.start_date), "day"));
+    latestRef.current = { start_date: bar.start_date, end_date: bar.end_date };
 
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
       if (dragModeRef.current === "start") {
         const newLeft = Math.max(0, startLeftRef.current + dx);
         const newStart = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, bar.end_date);
+        latestRef.current = { ...latestRef.current, start_date: newStart };
         onUpdate(bar.id, { start_date: newStart });
       } else if (dragModeRef.current === "end") {
         const newRight = startLeftRef.current + width + dx;
         const newEnd = clampDate(pixelsToDate(newRight, months, monthWidth), bar.start_date, maxDate);
+        latestRef.current = { ...latestRef.current, end_date: newEnd };
         onUpdate(bar.id, { end_date: newEnd });
       } else {
         const newLeft = Math.max(0, startLeftRef.current + dx);
@@ -352,6 +362,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
           newEnd = maxDate;
           newStart = clampDate(fmt(dayjs(newEnd).subtract(durationRef.current, "day")), minDate, maxDate);
         }
+        latestRef.current = { start_date: newStart, end_date: newEnd };
         onUpdate(bar.id, { start_date: newStart, end_date: newEnd });
       }
     };
@@ -360,6 +371,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
       setDragging(false);
       window.removeEventListener("mousemove", handleMove);
       window.removeEventListener("mouseup", handleUp);
+      onSave(bar.id, latestRef.current);
     };
 
     window.addEventListener("mousemove", handleMove);
@@ -463,10 +475,11 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
   );
 }
 
-function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
+function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate, onSave, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
+  const latestRef = useRef(null);
 
   const left = dateToPixels(ms.date, months, monthWidth);
 
@@ -475,11 +488,13 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
     setDragging(true);
     startXRef.current = e.clientX;
     startLeftRef.current = left;
+    latestRef.current = ms.date;
 
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
       const newLeft = Math.max(0, startLeftRef.current + dx);
       const newDate = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate) || ms.date;
+      latestRef.current = newDate;
       onUpdate(ms.id, { date: newDate });
     };
 
@@ -487,6 +502,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
       setDragging(false);
       window.removeEventListener("mousemove", handleMove);
       window.removeEventListener("mouseup", handleUp);
+      onSave(ms.id, { date: latestRef.current });
     };
 
     window.addEventListener("mousemove", handleMove);
@@ -544,7 +560,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
 
 function TrackRow({
   track, months, monthWidth, minDate, maxDate,
-  onUpdateBar, onUpdateMilestone,
+  onUpdateBar, onSaveBar, onUpdateMilestone, onSaveMilestone,
   onAddBar, onAddMilestone,
   onEditBar, onEditMilestone,
   onUpdateTrack, onDeleteTrack,
@@ -673,6 +689,7 @@ function TrackRow({
               minDate={minDate}
               maxDate={maxDate}
               onUpdate={onUpdateBar}
+              onSave={onSaveBar}
               onEdit={onEditBar}
             />
           ) : (
@@ -684,6 +701,7 @@ function TrackRow({
               minDate={minDate}
               maxDate={maxDate}
               onUpdate={onUpdateBar}
+              onSave={onSaveBar}
               onEdit={onEditBar}
             />
           )
@@ -697,6 +715,7 @@ function TrackRow({
             minDate={minDate}
             maxDate={maxDate}
             onUpdate={onUpdateMilestone}
+            onSave={onSaveMilestone}
             onEdit={onEditMilestone}
           />
         ))}
@@ -1111,7 +1130,8 @@ export default function QuickSchedulePage() {
     setDragOverTrackId(null);
   };
 
-  const handleUpdateBar = async (barId, data) => {
+  // 拖拽中：仅本地乐观更新（不发网络请求，避免整树替换导致的视觉回滞）
+  const handleUpdateBar = (barId, data) => {
     setSchedule((prev) => {
       if (!prev) return prev;
       return {
@@ -1122,6 +1142,10 @@ export default function QuickSchedulePage() {
         })),
       };
     });
+  };
+
+  // 拖拽结束：一次性保存最终值到后端
+  const handleSaveBar = async (barId, data) => {
     try {
       const r = await api.quickSchedules.bars.update(schedule.id, barId, data);
       setSchedule(r.data);
@@ -1178,7 +1202,7 @@ export default function QuickSchedulePage() {
     setCreatingMilestone(null);
   };
 
-  const handleUpdateMilestone = async (milestoneId, data) => {
+  const handleUpdateMilestone = (milestoneId, data) => {
     setSchedule((prev) => {
       if (!prev) return prev;
       return {
@@ -1189,6 +1213,9 @@ export default function QuickSchedulePage() {
         })),
       };
     });
+  };
+
+  const handleSaveMilestone = async (milestoneId, data) => {
     try {
       const r = await api.quickSchedules.milestones.update(schedule.id, milestoneId, data);
       setSchedule(r.data);
@@ -1293,7 +1320,9 @@ export default function QuickSchedulePage() {
                     minDate={schedule.start_date}
                     maxDate={schedule.end_date}
                     onUpdateBar={handleUpdateBar}
+                    onSaveBar={handleSaveBar}
                     onUpdateMilestone={handleUpdateMilestone}
+                    onSaveMilestone={handleSaveMilestone}
                     onAddBar={handleAddBar}
                     onAddMilestone={handleAddMilestone}
                     onEditBar={setEditBar}

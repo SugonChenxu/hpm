@@ -2,6 +2,11 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-18 — 【快速排期】拖拽丝滑度优化（拖拽中不请求后端）
+
+- **接口调整** 拖拽进度条/节点时不再每次 mousemove 都发后端请求（此前每次移动都 PUT + 后端返回全量树整树替换，响应乱序导致视觉回滞）。改为：拖拽中仅本地乐观更新，松手（mouseup）时一次性保存最终值。
+- **实现** 父组件 `handleUpdateBar`/`handleUpdateMilestone` 拆为「乐观更新」+「`handleSaveBar`/`handleSaveMilestone` 松手保存」；`ArrowBar`/`RectBar`/`DraggableMilestone` 新增 `onSave` 回调 + `latestRef` 记录拖拽最终值。
+
 ## 2026-08-18 — 【快速排期】白条把手贴边 + 节点拖拽范围收窄
 
 - **参数变动** 矩形条两端白色竖条把手由热区居中改为紧贴条两端边缘（`justifyContent: flex-start/flex-end`），视觉更规整。
