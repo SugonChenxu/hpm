@@ -308,35 +308,53 @@ function ArrowBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit 
   );
 }
 
-/** 普通矩形进度条：整条平移 */
+/** 矩形进度条：底边贴箭头线，纯色填充+白边阴影；两端可拖拽改起止，整条可平移 */
 function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }) {
   const [dragging, setDragging] = useState(false);
+  const dragModeRef = useRef("move");
   const startXRef = useRef(0);
   const startLeftRef = useRef(0);
+  const rightRef = useRef(0);
   const durationRef = useRef(0);
 
   const left = dateToPixels(bar.start_date, months, monthWidth);
   const right = dateToPixels(bar.end_date, months, monthWidth);
-  const width = Math.max(4, right - left);
+  const width = Math.max(16, right - left);
+  const color = bar.color || "#1565C0";
 
-  const handleMouseDown = (e) => {
+  const BAR_TOP = 13; // 底边 13+18=31，正好压在箭头线顶边（箭头线视觉线 31~33）
+  const BAR_HEIGHT = 18;
+  const HANDLE_TOP = BAR_TOP + BAR_HEIGHT / 2 - 5; // 17，圆点中心与条中心对齐
+
+  const startDrag = (mode, e) => {
     e.stopPropagation();
     setDragging(true);
+    dragModeRef.current = mode;
     startXRef.current = e.clientX;
     startLeftRef.current = left;
+    rightRef.current = right;
     durationRef.current = Math.max(0, dayjs(bar.end_date).diff(dayjs(bar.start_date), "day"));
 
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
-      const newLeft = Math.max(0, startLeftRef.current + dx);
-      let newStart = pixelsToDate(newLeft, months, monthWidth) || bar.start_date;
-      newStart = clampDate(newStart, minDate, maxDate);
-      let newEnd = fmt(dayjs(newStart).add(durationRef.current, "day"));
-      if (maxDate && newEnd > maxDate) {
-        newEnd = maxDate;
-        newStart = clampDate(fmt(dayjs(newEnd).subtract(durationRef.current, "day")), minDate, maxDate);
+      if (dragModeRef.current === "start") {
+        const newLeft = Math.max(0, startLeftRef.current + dx);
+        const newStart = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, bar.end_date);
+        onUpdate(bar.id, { start_date: newStart });
+      } else if (dragModeRef.current === "end") {
+        const newRight = startLeftRef.current + width + dx;
+        const newEnd = clampDate(pixelsToDate(newRight, months, monthWidth), bar.start_date, maxDate);
+        onUpdate(bar.id, { end_date: newEnd });
+      } else {
+        const newLeft = Math.max(0, startLeftRef.current + dx);
+        let newStart = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate);
+        let newEnd = fmt(dayjs(newStart).add(durationRef.current, "day"));
+        if (maxDate && newEnd > maxDate) {
+          newEnd = maxDate;
+          newStart = clampDate(fmt(dayjs(newEnd).subtract(durationRef.current, "day")), minDate, maxDate);
+        }
+        onUpdate(bar.id, { start_date: newStart, end_date: newEnd });
       }
-      onUpdate(bar.id, { start_date: newStart, end_date: newEnd });
     };
 
     const handleUp = () => {
@@ -352,30 +370,89 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
   return (
     <Tooltip title={`${bar.title || "(未命名)"} · ${bar.start_date} ~ ${bar.end_date}`} arrow placement="top">
       <Box
-        onMouseDown={handleMouseDown}
-        onDoubleClick={() => onEdit(bar)}
         sx={{
           position: "absolute",
           left,
           width,
-          top: 23, // 中心 32，与轨道名称文字中心、箭头直线对齐
-          height: 18,
-          bgcolor: bar.color || "#1565C0",
-          borderRadius: "4px",
-          cursor: dragging ? "grabbing" : "grab",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-          display: "flex",
-          alignItems: "center",
-          px: 0.5,
+          top: 0,
+          height: ROW_HEIGHT,
           zIndex: 2,
+          pointerEvents: "none",
           userSelect: "none",
-          overflow: "hidden",
-          whiteSpace: "nowrap",
         }}
       >
-        <Typography variant="caption" sx={{ color: "#fff", fontWeight: 600, fontSize: "0.62rem", textShadow: "0 1px 1px rgba(0,0,0,0.4)" }}>
-          {bar.title}
-        </Typography>
+        {/* 条主体：纯色填充 + 白色描边 + 阴影 */}
+        <Box
+          onMouseDown={(e) => startDrag("move", e)}
+          onDoubleClick={() => onEdit(bar)}
+          sx={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: BAR_TOP,
+            height: BAR_HEIGHT,
+            bgcolor: color,
+            border: "2px solid #fff",
+            boxShadow: "0 2px 5px rgba(0,0,0,0.28)",
+            borderRadius: "3px",
+            pointerEvents: "auto",
+            cursor: dragging ? "grabbing" : "grab",
+            display: "flex",
+            alignItems: "center",
+            px: 0.75,
+            overflow: "hidden",
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{
+              color: "#fff",
+              fontWeight: 600,
+              fontSize: "0.62rem",
+              lineHeight: 1,
+              whiteSpace: "nowrap",
+              textOverflow: "ellipsis",
+              overflow: "hidden",
+              textShadow: "0 1px 1px rgba(0,0,0,0.45)",
+            }}
+          >
+            {bar.title}
+          </Typography>
+        </Box>
+        {/* 左端收尾拖拽把手 */}
+        <Box
+          onMouseDown={(e) => startDrag("start", e)}
+          sx={{
+            position: "absolute",
+            left: -5,
+            top: HANDLE_TOP,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            bgcolor: color,
+            border: "2px solid #fff",
+            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+            cursor: "ew-resize",
+            pointerEvents: "auto",
+          }}
+        />
+        {/* 右端收尾拖拽把手 */}
+        <Box
+          onMouseDown={(e) => startDrag("end", e)}
+          sx={{
+            position: "absolute",
+            right: -5,
+            top: HANDLE_TOP,
+            width: 10,
+            height: 10,
+            borderRadius: "50%",
+            bgcolor: color,
+            border: "2px solid #fff",
+            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+            cursor: "ew-resize",
+            pointerEvents: "auto",
+          }}
+        />
       </Box>
     </Tooltip>
   );
@@ -423,7 +500,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
           width: 80,
           height: 44,
           cursor: dragging ? "grabbing" : "grab",
-          zIndex: 3,
+          zIndex: 4, // 节点永远显示在最上方，盖过矩形进度条与箭头线
           userSelect: "none",
           display: "flex",
           flexDirection: "column",
@@ -459,7 +536,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
 function TrackRow({
   track, months, monthWidth, minDate, maxDate,
   onUpdateBar, onUpdateMilestone,
-  onAddMilestone,
+  onAddBar, onAddMilestone,
   onEditBar, onEditMilestone,
   onUpdateTrack, onDeleteTrack,
   dragTrackId, dragOverTrackId,
@@ -615,6 +692,9 @@ function TrackRow({
           />
         ))}
         <Box sx={{ position: "absolute", right: 4, bottom: 2, display: "flex", gap: 0.25, zIndex: 6 }}>
+          <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddBar(track.id)}>
+            ＋进度条
+          </Button>
           <Button size="small" variant="outlined" sx={{ fontSize: "0.58rem", minWidth: 0, px: 0.5, py: 0, lineHeight: 1.3 }} onClick={() => onAddMilestone(track.id)}>
             ＋节点
           </Button>
@@ -624,7 +704,8 @@ function TrackRow({
   );
 }
 
-function EditBarDialog({ open, bar, onClose, onSave, onDelete }) {
+function EditBarDialog({ open, bar, defaultStart, defaultEnd, onClose, onSave, onDelete }) {
+  const isEdit = !!bar;
   const [title, setTitle] = useState("");
   const [color, setColor] = useState("#1565C0");
   const [start, setStart] = useState("");
@@ -632,31 +713,49 @@ function EditBarDialog({ open, bar, onClose, onSave, onDelete }) {
   const [style, setStyle] = useState("bar");
 
   useEffect(() => {
-    if (bar) {
-      setTitle(bar.title || "");
-      setColor(bar.color || "#1565C0");
-      setStart(bar.start_date || "");
-      setEnd(bar.end_date || "");
-      setStyle(bar.style || "bar");
+    if (open) {
+      if (bar) {
+        setTitle(bar.title || "");
+        setColor(bar.color || "#1565C0");
+        setStart(bar.start_date || "");
+        setEnd(bar.end_date || "");
+        setStyle(bar.style || "bar");
+      } else {
+        setTitle("");
+        setColor("#1565C0");
+        setStart(defaultStart || "");
+        setEnd(defaultEnd || "");
+        setStyle("bar");
+      }
     }
-  }, [bar]);
+  }, [open, bar, defaultStart, defaultEnd]);
+
+  const handleSave = () => {
+    if (!start || !end || start > end) {
+      alert("请检查起止日期");
+      return;
+    }
+    onSave({ title, color, start_date: start, end_date: end, style });
+  };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>编辑进度条</DialogTitle>
+      <DialogTitle>{isEdit ? "编辑进度条" : "新增进度条"}</DialogTitle>
       <DialogContent>
         <TextField fullWidth size="small" label="名称" value={title} onChange={(e) => setTitle(e.target.value)} sx={{ mt: 1, mb: 2 }} />
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <TextField size="small" type="date" label="开始" InputLabelProps={{ shrink: true }} value={start} onChange={(e) => setStart(e.target.value)} />
           <TextField size="small" type="date" label="结束" InputLabelProps={{ shrink: true }} value={end} onChange={(e) => setEnd(e.target.value)} />
         </Stack>
-        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-          <InputLabel>样式</InputLabel>
-          <Select value={style} label="样式" onChange={(e) => setStyle(e.target.value)}>
-            <MenuItem value="bar">矩形进度条</MenuItem>
-            <MenuItem value="arrow">带箭头直线</MenuItem>
-          </Select>
-        </FormControl>
+        {isEdit && (
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+            <InputLabel>样式</InputLabel>
+            <Select value={style} label="样式" onChange={(e) => setStyle(e.target.value)}>
+              <MenuItem value="bar">矩形进度条</MenuItem>
+              <MenuItem value="arrow">带箭头直线</MenuItem>
+            </Select>
+          </FormControl>
+        )}
         <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mb: 0.5 }}>颜色</Typography>
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
           {PRESET_COLORS.map((c) => (
@@ -672,10 +771,10 @@ function EditBarDialog({ open, bar, onClose, onSave, onDelete }) {
         </Box>
       </DialogContent>
       <DialogActions sx={{ justifyContent: "space-between" }}>
-        <Button color="error" onClick={onDelete}>删除</Button>
+        {isEdit ? <Button color="error" onClick={onDelete}>删除</Button> : <Box />}
         <Box>
           <Button onClick={onClose}>取消</Button>
-          <Button variant="contained" onClick={() => onSave({ title, color, start_date: start, end_date: end, style })}>保存</Button>
+          <Button variant="contained" onClick={handleSave}>保存</Button>
         </Box>
       </DialogActions>
     </Dialog>
@@ -856,6 +955,7 @@ export default function QuickSchedulePage() {
   const [editBar, setEditBar] = useState(null);
   const [editMilestone, setEditMilestone] = useState(null);
   const [creatingMilestone, setCreatingMilestone] = useState(null);
+  const [creatingBar, setCreatingBar] = useState(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [dragTrackId, setDragTrackId] = useState(null);
@@ -1033,6 +1133,24 @@ export default function QuickSchedulePage() {
     setEditBar(null);
   };
 
+  const handleAddBar = (trackId) => {
+    if (!schedule) return;
+    setCreatingBar(trackId);
+  };
+
+  const handleCreateBar = async (data) => {
+    const r = await api.quickSchedules.bars.create(schedule.id, {
+      track_id: creatingBar,
+      title: data.title,
+      start_date: data.start_date,
+      end_date: data.end_date,
+      color: data.color,
+      style: "bar",
+    });
+    setSchedule(r.data.schedule);
+    setCreatingBar(null);
+  };
+
   const handleAddMilestone = (trackId) => {
     if (!schedule) return;
     setCreatingMilestone(trackId);
@@ -1167,6 +1285,7 @@ export default function QuickSchedulePage() {
                     maxDate={schedule.end_date}
                     onUpdateBar={handleUpdateBar}
                     onUpdateMilestone={handleUpdateMilestone}
+                    onAddBar={handleAddBar}
                     onAddMilestone={handleAddMilestone}
                     onEditBar={setEditBar}
                     onEditMilestone={setEditMilestone}
@@ -1186,8 +1305,8 @@ export default function QuickSchedulePage() {
 
           <Box sx={{ p: 1, borderTop: "1px solid", borderColor: "divider", display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>提示：</Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽直线两端调整起止日期</Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽节点符号沿轨道调整时间</Typography>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽直线/矩形条两端调整起止</Typography>
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>· 拖拽条体或节点符号沿轨道平移</Typography>
             <Typography variant="caption" sx={{ color: "text.secondary" }}>· 双击可编辑</Typography>
             <Typography variant="caption" sx={{ color: "text.secondary", ml: "auto" }}>共 {schedule.tracks.length} 个轨道</Typography>
           </Box>
@@ -1214,6 +1333,14 @@ export default function QuickSchedulePage() {
       {editBar && (
         <EditBarDialog open={!!editBar} bar={editBar} onClose={() => setEditBar(null)} onSave={handleSaveBarDialog} onDelete={handleDeleteBar} />
       )}
+      <EditBarDialog
+        open={creatingBar !== null}
+        bar={null}
+        defaultStart={schedule ? schedule.start_date : ""}
+        defaultEnd={schedule ? schedule.end_date : ""}
+        onClose={() => setCreatingBar(null)}
+        onSave={handleCreateBar}
+      />
       {editMilestone && (
         <EditMilestoneDialog open={!!editMilestone} ms={editMilestone} onClose={() => setEditMilestone(null)} onSave={handleSaveMilestoneDialog} onDelete={handleDeleteMilestone} />
       )}

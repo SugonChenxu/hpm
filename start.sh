@@ -49,7 +49,7 @@ case "${1:-start}" in
     ;;
   build)
     echo "编译 + 切换生产模式..."
-    cd client && npm run build && cd ..
+    (cd client && npm run build) || { echo "构建失败，未切换服务"; exit 1; }
     npx pm2 delete forge forge-api forge-ui 2>/dev/null
     npx pm2 start ecosystem.config.js
     npx pm2 save
