@@ -558,7 +558,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
   );
 }
 
-/** 竖虚线：贯穿所有轨道的时间参考线，可拖拽，靠近节点时吸附对齐 */
+/** 竖虚线（参照线）：贯穿所有轨道，可拖拽，靠近节点时吸附对齐；圆圈与虚线同轴居中 */
 function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeight, allMilestones, onUpdate, onSave, onEdit }) {
   const [dragging, setDragging] = useState(false);
   const [snapped, setSnapped] = useState(false);
@@ -577,20 +577,30 @@ function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeig
     startLeftRef.current = left;
     latestRef.current = vline.date;
 
+    // 排期起止的像素边界：参照线只能在此范围内拖动
+    const minPx = dateToPixels(minDate, months, monthWidth);
+    const maxPx = dateToPixels(maxDate, months, monthWidth);
+
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
-      const newLeft = Math.max(0, startLeftRef.current + dx);
-      let newDate = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate) || vline.date;
+      const newLeft = Math.max(minPx, Math.min(maxPx, startLeftRef.current + dx));
 
-      // 吸附：靠近节点（8px 内）自动对齐到该节点日期
+      // 吸附：靠近任意关键节点（10px 内）对齐到该节点纵向对称轴
       let snappedDate = null;
-      let bestDist = 8;
+      let bestDist = 10;
       for (const ms of allMilestones) {
         const nodeLeft = dateToPixels(ms.date, months, monthWidth);
         const dist = Math.abs(newLeft - nodeLeft);
         if (dist < bestDist) { bestDist = dist; snappedDate = ms.date; }
       }
-      if (snappedDate) { newDate = snappedDate; setSnapped(true); } else { setSnapped(false); }
+      let newDate;
+      if (snappedDate) {
+        newDate = snappedDate;
+        setSnapped(true);
+      } else {
+        newDate = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate) || vline.date;
+        setSnapped(false);
+      }
 
       latestRef.current = newDate;
       onUpdate(vline.id, { date: newDate });
@@ -614,31 +624,28 @@ function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeig
       onDoubleClick={() => onEdit(vline)}
       sx={{
         position: "absolute",
-        left: left - 1,
+        left,
         top: 0,
-        width: 3,
+        width: 12,
         height: totalHeight,
         zIndex: 5,
         cursor: "col-resize",
         pointerEvents: "auto",
         userSelect: "none",
+        transform: "translateX(-50%)", // 容器中心对齐 left（节点纵向对称轴）
       }}
     >
-      {/* 虚线本体 */}
-      <Box sx={{ position: "absolute", left: 1, top: 0, bottom: 0, width: 0, borderLeft: `2px dashed ${snapped ? "#FF9800" : color}` }} />
-      {/* 顶部手柄 */}
-      <Box
-        sx={{
-          position: "absolute", left: -5, top: -2, width: 12, height: 12, borderRadius: "50%",
-          bgcolor: snapped ? "#FF9800" : color, border: "2px solid #fff", boxShadow: "0 0 0 1px rgba(0,0,0,0.25)",
-        }}
-      />
-      {/* 标题 */}
+      <svg width={12} height={totalHeight} style={{ position: "absolute", left: 0, top: 0, display: "block", overflow: "visible" }}>
+        {/* 虚线：x=6 = 容器中心 = left */}
+        <line x1={6} y1={11} x2={6} y2={totalHeight} stroke={snapped ? "#FF9800" : color} strokeWidth={2} strokeDasharray="6,4" />
+        {/* 顶部圆圈：cx=6 与虚线同轴 */}
+        <circle cx={6} cy={6} r={5} fill={snapped ? "#FF9800" : color} stroke="#FFFFFF" strokeWidth={2} />
+      </svg>
       {vline.title ? (
         <Typography
           variant="caption"
           sx={{
-            position: "absolute", left: 9, top: -6, fontSize: "0.6rem", color, fontWeight: 700,
+            position: "absolute", left: 13, top: -2, fontSize: "0.6rem", color, fontWeight: 700,
             whiteSpace: "nowrap", pointerEvents: "none", bgcolor: "rgba(255,255,255,0.85)",
             px: 0.4, borderRadius: "2px", lineHeight: 1.4,
           }}
@@ -1522,7 +1529,7 @@ export default function QuickSchedulePage() {
             <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
             <Typography variant="body2" sx={{ color: "text.secondary" }}>~</Typography>
             <DateFieldPopover label="结束" value={schedule.end_date} onChange={handleUpdateEnd} />
-            <Button size="small" variant="outlined" onClick={handleAddVline}>＋ 虚线</Button>
+            <Button size="small" variant="outlined" onClick={handleAddVline}>＋ 新增参照线</Button>
             <Button size="small" variant="outlined" onClick={handleAddTrack}>＋ 新增轨道</Button>
           </Box>
 
