@@ -322,9 +322,8 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
   const width = Math.max(16, right - left);
   const color = bar.color || "#1565C0";
 
-  const BAR_TOP = 13; // 底边 13+18=31，正好压在箭头线顶边（箭头线视觉线 31~33）
-  const BAR_HEIGHT = 18;
-  const HANDLE_TOP = BAR_TOP + BAR_HEIGHT / 2 - 5; // 17，圆点中心与条中心对齐
+  const BAR_TOP = 19; // 底边 19+12=31，正好压在箭头线顶边（箭头线视觉线 31~33）
+  const BAR_HEIGHT = 12; // 原 18 的 2/3
 
   const startDrag = (mode, e) => {
     e.stopPropagation();
@@ -400,6 +399,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
             cursor: dragging ? "grabbing" : "grab",
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             px: 0.75,
             overflow: "hidden",
           }}
@@ -408,7 +408,7 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
             variant="caption"
             sx={{
               color: "#fff",
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: "0.62rem",
               lineHeight: 1,
               whiteSpace: "nowrap",
@@ -420,40 +420,44 @@ function RectBar({ bar, months, monthWidth, minDate, maxDate, onUpdate, onEdit }
             {bar.title}
           </Typography>
         </Box>
-        {/* 左端收尾拖拽把手 */}
+        {/* 左端收尾拖拽把手：条左端内侧 14px 热区 + 白色竖条标记 */}
         <Box
           onMouseDown={(e) => startDrag("start", e)}
           sx={{
             position: "absolute",
-            left: -5,
-            top: HANDLE_TOP,
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            bgcolor: color,
-            border: "2px solid #fff",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+            left: 0,
+            top: BAR_TOP,
+            width: 14,
+            height: BAR_HEIGHT,
             cursor: "ew-resize",
             pointerEvents: "auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1,
           }}
-        />
-        {/* 右端收尾拖拽把手 */}
+        >
+          <Box sx={{ width: 4, height: BAR_HEIGHT - 2, bgcolor: "#fff", borderRadius: "2px", boxShadow: "0 0 0 1px rgba(0,0,0,0.3)" }} />
+        </Box>
+        {/* 右端收尾拖拽把手：条右端内侧 14px 热区 + 白色竖条标记 */}
         <Box
           onMouseDown={(e) => startDrag("end", e)}
           sx={{
             position: "absolute",
-            right: -5,
-            top: HANDLE_TOP,
-            width: 10,
-            height: 10,
-            borderRadius: "50%",
-            bgcolor: color,
-            border: "2px solid #fff",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+            right: 0,
+            top: BAR_TOP,
+            width: 14,
+            height: BAR_HEIGHT,
             cursor: "ew-resize",
             pointerEvents: "auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1,
           }}
-        />
+        >
+          <Box sx={{ width: 4, height: BAR_HEIGHT - 2, bgcolor: "#fff", borderRadius: "2px", boxShadow: "0 0 0 1px rgba(0,0,0,0.3)" }} />
+        </Box>
       </Box>
     </Tooltip>
   );
