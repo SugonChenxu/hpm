@@ -152,9 +152,8 @@ function buildGrpSp(name, memberSps) {
     maxX = Math.max(maxX, x + cx); maxY = Math.max(maxY, y + cy);
     return { sp, x, y };
   });
-  const children = items.map(({ sp, x, y }) =>
-    sp.replace(/<a:off x="(-?\d+)" y="(-?\d+)"\/>/, `<a:off x="${x - minX}" y="${y - minY}"/>`)
-  );
+  // 子形状保持绝对坐标（PowerPoint 的 group 子形状用绝对坐标，无需转相对）
+  const children = items.map(({ sp }) => sp);
   const extCx = maxX - minX;
   const extCy = maxY - minY;
   const id = Math.floor(100000 + Math.random() * 800000);
