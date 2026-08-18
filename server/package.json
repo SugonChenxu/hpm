@@ -17,6 +17,7 @@
     "morgan": "^1.10.0",
     "node-rfc": "^3.3.1",
     "pm2": "^7.0.3",
+    "pptxgenjs": "^4.0.1",
     "session-file-store": "^1.5.0"
   }
 }

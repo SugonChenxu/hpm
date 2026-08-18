@@ -7,6 +7,7 @@
 
 import { Router } from "express";
 import db from "../db.js";
+import { buildSchedulePptx } from "../quick-schedule-pptx.js";
 
 const router = Router();
 
@@ -436,6 +437,28 @@ router.delete("/quick-schedules/:id/milestones/:milestoneId", (req, res) => {
   db.prepare("DELETE FROM quick_schedule_milestones WHERE id = ?").run(req.params.milestoneId);
   const detail = buildScheduleDetail(req.params.id, req.userId);
   res.json({ ok: true, data: detail });
+});
+
+// ═══════════════════════════════════════════════
+// GET /quick-schedules/:id/export/pptx — 导出 PPTX（原生形状，可拖拽）
+// ═══════════════════════════════════════════════
+router.get("/quick-schedules/:id/export/pptx", async (req, res) => {
+  try {
+    const detail = buildScheduleDetail(req.params.id, req.userId);
+    if (!detail) return res.status(404).json({ ok: false, error: "排期不存在" });
+
+    const buf = await buildSchedulePptx(detail);
+    const filename = encodeURIComponent(`${detail.title || "快速排期"}.pptx`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${filename}`);
+    res.send(buf);
+  } catch (err) {
+    console.error("[quick-schedules] pptx 导出失败:", err);
+    res.status(500).json({ ok: false, error: err.message || "导出失败" });
+  }
 });
 
 export default router;

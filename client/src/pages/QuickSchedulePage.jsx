@@ -1265,11 +1265,39 @@ export default function QuickSchedulePage() {
     }
   };
 
+  const handleExportPptx = async () => {
+    if (!schedule) return;
+    try {
+      const res = await fetch(`/api/quick-schedules/${schedule.id}/export/pptx`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let msg = "导出失败";
+        try { msg = (await res.json()).error || msg; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${schedule.title || "快速排期"}.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err.message || "导出失败");
+    }
+  };
+
   return (
     <Box sx={{ p: 3, height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
         <PageHeader title="快速排期" subtitle="会议时快速搭建多轨道项目排期模拟，拖拽即可调整进度与关键节点" />
-        <Button variant="contained" onClick={() => setCreateOpen(true)}>＋ 创建排期</Button>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Button variant="outlined" disabled={!schedule} onClick={handleExportPptx}>导出 PPT</Button>
+          <Button variant="contained" onClick={() => setCreateOpen(true)}>＋ 创建排期</Button>
+        </Box>
       </Box>
 
       {schedule ? (
