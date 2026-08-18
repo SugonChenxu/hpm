@@ -270,27 +270,51 @@ export async function buildSchedulePptx(schedule) {
       x: 0.55, y: 0.64, w: 12.2, h: 0.26, fontSize: 10, color: "6B7280",
     });
 
+    // 时间轴组：背景格子（月份白灰相间底板）+ 季度 + 月份，成组绑定共同移动
+    const timelineSeqs = [];
+
+    // 背景格子（贯穿轨道区高度，作为甘特底板）
+    for (let i = 0; i < months.length; i++) {
+      const m = months[i];
+      const mx = xForDate(m.startDate);
+      const mw = Math.max(0.06, daysBetween(m.startDate, m.endDate) * dayW + dayW);
+      timelineSeqs.push(
+        B.addShape("rect", {
+          x: mx, y: GANTT_TOP, w: mw, h: pageTracks.length * ROW_H,
+          fill: { color: i % 2 === 0 ? "FFFFFF" : "EEF2F7" },
+          line: { color: "FFFFFF", width: 0.5 },
+        })
+      );
+    }
+
     // 季度行（红底，含分割线）
     for (const q of quarters) {
       const qx = xForDate(q.startDate);
       const qw = Math.max(0.1, daysBetween(q.startDate, q.endDate) * dayW + dayW);
-      B.addText(q.label, {
-        x: qx, y: 0.94, w: qw, h: 0.28, fontSize: 9, bold: true, color: "FFFFFF",
-        fill: { color: "A94442" }, line: { color: "FFFFFF", width: 0.75 },
-        align: "center", valign: "middle",
-      });
+      timelineSeqs.push(
+        B.addText(q.label, {
+          x: qx, y: 0.94, w: qw, h: 0.28, fontSize: 9, bold: true, color: "FFFFFF",
+          fill: { color: "A94442" }, line: { color: "FFFFFF", width: 0.75 },
+          align: "center", valign: "middle",
+        })
+      );
     }
     // 月份行（浅红底，含分割线）
     for (const m of months) {
       const mx = xForDate(m.startDate);
       const mw = Math.max(0.06, daysBetween(m.startDate, m.endDate) * dayW + dayW);
       const label = mw < 0.3 ? m.label.replace("月", "") : m.label;
-      B.addText(label, {
-        x: mx, y: 1.24, w: mw, h: 0.26, fontSize: 8, color: "FFFFFF",
-        fill: { color: "D9A6A5" }, line: { color: "FFFFFF", width: 0.75 },
-        align: "center", valign: "middle",
-      });
+      timelineSeqs.push(
+        B.addText(label, {
+          x: mx, y: 1.24, w: mw, h: 0.26, fontSize: 8, color: "FFFFFF",
+          fill: { color: "D9A6A5" }, line: { color: "FFFFFF", width: 0.75 },
+          align: "center", valign: "middle",
+        })
+      );
     }
+
+    // 时间轴（季度+月份+背景格子）成组
+    B.addGroup(timelineSeqs);
 
     // 每条轨道
     pageTracks.forEach((track, i) => {
@@ -345,6 +369,21 @@ export async function buildSchedulePptx(schedule) {
         B.addGroup([symSeq, txtSeq]);
       }
     });
+
+    // 参照线（竖虚线，贯穿所有轨道，最上层）
+    for (const vl of schedule.vlines || []) {
+      const vlx = xForDate(vl.date);
+      B.addShape("line", {
+        x: vlx, y: GANTT_TOP, w: 0, h: pageTracks.length * ROW_H,
+        line: { color: stripHash(vl.color), width: 1.5, dashType: "dash" },
+      });
+      if (vl.title) {
+        B.addText(vl.title, {
+          x: vlx + 0.03, y: GANTT_TOP - 0.26, w: 1.4, h: 0.2,
+          fontSize: 7, color: stripHash(vl.color), bold: true,
+        });
+      }
+    }
 
     // 底部统计（保留网页版底部状态）
     B.addText(`共 ${tracks.length} 个轨道 · ${barCount} 个进度条 · ${msCount} 个节点`, {
