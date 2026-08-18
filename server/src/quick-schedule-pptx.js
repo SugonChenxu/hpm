@@ -3,9 +3,10 @@
  *
  * 将排期甘特图映射为 PowerPoint 原生形状：
  *   - 轨道线（arrow bar）→ 直线 + 右端箭头
- *   - 进度条（bar）→ 纯色矩形 + 居中白字
+ *   - 进度条（bar）→ 纯色矩形 + 白色斜纹底纹 + 居中白字
  *   - 关键节点（milestone）→ 圆/方块/菱形/三角/五角星 + 文字
- *   - 时间轴 → 季度标签（红底白字）
+ *   - 时间轴 → 季度（红底）+ 月份（浅红底）两行
+ *   - 整体 → 圆角毛玻璃边框；轨道名称保留浅色底纹
  *
  * 生成 .pptx 后，所有形状均可自由拖动、调整大小（PPT 原生能力）。
  */
@@ -66,6 +67,56 @@ function buildQuarters(startDate, endDate) {
   return quarters;
 }
 
+// 将时间跨度拆成月份标签
+function buildMonths(startDate, endDate) {
+  const months = [];
+  const startT = parseDateUTC(startDate);
+  const endT = parseDateUTC(endDate);
+  let cur = new Date(Date.UTC(new Date(startT).getUTCFullYear(), new Date(startT).getUTCMonth(), 1));
+  while (cur.getTime() <= endT) {
+    const y = cur.getUTCFullYear();
+    const m = cur.getUTCMonth();
+    const mStart = new Date(Date.UTC(y, m, 1));
+    const mEnd = new Date(Date.UTC(y, m + 1, 0));
+    const labelStart = mStart.getTime() < startT ? startT : mStart.getTime();
+    const labelEnd = mEnd.getTime() > endT ? endT : mEnd.getTime();
+    months.push({
+      label: `${m + 1}月`,
+      startDate: toDateStr(new Date(labelStart)),
+      endDate: toDateStr(new Date(labelEnd)),
+    });
+    cur = new Date(Date.UTC(y, m + 1, 1));
+  }
+  return months;
+}
+
+// 进度条：纯色主体 + 白色斜纹底纹 + 居中文字
+function addBarShape(slide, x, y, w, h, color, title) {
+  slide.addShape("rect", {
+    x, y, w, h,
+    fill: { color: stripHash(color) },
+    line: { color: "FFFFFF", width: 0.5 },
+  });
+  // 白色斜纹（45°，半透明，交替条状）
+  const step = 0.09;
+  const diag = Math.sqrt(w * w + h * h);
+  const count = Math.max(1, Math.ceil((w + h) / step));
+  for (let i = 0; i <= count; i++) {
+    const cx = x - h + i * step;
+    const cy = y + h / 2;
+    slide.addShape("rect", {
+      x: cx - 0.02, y: cy - diag / 2, w: 0.04, h: diag,
+      rotate: 45,
+      fill: { color: "FFFFFF", transparency: 55 },
+      line: { type: "none" },
+    });
+  }
+  // 文字（最上层）
+  slide.addText(title || "", {
+    x, y, w, h, fontSize: 8, color: "FFFFFF", bold: true, align: "center", valign: "middle",
+  });
+}
+
 export async function buildSchedulePptx(schedule) {
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: "WIDE", width: 13.33, height: 7.5 });
@@ -83,34 +134,52 @@ export async function buildSchedulePptx(schedule) {
   const LABEL_W = 1.7;
   const GANTT_X = 1.9;
   const GANTT_W = 11.0;
-  const GANTT_TOP = 1.5;
+  const GANTT_TOP = 1.58;
   const ROW_H = 0.5;
   const MAX_TRACKS = 11; // 每页最多轨道数
   const dayW = GANTT_W / totalDays;
 
   const xForDate = (d) => GANTT_X + daysBetween(start, d) * dayW;
   const quarters = buildQuarters(start, end);
+  const months = buildMonths(start, end);
   const pageCount = Math.max(1, Math.ceil(tracks.length / MAX_TRACKS));
 
   for (let page = 0; page < pageCount; page++) {
     const pageTracks = tracks.slice(page * MAX_TRACKS, (page + 1) * MAX_TRACKS);
     const slide = pptx.addSlide();
 
-    // 标题 + 日期范围
-    slide.addText(schedule.title || "快速排期", {
-      x: 0.5, y: 0.22, w: 12.3, h: 0.45, fontSize: 20, bold: true, color: "1F2937",
-    });
-    slide.addText(`${start} ~ ${end} · 共 ${totalDays} 天${pageCount > 1 ? ` · 第 ${page + 1}/${pageCount} 页` : ""}`, {
-      x: 0.5, y: 0.68, w: 12.3, h: 0.3, fontSize: 10, color: "6B7280",
+    // 整体毛玻璃边框：圆角矩形，浅色边框 + 极浅填充（在内容之下）
+    slide.addShape("roundRect", {
+      x: 0.32, y: 0.12, w: 12.69, h: 7.26, rectRadius: 0.14,
+      fill: { color: "FFFFFF", transparency: 88 },
+      line: { color: "94A3B8", width: 1 },
     });
 
-    // 时间轴季度标签
+    // 标题 + 日期范围
+    slide.addText(schedule.title || "快速排期", {
+      x: 0.55, y: 0.24, w: 12.2, h: 0.42, fontSize: 19, bold: true, color: "1F2937",
+    });
+    slide.addText(`${start} ~ ${end} · 共 ${totalDays} 天${pageCount > 1 ? ` · 第 ${page + 1}/${pageCount} 页` : ""}`, {
+      x: 0.55, y: 0.64, w: 12.2, h: 0.26, fontSize: 10, color: "6B7280",
+    });
+
+    // 时间轴第一行：季度标签（红底白字）
     for (const q of quarters) {
       const qx = xForDate(q.startDate);
       const qw = Math.max(0.1, daysBetween(q.startDate, q.endDate) * dayW + dayW);
       slide.addText(q.label, {
-        x: qx, y: 1.04, w: qw, h: 0.3, fontSize: 9, bold: true, color: "FFFFFF",
+        x: qx, y: 0.94, w: qw, h: 0.28, fontSize: 9, bold: true, color: "FFFFFF",
         fill: { color: "A94442" }, align: "center", valign: "middle",
+      });
+    }
+    // 时间轴第二行：月份标签（浅红底）
+    for (const m of months) {
+      const mx = xForDate(m.startDate);
+      const mw = Math.max(0.06, daysBetween(m.startDate, m.endDate) * dayW + dayW);
+      const label = mw < 0.3 ? m.label.replace("月", "") : m.label;
+      slide.addText(label, {
+        x: mx, y: 1.24, w: mw, h: 0.26, fontSize: 8, color: "FFFFFF",
+        fill: { color: "D9A6A5" }, align: "center", valign: "middle",
       });
     }
 
@@ -119,13 +188,18 @@ export async function buildSchedulePptx(schedule) {
       const rowY = GANTT_TOP + i * ROW_H;
       const centerY = rowY + ROW_H / 2;
 
-      // 左侧标签：色块 + 名称
+      // 左侧标签底纹（label_color 浅色半透明）+ 色块 + 名称
       slide.addShape("rect", {
-        x: 0.4, y: centerY - 0.07, w: 0.14, h: 0.14,
+        x: 0.42, y: rowY + 0.03, w: LABEL_W - 0.3, h: ROW_H - 0.06,
+        fill: { color: stripHash(track.label_color), transparency: 88 },
+        line: { type: "none" },
+      });
+      slide.addShape("rect", {
+        x: 0.5, y: centerY - 0.07, w: 0.14, h: 0.14,
         fill: { color: stripHash(track.label_color) }, line: { type: "none" },
       });
       slide.addText(track.title || "(未命名)", {
-        x: 0.58, y: rowY, w: LABEL_W - 0.34, h: ROW_H, fontSize: 9, color: "374151",
+        x: 0.7, y: rowY, w: LABEL_W - 0.55, h: ROW_H, fontSize: 9, color: "374151",
         valign: "middle", align: "left", isTextBox: true,
       });
 
@@ -141,14 +215,7 @@ export async function buildSchedulePptx(schedule) {
         } else {
           const bx = xForDate(bar.start_date);
           const bw = Math.max(0.08, daysBetween(bar.start_date, bar.end_date) * dayW + dayW);
-          slide.addShape("rect", {
-            x: bx, y: centerY - 0.11, w: bw, h: 0.22,
-            fill: { color: stripHash(bar.color) }, line: { color: "FFFFFF", width: 0.75 },
-          });
-          slide.addText(bar.title || "", {
-            x: bx, y: centerY - 0.11, w: bw, h: 0.22, fontSize: 8, color: "FFFFFF",
-            bold: true, align: "center", valign: "middle",
-          });
+          addBarShape(slide, bx, centerY - 0.11, bw, 0.22, bar.color, bar.title);
         }
       }
 
