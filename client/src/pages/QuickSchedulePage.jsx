@@ -566,7 +566,8 @@ function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeig
   const startLeftRef = useRef(0);
   const latestRef = useRef(null);
 
-  const left = dateToPixels(vline.date, months, monthWidth);
+  // 参照线在「轨道容器」（含左侧标签列）内定位，需叠加 LABEL_WIDTH 偏移对齐甘特内容区
+  const left = LABEL_WIDTH + dateToPixels(vline.date, months, monthWidth);
   const color = vline.color || "#D32F2F";
 
   const handleMouseDown = (e) => {
@@ -577,9 +578,9 @@ function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeig
     startLeftRef.current = left;
     latestRef.current = vline.date;
 
-    // 排期起止的像素边界：参照线只能在此范围内拖动
-    const minPx = dateToPixels(minDate, months, monthWidth);
-    const maxPx = dateToPixels(maxDate, months, monthWidth);
+    // 排期起止的像素边界（容器坐标）：参照线只能在此范围内拖动
+    const minPx = LABEL_WIDTH + dateToPixels(minDate, months, monthWidth);
+    const maxPx = LABEL_WIDTH + dateToPixels(maxDate, months, monthWidth);
 
     const handleMove = (ev) => {
       const dx = ev.clientX - startXRef.current;
@@ -589,7 +590,7 @@ function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeig
       let snappedDate = null;
       let bestDist = 10;
       for (const ms of allMilestones) {
-        const nodeLeft = dateToPixels(ms.date, months, monthWidth);
+        const nodeLeft = LABEL_WIDTH + dateToPixels(ms.date, months, monthWidth);
         const dist = Math.abs(newLeft - nodeLeft);
         if (dist < bestDist) { bestDist = dist; snappedDate = ms.date; }
       }
@@ -598,7 +599,7 @@ function DraggableVline({ vline, months, monthWidth, minDate, maxDate, totalHeig
         newDate = snappedDate;
         setSnapped(true);
       } else {
-        newDate = clampDate(pixelsToDate(newLeft, months, monthWidth), minDate, maxDate) || vline.date;
+        newDate = clampDate(pixelsToDate(newLeft - LABEL_WIDTH, months, monthWidth), minDate, maxDate) || vline.date;
         setSnapped(false);
       }
 
