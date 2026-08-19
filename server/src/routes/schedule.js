@@ -35,24 +35,25 @@ function todayStr() {
 }
 
 /**
- * 日期加减天数（含首尾语义），返回本地时区 YYYY-MM-DD
- * 与前端 schedule-date.js 的 addDays 保持一致：addDays(date, N) = date + (N-1) 天
- * 例：工期 5 天，开始 2026-08-21 → addDays("2026-08-21", 5) = "2026-08-25"
- * 前置联动场景：B 结束 = A 开始 - 1 → addDays(A开始, 0)；A 开始 = B 结束 + 1 → addDays(B结束, 2)
+ * 日期加减天数（标准语义），返回本地时区 YYYY-MM-DD
+ * 排期约定（不含首尾）：完成时间 = 开始时间 + 工期；工期 = 结束 - 开始
+ * addDays(date, N) = date + N 天
+ * 例：开始 2026-08-21，工期 5 → addDays("2026-08-21", 5) = "2026-08-26"
+ * 前置联动：B 结束 = A 开始 - 1 → addDays(A开始, -1)；A 开始 = B 结束 + 1 → addDays(B结束, 1)
  */
 function addDays(dateStr, days) {
   const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days - 1);
+  d.setDate(d.getDate() + days);
   return formatLocalDate(d);
 }
 
 /**
- * 计算两个日期之间的天数（含首尾），即实际工期天数
+ * 计算两个日期之间的天数（不含首尾），即实际工期 = 结束 - 开始
  */
 function daysBetween(startStr, endStr) {
   const s = new Date(startStr + "T00:00:00");
   const e = new Date(endStr + "T00:00:00");
-  return Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+  return Math.round((e - s) / (1000 * 60 * 60 * 24));
 }
 
 /**
@@ -86,9 +87,9 @@ export function linkPredecessorsToStart(projectId, taskId, newStartA, oldStartA 
     //          ② A 后移且 B 原本紧贴（B 结束 = 旧 A 开始 - 1）→ 顺延保持紧贴
     const pEnd = norm(p.planned_end);
     const overlap = pEnd >= newStart;
-    const tightFollow = oldStart != null && pEnd === addDays(oldStart, 0);
+    const tightFollow = oldStart != null && pEnd === addDays(oldStart, -1);
     if (!overlap && !tightFollow) continue;
-    const newEnd = addDays(newStart, 0);
+    const newEnd = addDays(newStart, -1);
     if (newEnd < norm(p.planned_start)) {
       // 前置整体晚于 A 的新开始时间，无法自动压缩 → 提示，跳过
       warnings.push(
@@ -294,7 +295,7 @@ function cascadePropagation(tasks, changedTaskId) {
 
       if (predEnds.length > 0) {
         const maxEnd = predEnds.sort().reverse()[0];
-        task.planned_start = addDays(maxEnd, 2);
+        task.planned_start = addDays(maxEnd, 1);
         task.planned_end = addDays(task.planned_start, Math.max(1, task.duration_days));
       }
     }
@@ -509,7 +510,7 @@ router.post("/projects/:id/schedule/generate", (req, res) => {
             .filter(Boolean);
           if (predEnds.length > 0) {
             const maxEnd = predEnds.sort().reverse()[0];
-            task.planned_start = addDays(maxEnd, 2);
+            task.planned_start = addDays(maxEnd, 1);
             task.planned_end = addDays(task.planned_start, Math.max(1, task.duration_days));
           }
         }
@@ -1017,7 +1018,7 @@ router.put("/schedule-tasks/:id/predecessors", (req, res) => {
 
         if (predEnds.length > 0) {
           const maxEnd = predEnds.sort().reverse()[0];
-          const newStart = addDays(maxEnd, 2);
+          const newStart = addDays(maxEnd, 1);
           const newEnd = addDays(newStart, Math.max(1, task.duration_days));
 
           db.prepare(`
@@ -1331,7 +1332,7 @@ function insertScheduleTasks(projectId, taskList) {
     } else if (start && !end && duration) {
       end = addDays(start, Math.max(1, duration));
     } else if (end && !start && duration) {
-      start = addDays(end, 2 - duration);
+      start = addDays(end, -duration);
     } else if (start && !end) {
       end = start;
     } else if (end && !start) {

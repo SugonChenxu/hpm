@@ -4,9 +4,9 @@ import dayjs from "dayjs";
  * 排期日期工具函数
  * 所有日期计算基于 dayjs，输出 ISO 日期字符串 YYYY-MM-DD
  *
- * 日期约定：开始日期 + (N-1) 天 = 结束日期（含首尾）
- * 例：21 日开始，工期 5 天 → 结束 = 25 日
- *     addDays("2026-07-21", 5) → "2026-07-25"
+ * 日期约定（不含首尾）：完成时间 = 开始时间 + 工期；工期 = 结束 - 开始
+ * 例：21 日开始，工期 5 天 → 结束 = 26 日
+ *     addDays("2026-07-21", 5) → "2026-07-26"
  */
 
 /** 格式化日期为 YYYY-MM-DD */
@@ -19,19 +19,19 @@ export function toDayjs(dateStr) {
   return dayjs(dateStr).startOf("day");
 }
 
-/** 日期加 (days-1) 天——用于「开始日期 + 工期天数 = 结束日期」的含首尾计算 */
+/** 日期加 days 天——用于「开始日期 + 工期天数 = 结束日期」（不含首尾） */
 export function addDays(dateStr, days) {
-  return dayjs(dateStr).add(days - 1, "day").format("YYYY-MM-DD");
+  return dayjs(dateStr).add(days, "day").format("YYYY-MM-DD");
 }
 
-/** 两个日期之间的天数（含首尾），即实际工期天数 */
+/** 两个日期之间的天数（不含首尾），即实际工期 = 结束 - 开始 */
 export function daysBetween(startStr, endStr) {
-  return dayjs(endStr).diff(dayjs(startStr), "day") + 1;
+  return dayjs(endStr).diff(dayjs(startStr), "day");
 }
 
 /**
- * 修改开始日期 → 结束日期 = 新开始 + 工期 - 1（工期含首尾，与后端一致）
- * 例：start=21, duration=5 → end=25
+ * 修改开始日期 → 结束日期 = 新开始 + 工期（工期 = 结束 - 开始，不含首尾）
+ * 例：start=21, duration=5 → end=26
  */
 export function updateStartDate(task, newStart) {
   const duration = task.duration_days || 1;
@@ -57,8 +57,8 @@ export function updateEndDate(task, newEnd) {
 }
 
 /**
- * 修改工期 → 结束日期 = 开始日期 + 新工期 - 1（工期含首尾，与后端一致）
- * 例：start=21, newDuration=5 → end=25
+ * 修改工期 → 结束日期 = 开始日期 + 新工期（工期 = 结束 - 开始，不含首尾）
+ * 例：start=21, newDuration=5 → end=26
  */
 export function updateDuration(task, newDuration) {
   const dur = Math.max(1, Number(newDuration));

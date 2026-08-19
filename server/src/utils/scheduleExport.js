@@ -4,7 +4,7 @@ import ExcelJS from "exceljs";
  * 构建「项目排期表」Excel 工作簿（含日期联动公式）。
  *
  * 设计要点（与 Forge 后端计算规则保持一致）：
- *  1. 工期按「含首尾的日历天数」计，因此 完成时间 = 开始时间 + 工期 - 1。
+ *  1. 工期按「不含首尾的天数」计（工期 = 结束 - 开始），因此 完成时间 = 开始时间 + 工期。
  *  2. 有前置依赖的叶子任务：开始时间 = MAX(各前置任务完成时间) + 1（多重依赖取最晚）。
  *  3. 阶段任务（汇总行）：开始时间 = MIN(其叶子子孙的开始时间)，
  *     完成时间 = MAX(其叶子子孙的完成时间)。
@@ -192,10 +192,10 @@ export async function buildScheduleWorkbook(tasks, project) {
         startCell.value = dateToValue(t.planned_start);
       }
 
-      // 完成时间 = 开始时间 + 工期 - 1（含首尾日历天数，与 Forge 一致）
+      // 完成时间 = 开始时间 + 工期（不含首尾，与 Forge 一致）
       if (startSerial != null) {
         endCell.value = {
-          formula: `=${startCol}${rowNum}+${durCol}${rowNum}-1`,
+          formula: `=${startCol}${rowNum}+${durCol}${rowNum}`,
           result: endSerial != null ? endSerial : undefined,
         };
       } else if (endSerial != null) {

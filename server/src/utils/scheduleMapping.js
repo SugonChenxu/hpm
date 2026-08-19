@@ -268,7 +268,7 @@ function addDaysLocal(dateStr, days) {
 function daysBetweenLocal(startStr, endStr) {
   const s = new Date(startStr + "T00:00:00");
   const e = new Date(endStr + "T00:00:00");
-  return Math.round((e - s) / (1000 * 60 * 60 * 24)) + 1;
+  return Math.round((e - s) / (1000 * 60 * 60 * 24)); // 不含首尾：工期 = 结束 - 开始
 }
 
 // 给定任意两个（开始 / 完成 / 工期），推导缺失的那个：
@@ -293,10 +293,10 @@ export function deriveDates(start, end, duration, taskType) {
     return { start, end, duration: Math.max(1, daysBetweenLocal(start, end)) };
   }
   if (hasS && hasD && !hasE) {
-    return { start, end: addDaysLocal(start, d - 1), duration: d };
+    return { start, end: addDaysLocal(start, d), duration: d }; // 完成 = 开始 + 工期
   }
   if (hasE && hasD && !hasS) {
-    return { start: addDaysLocal(end, -(d - 1)), end, duration: d };
+    return { start: addDaysLocal(end, -d), end, duration: d }; // 开始 = 结束 - 工期
   }
   if (hasS && !hasE && !hasD) {
     return { start, end: start, duration: 1 };
