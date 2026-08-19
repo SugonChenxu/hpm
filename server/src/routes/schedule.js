@@ -35,11 +35,14 @@ function todayStr() {
 }
 
 /**
- * 日期加减天数，返回本地时区 YYYY-MM-DD
+ * 日期加减天数（含首尾语义），返回本地时区 YYYY-MM-DD
+ * 与前端 schedule-date.js 的 addDays 保持一致：addDays(date, N) = date + (N-1) 天
+ * 例：工期 5 天，开始 2026-08-21 → addDays("2026-08-21", 5) = "2026-08-25"
+ * 前置联动场景：B 结束 = A 开始 - 1 → addDays(A开始, 0)；A 开始 = B 结束 + 1 → addDays(B结束, 2)
  */
 function addDays(dateStr, days) {
   const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
+  d.setDate(d.getDate() + days - 1);
   return formatLocalDate(d);
 }
 
