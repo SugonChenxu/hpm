@@ -2,6 +2,15 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-19 — 【快速排期】新增导出 Excel（明细 + 甘特图）并打通腾讯文档
+
+- **新增功能** 快速排期新增「导出 Excel」按钮（位于「导出 PPT」左侧），一键下载 `.xlsx`。
+- **新增模块** `server/src/quick-schedule-xlsx.js`：用 ExcelJS 将排期生成为双工作表工作簿——「排期明细」（轨道/进度条/箭头直线/关键节点/参照线全量结构化数据，含颜色填充、自动筛选）与「甘特图」（日期轴 + 彩色进度条填充 + 节点 ● 标记 + 参照线 ▼ 高亮，冻结窗格、月度分色）。日期语义沿用「不含首尾」（工期 = 结束 - 开始）。
+- **接口调整** `server/src/routes/quick-schedules.js` 新增 `GET /api/quick-schedules/:id/export/xlsx`，复用 `buildScheduleDetail`，返回 `spreadsheetml.sheet` 附件下载（与 PPT 路由同构）。
+- **前端** `client/src/pages/QuickSchedulePage.jsx` 新增 `handleExportXlsx` 与「导出 Excel」按钮（credentials include，下载 `排期标题.xlsx`）。
+- **腾讯文档打通** 通过已连接的腾讯文档连接器将生成的 xlsx 导入为在线表格（pre_import + COS 上传 + async_import），实测导出「项目规划」排期并成功生成在线表格 `https://docs.qq.com/sheet/DUXp5cFBnZEtjUHBI`（`file_id=QzypPgdKcPpH`）。因腾讯文档票据由宿主注入、不在局域网服务器持有，云端推送当前由连接器（agent）执行；局域网同事可直接用「导出 Excel」下载后拖入腾讯文档。
+- **验证** 真实数据（7 轨道 / 10 进度条 / 18 节点 / 2 参照线）生成 xlsx，校验 styles 含 11 个填充、605 个甘特单元格应用自定义填充；生产构建通过，路由经鉴权网关（401 正确拦截）。
+
 ## 2026-08-19 — 【项目计划】排期日期语义切换为「不含首尾」（完成 = 开始 + 工期）
 
 - **参数变动（全局语义）** 按用户要求，项目计划排期日期约定由「含首尾」（完成 = 开始 + 工期 - 1）切换为「**不含首尾**」（完成 = 开始 + 工期；工期 = 结束 - 开始）。后端 `addDays` 改回标准 +n 天、`daysBetween` 改回结束 - 开始，并调整全部调用点：反向联动 B 结束 = A 开始 - 1 → `addDays(A开始, -1)`；正向级联 A 开始 = B 结束 + 1 → `addDays(B结束, 1)`；完成 = 开始 + 工期 → `addDays(开始, 工期)`；开始 = 结束 - 工期 → `addDays(结束, -工期)`。

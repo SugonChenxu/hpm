@@ -8,6 +8,7 @@
 import { Router } from "express";
 import db from "../db.js";
 import { buildSchedulePptx } from "../quick-schedule-pptx.js";
+import { buildScheduleXlsx } from "../quick-schedule-xlsx.js";
 
 const router = Router();
 
@@ -467,6 +468,28 @@ router.get("/quick-schedules/:id/export/pptx", async (req, res) => {
     res.send(buf);
   } catch (err) {
     console.error("[quick-schedules] pptx 导出失败:", err);
+    res.status(500).json({ ok: false, error: err.message || "导出失败" });
+  }
+});
+
+// ═══════════════════════════════════════════════
+// GET /quick-schedules/:id/export/xlsx — 导出 XLSX（明细 + 甘特图）
+// ═══════════════════════════════════════════════
+router.get("/quick-schedules/:id/export/xlsx", async (req, res) => {
+  try {
+    const detail = buildScheduleDetail(req.params.id, req.userId);
+    if (!detail) return res.status(404).json({ ok: false, error: "排期不存在" });
+
+    const buf = await buildScheduleXlsx(detail);
+    const filename = encodeURIComponent(`${detail.title || "快速排期"}.xlsx`);
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${filename}`);
+    res.send(buf);
+  } catch (err) {
+    console.error("[quick-schedules] xlsx 导出失败:", err);
     res.status(500).json({ ok: false, error: err.message || "导出失败" });
   }
 });
