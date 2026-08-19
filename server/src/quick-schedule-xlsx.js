@@ -34,25 +34,42 @@ const SYMBOL_GEOM = {
   flag: "roundRect",
 };
 
-// ── 网格布局常量（1-based 行 / 列） ──
+// ── 网格布局常量（1-based 行 / 列，对齐 PPT 导出版式） ──
 const TITLE_ROW = 1;
-const SUB_ROW = 2;
-const HEAD_Q_ROW = 3; // 季度行
-const HEAD_M_ROW = 4; // 月份行
-const FIRST_DATA_ROW = 5;
+const HEAD_Q_ROW = 2; // 季度行（红底）
+const HEAD_M_ROW = 3; // 月份行（浅红底）
+const FIRST_DATA_ROW = 4;
 const COL_A = 1;                 // 轨道名列（1-based）
 const DATE_COL0 = COL_A;         // 0-based 起始月列 = B
-const ROW0_FIRST = FIRST_DATA_ROW - 1; // 0-based 首条轨道行 = 4
+const ROW0_FIRST = FIRST_DATA_ROW - 1; // 0-based 首条轨道行 = 3
 
-const ROW_EMU = 406400;          // 32pt 轨道行高（EMU），参照 Forge ROW_HEIGHT=64px 的宽松度
-const MONTH_COL_WIDTH = 13;      // 月份列宽（字符，≈96px，参照 Forge 月宽自适应约 80~115px）
+const ROW_EMU = 457200;          // 36pt 轨道行高（EMU，参考 PPT ROW_H=0.5"）
+const MONTH_COL_WIDTH = 13;      // 月份列宽（字符，≈96px）
 const MONTH_COL_EMU = Math.round((MONTH_COL_WIDTH * 7 + 5) * 9525);
-const TRACK_COL_WIDTH = 22;      // 轨道列宽（字符，≈160px，参照 Forge LABEL_WIDTH=160px）
-const MS_PX = 18;                // 节点符号边长 px（参照 Forge MilestoneSymbol size=18）
+const TRACK_COL_WIDTH = 22;      // 轨道列宽（字符，≈160px）
+const MS_PX = 15;                // 节点符号边长 px（参考 PPT 0.16"）
 const MS_W = MS_PX * 9525;
 const MS_H = MS_PX * 9525;
-const BAR_PAD = Math.round(ROW_EMU * 0.24); // 进度条上下内边距（条高 ≈ 52% 行高）
-const LINE_W = 19050;            // 1.5pt
+const BAR_PAD = Math.round(ROW_EMU * 0.28); // 进度条上下内边距（条高 ≈ 44% 行高 ≈ 21px，参考 PPT 0.22"）
+const LINE_W = 19050;            // 1.5pt（轨道线/参照线，参考 PPT）
+
+// PPT 配色方案（quick-schedule-pptx.js 同源）
+const C_TITLE = "1F2937";        // 标题深字（无底色）
+const C_QUARTER_BG = "A94442";   // 季度红底
+const C_MONTH_BG = "D9A6A5";     // 月份浅红底
+const C_BAND_A = "FFFFFF";       // 轨道区月带白
+const C_BAND_B = "EEF2F7";       // 轨道区月带浅灰
+const C_TRACK_TEXT = "374151";   // 轨道名深字
+const C_MS_TEXT = "000000";      // 节点文字（PPT 默认黑）
+
+/** 浅色化：颜色与白色按 ratio 混合（轨道名底纹，参考 PPT transparency=88） */
+function lighten(hex, ratio = 0.88) {
+  const h = stripHash(hex);
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const mix = (v) => Math.round(v * (1 - ratio) + 255 * ratio);
+  const to2 = (v) => v.toString(16).padStart(2, "0").toUpperCase();
+  return to2(mix(r)) + to2(mix(g)) + to2(mix(b));
+}
 
 /** 起止日期之间的月份序列（含首末月） */
 function monthList(start, end) {
@@ -93,6 +110,7 @@ function shapeAnchor({
   fillHex, fillMode = "solid", geom = "roundRect",
   text, textColor = "FFFFFF", textSize = 900, textAlign = "ctr",
   lineColor = null, lineW = LINE_W, dash = "solid", tailArrow = false, headArrow = false,
+  stroke = null,
 }) {
   const fillXml = fillMode === "none" ? "<a:noFill/>" : `<a:solidFill><a:srgbClr val="${fillHex}"/></a:solidFill>`;
   let lnXml;
@@ -101,6 +119,8 @@ function shapeAnchor({
     const head = headArrow ? `<a:headEnd type="triangle" w="med" len="med"/>` : "";
     const tail = tailArrow ? `<a:tailEnd type="triangle" w="med" len="med"/>` : "";
     lnXml = `<a:ln w="${lineW}" cap="flat"><a:solidFill><a:srgbClr val="${lineColor}"/></a:solidFill>${dashXml}${head}${tail}</a:ln>`;
+  } else if (stroke) {
+    lnXml = `<a:ln w="6350"><a:solidFill><a:srgbClr val="${stroke}"/></a:solidFill></a:ln>`;
   } else {
     lnXml = "<a:ln><a:noFill/></a:ln>";
   }
@@ -147,10 +167,13 @@ function buildDrawing(schedule) {
   tracks.forEach((t, ti) => {
     const row0 = ROW0_FIRST + ti;
     const trackColor = stripHash(t.label_color || "1565C0");
-    // 行垂直中心（箭头线/节点/名称框统一中线对齐）
+    // 行垂直中线（箭头线/节点符号共用）
     const midY = Math.round(ROW_EMU / 2);
     const cyTop = midY - Math.round(MS_H / 2);
     const cyBot = midY + Math.round(MS_H / 2);
+    // 节点文字在符号下方（参考 PPT：y = centerY + size/2 + gap）
+    const lblTop = cyBot + 9525;
+    const lblBot = ROW_EMU - 9525;
 
     for (const b of t.bars || []) {
       const f1 = monthFrac(b.start_date);
@@ -158,25 +181,25 @@ function buildDrawing(schedule) {
       const c1 = colOf(b.start_date);
       const c2 = colOf(b.end_date);
       if (b.style === "arrow") {
-        // 轨道线：水平直线 + 末端箭头（rowOff 相同 → 绝对水平）
+        // 轨道线：水平直线 + 末端箭头，右端对齐最后一个月份的右侧
         anchors.push(
           shapeAnchor({
             id: id++, name: `arrow_${ti}_${b.id || id}`,
             colFrom: c1, rowFrom: row0, colOffFrom: Math.round(f1 * MONTH_COL_EMU), rowOffFrom: midY,
-            colTo: c2 + 1, rowTo: row0, colOffTo: Math.round(f2 * MONTH_COL_EMU), rowOffTo: midY,
+            colTo: c2 + 1, rowTo: row0, colOffTo: 0, rowOffTo: midY,
             fillMode: "none", geom: "line",
             lineColor: stripHash(b.color || trackColor), lineW: LINE_W, tailArrow: true,
           })
         );
       } else {
-        // 进度条：按 Forge 比例（左=开始日位置，右=结束日位置）
+        // 进度条：按 Forge 比例（左=开始日位置，右=结束日位置），白边 + 8pt 白字（参考 PPT）
         anchors.push(
           shapeAnchor({
             id: id++, name: `bar_${ti}_${b.id || id}`,
             colFrom: c1, rowFrom: row0, colOffFrom: Math.round(f1 * MONTH_COL_EMU), rowOffFrom: BAR_PAD,
             colTo: c2, rowTo: row0, colOffTo: Math.round(f2 * MONTH_COL_EMU), rowOffTo: ROW_EMU - BAR_PAD,
-            fillHex: stripHash(b.color), geom: "roundRect",
-            text: b.title, textColor: "FFFFFF", textSize: 1000,
+            fillHex: stripHash(b.color), geom: "roundRect", stroke: "FFFFFF",
+            text: b.title, textColor: "FFFFFF", textSize: 800,
           })
         );
       }
@@ -186,7 +209,7 @@ function buildDrawing(schedule) {
       const c = colOf(m.date);
       const frac = monthFrac(m.date);
       const geom = SYMBOL_GEOM[m.symbol] || "diamond";
-      // 符号尺寸：参照 Forge 18×18；square 为窄竖矩形（宽 = 0.58×s）；中心对准日期点
+      // 符号：15px，中心对准日期点；文字居中于符号下方
       const wf = m.symbol === "square" ? 0.58 : 1;
       const w = Math.round(MS_W * wf);
       const cx = Math.round(frac * MONTH_COL_EMU);
@@ -200,13 +223,15 @@ function buildDrawing(schedule) {
         })
       );
       if (m.title) {
+        const lblW = Math.round(100 * 9525); // ≈100px，与 PPT 文字宽 1.1" 相当
+        const lblFrom = Math.max(0, cx - Math.round(lblW / 2));
         anchors.push(
           shapeAnchor({
             id: id++, name: `ms_t_${ti}_${m.id || id}`,
-            colFrom: c, rowFrom: row0, colOffFrom: offFrom + w + 12000, rowOffFrom: cyTop,
-            colTo: c + 2, rowTo: row0, colOffTo: 0, rowOffTo: cyBot,
+            colFrom: c, rowFrom: row0, colOffFrom: lblFrom, rowOffFrom: lblTop,
+            colTo: c, rowTo: row0, colOffTo: lblFrom + lblW, rowOffTo: lblBot,
             fillMode: "none", geom: "rect",
-            text: m.title, textColor: "374151", textSize: 900, textAlign: "l",
+            text: m.title, textColor: stripHash(m.text_color || C_MS_TEXT), textSize: 750, textAlign: "ctr",
           })
         );
       }
@@ -223,7 +248,7 @@ function buildDrawing(schedule) {
         colFrom: c, rowFrom: ROW0_FIRST, colOffFrom: x, rowOffFrom: 0,
         colTo: c, rowTo: lastRow0, colOffTo: x, rowOffTo: 0,
         fillMode: "none", geom: "line",
-        lineColor: stripHash(v.color || "D32F2F"), lineW: 12700, dash: "dash",
+        lineColor: stripHash(v.color || "D32F2F"), lineW: LINE_W, dash: "dash",
       })
     );
     if (v.title) {
@@ -233,7 +258,7 @@ function buildDrawing(schedule) {
           colFrom: c, rowFrom: ROW0_FIRST, colOffFrom: x + 12000, rowOffFrom: 0,
           colTo: c + 2, rowTo: ROW0_FIRST, colOffTo: 0, rowOffTo: Math.round(ROW_EMU * 0.6),
           fillMode: "none", geom: "rect",
-          text: v.title, textColor: stripHash(v.color || "D32F2F"), textSize: 900, textAlign: "l",
+          text: v.title, textColor: stripHash(v.color || "D32F2F"), textSize: 700, textAlign: "l",
         })
       );
     }
@@ -308,33 +333,23 @@ export async function buildScheduleXlsx(schedule) {
     msCount += (t.milestones || []).length;
   }
 
-  // 单工作表：甘特图（月份网格骨架），冻结表头 4 行 + 轨道列
-  const gantt = wb.addWorksheet("甘特图", { views: [{ state: "frozen", xSplit: 1, ySplit: 4 }] });
+  // 单工作表：甘特图（月份网格骨架），冻结表头 3 行 + 轨道列
+  const gantt = wb.addWorksheet("甘特图", { views: [{ state: "frozen", xSplit: 1, ySplit: 3 }] });
   const colCount = COL_A + N; // A 列 + 每月一列
 
-  // ── 标题 ──
+  // ── 标题（参考 PPT：深色文字、无底色） ──
   gantt.mergeCells(TITLE_ROW, COL_A, TITLE_ROW, colCount);
   const titleCell = gantt.getCell(TITLE_ROW, COL_A);
   titleCell.value = schedule.title || "快速排期";
-  titleCell.font = { bold: true, size: 16, color: "FFFFFF" };
-  titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb("1F3A5F") } };
-  titleCell.alignment = { vertical: "middle", horizontal: "center" };
-  gantt.getRow(TITLE_ROW).height = 26;
-
-  // ── 副标题（统计） ──
-  gantt.mergeCells(SUB_ROW, COL_A, SUB_ROW, colCount);
-  const subCell = gantt.getCell(SUB_ROW, COL_A);
-  subCell.value =
-    `${start} ~ ${end} · 共 ${N} 个月 · ${tracks.length} 轨道 / ${barCount} 进度条 / ${arrowCount} 轨道线 / ${msCount} 节点 · 形状可直接拖动调整`;
-  subCell.font = { size: 10, color: "6B7280" };
-  subCell.alignment = { vertical: "middle", horizontal: "left" };
-  gantt.getRow(SUB_ROW).height = 18;
+  titleCell.font = { bold: true, size: 17, color: { argb: argb(C_TITLE) } };
+  titleCell.alignment = { vertical: "middle", horizontal: "left" };
+  gantt.getRow(TITLE_ROW).height = 28;
 
   // ── 列宽 ──
   gantt.getColumn(COL_A).width = TRACK_COL_WIDTH;
   for (let i = 0; i < N; i++) gantt.getColumn(COL_A + 1 + i).width = MONTH_COL_WIDTH;
 
-  // ── 季度行（合并） ──
+  // ── 季度行（参考 PPT：红底 A94442，白字；A 列角格留空） ──
   const qruns = [];
   for (let i = 0; i < N; ) {
     const q = qlabel(months[i].y, months[i].m);
@@ -344,56 +359,65 @@ export async function buildScheduleXlsx(schedule) {
     i = j;
   }
   const q0 = gantt.getCell(HEAD_Q_ROW, COL_A);
-  q0.value = "季度";
-  q0.font = { bold: true, size: 9, color: "FFFFFF" };
-  q0.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb("374151") } };
-  q0.alignment = { vertical: "middle", horizontal: "center" };
+  q0.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(C_QUARTER_BG) } };
   for (const r of qruns) {
     if (r.j > r.i) gantt.mergeCells(HEAD_Q_ROW, COL_A + 1 + r.i, HEAD_Q_ROW, COL_A + 1 + r.j);
     for (let c = r.i; c <= r.j; c++) {
       const cell = gantt.getCell(HEAD_Q_ROW, COL_A + 1 + c);
       cell.value = r.q;
-      cell.font = { bold: true, size: 10, color: "FFFFFF" };
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb("2E5C8A") } };
+      cell.font = { bold: true, size: 9, color: { argb: argb("FFFFFF") } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(C_QUARTER_BG) } };
       cell.alignment = { vertical: "middle", horizontal: "center" };
     }
   }
   gantt.getRow(HEAD_Q_ROW).height = 18;
 
-  // ── 月份行（一格一月，单色浅底深字，保证可读） ──
+  // ── 月份行（参考 PPT：浅红底 D9A6A5，白字；A 列角格留空） ──
   const m0 = gantt.getCell(HEAD_M_ROW, COL_A);
-  m0.value = "月份";
-  m0.font = { bold: true, size: 9, color: "FFFFFF" };
-  m0.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb("374151") } };
-  m0.alignment = { vertical: "middle", horizontal: "center" };
+  m0.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(C_MONTH_BG) } };
   for (let i = 0; i < N; i++) {
     const cell = gantt.getCell(HEAD_M_ROW, COL_A + 1 + i);
     cell.value = mlabel(months[i].y, months[i].m);
-    cell.font = { bold: true, size: 10, color: "1F2937" };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb("E8EEF7") } };
+    cell.font = { size: 8, color: { argb: argb("FFFFFF") } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(C_MONTH_BG) } };
     cell.alignment = { vertical: "middle", horizontal: "center" };
   }
   gantt.getRow(HEAD_M_ROW).height = 18;
 
-  // ── 轨道标签（轨道区底色统一白色，形状/数据颜色直接输出） ──
+  // ── 轨道区月带底色（参考 PPT：白 / EEF2F7 交替） ──
+  for (let i = 0; i < N; i++) {
+    const bg = i % 2 === 0 ? C_BAND_A : C_BAND_B;
+    for (let ti = 0; ti < tracks.length; ti++) {
+      const cell = gantt.getCell(FIRST_DATA_ROW + ti, COL_A + 1 + i);
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(bg) } };
+    }
+  }
+
+  // ── 轨道标签（参考 PPT：浅色底纹 + 深色名称 + 左侧色块） ──
   tracks.forEach((t, ti) => {
     const r = FIRST_DATA_ROW + ti;
-    gantt.getRow(r).height = 32;
+    gantt.getRow(r).height = 36;
+    const lc = t.label_color || "1565C0";
     const aCell = gantt.getCell(r, COL_A);
     aCell.value = t.title || "(未命名)";
-    aCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(t.label_color || "1565C0") } };
-    aCell.font = { bold: true, size: 10, color: "FFFFFF" };
+    aCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(lighten(lc)) } };
+    aCell.font = { bold: true, size: 9, color: { argb: argb(C_TRACK_TEXT) } };
     aCell.alignment = { vertical: "middle", horizontal: "left" };
+    aCell.border = {
+      left: { style: "thick", color: { argb: argb(lc) } },
+      top: { style: "thin", color: { argb: "FFD9DEE5" } },
+      bottom: { style: "thin", color: { argb: "FFD9DEE5" } },
+    };
   });
 
-  // ── 图例（表尾） ──
+  // ── 底部说明（参考 PPT 底部统计） ──
   const legendRow = FIRST_DATA_ROW + tracks.length + 1;
   gantt.mergeCells(legendRow, COL_A, legendRow, colCount);
   const legendCell = gantt.getCell(legendRow, COL_A);
   legendCell.value =
-    "图例：蓝色轨道线=排期主线 · 圆角矩形=进度条 · 菱形=关键节点 · 红色虚线=参照线 —— 所有形状均可直接选中拖动/缩放/改色";
-  legendCell.font = { size: 9, color: "6B7280", italic: true };
-  legendCell.alignment = { vertical: "middle", horizontal: "left" };
+    `共 ${tracks.length} 个轨道 · ${barCount} 个进度条 · ${msCount} 个节点 —— 所有形状均可直接选中拖动/缩放/改色`;
+  legendCell.font = { size: 9, color: { argb: argb("6B7280") }, italic: true };
+  legendCell.alignment = { vertical: "middle", horizontal: "right" };
   gantt.getRow(legendRow).height = 16;
 
   const baseBuf = await wb.xlsx.writeBuffer();
