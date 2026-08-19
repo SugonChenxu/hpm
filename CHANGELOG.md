@@ -2,14 +2,18 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
-## 2026-08-19 — 【快速排期】新增导出 Excel（明细 + 甘特图）并打通腾讯文档
+## 2026-08-19 — 【快速排期】导出 Excel 重构为「可视化甘特图」（形状可拖动，非表格）
 
-- **新增功能** 快速排期新增「导出 Excel」按钮（位于「导出 PPT」左侧），一键下载 `.xlsx`。
-- **新增模块** `server/src/quick-schedule-xlsx.js`：用 ExcelJS 将排期生成为双工作表工作簿——「排期明细」（轨道/进度条/箭头直线/关键节点/参照线全量结构化数据，含颜色填充、自动筛选）与「甘特图」（日期轴 + 彩色进度条填充 + 节点 ● 标记 + 参照线 ▼ 高亮，冻结窗格、月度分色）。日期语义沿用「不含首尾」（工期 = 结束 - 开始）。
-- **接口调整** `server/src/routes/quick-schedules.js` 新增 `GET /api/quick-schedules/:id/export/xlsx`，复用 `buildScheduleDetail`，返回 `spreadsheetml.sheet` 附件下载（与 PPT 路由同构）。
-- **前端** `client/src/pages/QuickSchedulePage.jsx` 新增 `handleExportXlsx` 与「导出 Excel」按钮（credentials include，下载 `排期标题.xlsx`）。
-- **腾讯文档打通** 通过已连接的腾讯文档连接器将生成的 xlsx 导入为在线表格（pre_import + COS 上传 + async_import），实测导出「项目规划」排期并成功生成在线表格 `https://docs.qq.com/sheet/DUXp5cFBnZEtjUHBI`（`file_id=QzypPgdKcPpH`）。因腾讯文档票据由宿主注入、不在局域网服务器持有，云端推送当前由连接器（agent）执行；局域网同事可直接用「导出 Excel」下载后拖入腾讯文档。
-- **验证** 真实数据（7 轨道 / 10 进度条 / 18 节点 / 2 参照线）生成 xlsx，校验 styles 含 11 个填充、605 个甘特单元格应用自定义填充；生产构建通过，路由经鉴权网关（401 正确拦截）。
+- **需求澄清** 用户要求导出与 PPT 一致的「可视化、可在 Excel 中直接拖动调整」的简易甘特图，而非填色表格 / 数据明细表。
+- **新增模块重写** `server/src/quick-schedule-xlsx.js`：先由 ExcelJS 生成「日期网格 + 轨道标签」骨架（单工作表「甘特图」），再用 jszip 向 xlsx 注入 `xl/drawings/drawing1.xml`（`spreadsheetDrawing`），将对象作为**真正的 Excel 绘图形状**（twoCellAnchor）叠放在网格之上——
+  - 进度条 → 圆角矩形（可拖动 / 改大小，内嵌白色名称）
+  - 箭头直线 → 细横条
+  - 关键节点 → 菱形（circle/square/triangle/star/flag 按符号映射）+ 右侧名称文本框
+  - 参照线 → 贯穿全部轨道的竖条 + 名称文本框
+  - 日期语义沿用「不含首尾」（工期 = 结束 - 开始）；每日一列（≤ 列上限），月度交替底色。
+- **接口/前端** 路由 `GET /api/quick-schedules/:id/export/xlsx` 与前端「导出 Excel」按钮不变，仅后端生成逻辑切换为形状版。
+- **腾讯文档说明** 腾讯文档在线表格为独立渲染引擎，**不保留 Excel drawing 形状**，导入后仅显示日期网格、不显示可拖动进度条；真正可拖动的视觉甘特图需用 **Excel / WPS 打开导出的 .xlsx**（与 PPT 导出同理，PPT 也是本地文件可编辑）。局域网同事用「导出 Excel」下载 .xlsx 后用 Excel/WPS 打开即可调整。
+- **验证** 真实数据（7 轨道 / 10 进度条 / 18 节点 / 2 参照线）生成 xlsx：drawing1.xml 注入成功（48 个 twoCellAnchor 形状）、sheet 挂载 `<drawing>`、`[Content_Types]` 增加 drawing override；drawing1.xml / sheet1.xml / rels / Content_Types 经 Python xml 解析器校验全部良构；生产构建通过、forge 在线。
 
 ## 2026-08-19 — 【项目计划】排期日期语义切换为「不含首尾」（完成 = 开始 + 工期）
 
