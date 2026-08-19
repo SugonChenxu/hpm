@@ -44,11 +44,14 @@ const COL_A = 1;                 // 轨道名列（1-based）
 const DATE_COL0 = COL_A;         // 0-based 起始月列 = B
 const ROW0_FIRST = FIRST_DATA_ROW - 1; // 0-based 首条轨道行 = 4
 
-const ROW_EMU = 330200;          // 26pt 轨道行高（EMU）
-const MONTH_COL_WIDTH = 22;      // 月份列宽（字符）
+const ROW_EMU = 406400;          // 32pt 轨道行高（EMU），参照 Forge ROW_HEIGHT=64px 的宽松度
+const MONTH_COL_WIDTH = 13;      // 月份列宽（字符，≈96px，参照 Forge 月宽自适应约 80~115px）
 const MONTH_COL_EMU = Math.round((MONTH_COL_WIDTH * 7 + 5) * 9525);
-const BAR_PAD = 30000;           // 进度条上下内边距
-const MS_INSET = 50000;          // 节点上下内边距
+const TRACK_COL_WIDTH = 22;      // 轨道列宽（字符，≈160px，参照 Forge LABEL_WIDTH=160px）
+const MS_PX = 18;                // 节点符号边长 px（参照 Forge MilestoneSymbol size=18）
+const MS_W = MS_PX * 9525;
+const MS_H = MS_PX * 9525;
+const BAR_PAD = Math.round(ROW_EMU * 0.24); // 进度条上下内边距（条高 ≈ 52% 行高）
 const LINE_W = 19050;            // 1.5pt
 
 /** 起止日期之间的月份序列（含首末月） */
@@ -168,14 +171,18 @@ function buildDrawing(schedule) {
 
     for (const m of t.milestones || []) {
       const c = colOf(m.date);
-      const left = Math.round(MONTH_COL_EMU * 0.28);
-      const right = Math.round(MONTH_COL_EMU * 0.72);
       const geom = SYMBOL_GEOM[m.symbol] || "diamond";
+      // 符号尺寸：参照 Forge 的 18×18；square 为窄竖矩形（宽 = 0.58×s）
+      const wf = m.symbol === "square" ? 0.58 : 1;
+      const w = Math.round(MS_W * wf);
+      const cx = Math.round(MONTH_COL_EMU / 2);
+      const cyTop = Math.round((ROW_EMU - MS_H) / 2);
+      const cyBot = Math.round((ROW_EMU + MS_H) / 2);
       anchors.push(
         shapeAnchor({
           id: id++, name: `ms_${ti}_${m.id || id}`,
-          colFrom: c, rowFrom: row0, colOffFrom: left, rowOffFrom: MS_INSET,
-          colTo: c + 1, rowTo: row0, colOffTo: right, rowOffTo: ROW_EMU - MS_INSET,
+          colFrom: c, rowFrom: row0, colOffFrom: cx - Math.round(w / 2), rowOffFrom: cyTop,
+          colTo: c, rowTo: row0, colOffTo: cx + Math.round(w / 2), rowOffTo: cyBot,
           fillHex: stripHash(m.color), geom,
         })
       );
@@ -183,8 +190,8 @@ function buildDrawing(schedule) {
         anchors.push(
           shapeAnchor({
             id: id++, name: `ms_t_${ti}_${m.id || id}`,
-            colFrom: c + 1, rowFrom: row0, colOffFrom: 0, rowOffFrom: MS_INSET,
-            colTo: c + 3, rowTo: row0, colOffTo: 0, rowOffTo: ROW_EMU - MS_INSET,
+            colFrom: c + 1, rowFrom: row0, colOffFrom: 0, rowOffFrom: cyTop,
+            colTo: c + 2, rowTo: row0, colOffTo: 0, rowOffTo: cyBot,
             fillMode: "none", geom: "rect",
             text: m.title, textColor: "1F2937", textSize: 900,
           })
@@ -312,7 +319,7 @@ export async function buildScheduleXlsx(schedule) {
   gantt.getRow(SUB_ROW).height = 18;
 
   // ── 列宽 ──
-  gantt.getColumn(COL_A).width = 18;
+  gantt.getColumn(COL_A).width = TRACK_COL_WIDTH;
   for (let i = 0; i < N; i++) gantt.getColumn(COL_A + 1 + i).width = MONTH_COL_WIDTH;
 
   // ── 季度行（合并） ──
@@ -369,7 +376,7 @@ export async function buildScheduleXlsx(schedule) {
   }
   tracks.forEach((t, ti) => {
     const r = FIRST_DATA_ROW + ti;
-    gantt.getRow(r).height = 26;
+    gantt.getRow(r).height = 32;
     const aCell = gantt.getCell(r, COL_A);
     aCell.value = t.title || "(未命名)";
     aCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(t.label_color || "1565C0") } };
