@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Box, Typography, Button, Dialog, DialogTitle, DialogContent,
-  DialogActions, IconButton, Tooltip, Chip, TextField, Stack,
+  DialogActions, IconButton, Tooltip, TextField, Stack,
 } from "@mui/material";
 import api from "../api/client";
 import PageHeader from "../components/common/PageHeader";
@@ -81,6 +81,8 @@ export default function QuickSchedulePage() {
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const loadAll = useCallback(async () => {
     try {
@@ -154,6 +156,19 @@ export default function QuickSchedulePage() {
     }
   };
 
+  const commitTitle = async (s) => {
+    setEditingId(null);
+    const t = titleDraft.trim();
+    if (t && t !== s.title) {
+      try {
+        const r = await api.quickSchedules.update(s.id, { title: t });
+        updateSchedule(s.id, r.data);
+      } catch (err) {
+        alert(err.message || "重命名失败");
+      }
+    }
+  };
+
   return (
     <Box sx={{ p: 3, height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
@@ -185,7 +200,6 @@ export default function QuickSchedulePage() {
           {schedules.map((s, idx) => {
             const expanded = expandedIds.has(s.id);
             const accent = ACCENT[idx % ACCENT.length];
-            const trackCount = s.tracks?.length || 0;
             return (
               <Box
                 key={s.id}
@@ -205,11 +219,32 @@ export default function QuickSchedulePage() {
                   >
                     {expanded ? "▾" : "▸"}
                   </Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {s.title}
-                  </Typography>
-                  <Chip size="small" variant="outlined" label={`${s.start_date} ~ ${s.end_date}`} />
-                  <Chip size="small" variant="outlined" label={`${trackCount} 轨道`} />
+                  {editingId === s.id ? (
+                    <TextField
+                      autoFocus
+                      size="small"
+                      value={titleDraft}
+                      onChange={(e) => setTitleDraft(e.target.value)}
+                      onBlur={() => commitTitle(s)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitTitle(s);
+                        else if (e.key === "Escape") setEditingId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      sx={{ flex: 1, "& .MuiInputBase-input": { fontWeight: 700, fontSize: "1rem" } }}
+                    />
+                  ) : (
+                    <Typography
+                      variant="subtitle1"
+                      sx={{
+                        fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis",
+                        whiteSpace: "nowrap", cursor: "text", "&:hover": { color: "primary.main" },
+                      }}
+                      onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setTitleDraft(s.title); }}
+                    >
+                      {s.title}
+                    </Typography>
+                  )}
                   <Tooltip title="删除排期">
                     <IconButton
                       size="small"

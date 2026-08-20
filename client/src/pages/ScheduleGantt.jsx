@@ -1134,8 +1134,6 @@ function DateFieldPopover({ label, value, onChange }) {
  * @param {(detail)=>void} onChange 父组件据此更新对应排期数据
  */
 export default function ScheduleGantt({ schedule, onChange }) {
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
   const [editBar, setEditBar] = useState(null);
   const [editMilestone, setEditMilestone] = useState(null);
   const [creatingMilestone, setCreatingMilestone] = useState(null);
@@ -1425,15 +1423,6 @@ export default function ScheduleGantt({ schedule, onChange }) {
     onChange(r.data);
   };
 
-  const commitTitle = async () => {
-    setEditingTitle(false);
-    const t = titleDraft.trim();
-    if (t && t !== schedule.title) {
-      const r = await api.quickSchedules.update(schedule.id, { title: t });
-      onChange(r.data);
-    }
-  };
-
   const handleExportPptx = async () => {
     if (!schedule) return;
     try {
@@ -1489,36 +1478,16 @@ export default function ScheduleGantt({ schedule, onChange }) {
   return (
     <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
       <Box sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1, borderBottom: "1px solid", borderColor: "divider", flexWrap: "wrap" }}>
-        {editingTitle ? (
-          <TextField
-            autoFocus
-            size="small"
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitTitle();
-              else if (e.key === "Escape") setEditingTitle(false);
-            }}
-            sx={{ flex: 1, minWidth: 160, "& .MuiInputBase-input": { fontWeight: 700, fontSize: "1rem" } }}
-          />
-        ) : (
-          <Typography
-            variant="subtitle1"
-            onClick={() => { setTitleDraft(schedule.title); setEditingTitle(true); }}
-            sx={{ fontWeight: 700, flex: 1, cursor: "text", "&:hover": { color: "primary.main" } }}
-          >
-            {schedule.title}
-          </Typography>
-        )}
-        <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
-        <Typography variant="body2" sx={{ color: "text.secondary" }}>~</Typography>
-        <DateFieldPopover label="结束" value={schedule.end_date} onChange={handleUpdateEnd} />
-        <Button size="small" variant="outlined" onClick={handleAddVline}>＋ 新增参照线</Button>
-        <Button size="small" variant="outlined" onClick={handleAddTrack}>＋ 新增轨道</Button>
-        <Box sx={{ display: "flex", gap: 1, ml: "auto" }}>
-          <Button size="small" variant="outlined" onClick={handleExportXlsx}>导出 Excel</Button>
-          <Button size="small" variant="outlined" onClick={handleExportPptx}>导出 PPT</Button>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", ml: "auto" }}>
+          <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
+          <Typography variant="body2" sx={{ color: "text.secondary" }}>~</Typography>
+          <DateFieldPopover label="结束" value={schedule.end_date} onChange={handleUpdateEnd} />
+          <Button size="small" variant="outlined" onClick={handleAddVline}>＋ 新增参照线</Button>
+          <Button size="small" variant="outlined" onClick={handleAddTrack}>＋ 新增轨道</Button>
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <Button size="small" variant="outlined" onClick={handleExportXlsx}>导出 Excel</Button>
+            <Button size="small" variant="outlined" onClick={handleExportPptx}>导出 PPT</Button>
+          </Box>
         </Box>
       </Box>
 
