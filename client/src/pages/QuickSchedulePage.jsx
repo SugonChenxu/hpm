@@ -170,7 +170,7 @@ export default function QuickSchedulePage() {
   };
 
   return (
-    <Box sx={{ p: 3, height: "calc(100vh - 64px)", display: "flex", flexDirection: "column" }}>
+    <Box sx={{ p: 3, height: "calc(100dvh - 64px)", display: "flex", flexDirection: "column" }}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
         <PageHeader title="快速排期" subtitle="多项目排期计划，可折叠/展开管理；拖拽即可调整进度与关键节点" />
         <Box sx={{ display: "flex", gap: 1 }}>
@@ -196,7 +196,7 @@ export default function QuickSchedulePage() {
           <Button variant="outlined" size="small" onClick={() => setCreateOpen(true)}>创建排期</Button>
         </Box>
       ) : (
-        <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0, display: "flex", flexDirection: "column", gap: 1.5, pr: 0.5 }}>
+        <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0, WebkitOverflowScrolling: "touch", display: "flex", flexDirection: "column", gap: 1.5, pr: 0.5 }}>
           {schedules.map((s, idx) => {
             const expanded = expandedIds.has(s.id);
             const accent = ACCENT[idx % ACCENT.length];

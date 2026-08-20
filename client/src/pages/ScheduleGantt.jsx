@@ -1491,7 +1491,7 @@ export default function ScheduleGantt({ schedule, onChange }) {
         </Box>
       </Box>
 
-      <Box ref={ganttRef} sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0 }}>
+      <Box ref={ganttRef} sx={{ flex: 1, overflowY: "auto", overflowX: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
         <Box sx={{ minWidth: LABEL_WIDTH + months.length * monthWidth }}>
           <TimelineHeader months={months} quarters={quarters} monthWidth={monthWidth} />
           {schedule.tracks.length === 0 ? (
