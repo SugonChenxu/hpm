@@ -206,7 +206,7 @@ export default function QuickSchedulePage() {
                 sx={{
                   border: "1px solid", borderColor: "divider", borderRadius: 2,
                   bgcolor: "background.paper", borderLeft: `4px solid ${accent}`,
-                  overflow: "hidden", boxShadow: expanded ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
+                  boxShadow: expanded ? "0 1px 4px rgba(0,0,0,0.06)" : "none",
                 }}
               >
                 <Box

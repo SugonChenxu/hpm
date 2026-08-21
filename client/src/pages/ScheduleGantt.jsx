@@ -1476,7 +1476,7 @@ export default function ScheduleGantt({ schedule, onChange }) {
   if (!schedule) return null;
 
   return (
-    <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
+    <Box sx={{ display: "flex", flexDirection: "column", border: "1px solid", borderColor: "divider", borderRadius: 2, bgcolor: "background.paper" }}>
       <Box sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 1, borderBottom: "1px solid", borderColor: "divider", flexWrap: "wrap" }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap", ml: "auto" }}>
           <DateFieldPopover label="开始" value={schedule.start_date} onChange={handleUpdateStart} />
@@ -1491,7 +1491,7 @@ export default function ScheduleGantt({ schedule, onChange }) {
         </Box>
       </Box>
 
-      <Box ref={ganttRef} sx={{ flex: 1, overflowY: "auto", overflowX: "auto", minHeight: 0, WebkitOverflowScrolling: "touch" }}>
+      <Box ref={ganttRef} sx={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
         <Box sx={{ minWidth: LABEL_WIDTH + months.length * monthWidth }}>
           <TimelineHeader months={months} quarters={quarters} monthWidth={monthWidth} />
           {schedule.tracks.length === 0 ? (
