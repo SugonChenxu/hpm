@@ -180,6 +180,92 @@ router.delete("/quick-schedules/:id", (req, res) => {
 });
 
 // ═══════════════════════════════════════════════
+// POST /quick-schedules/:id/duplicate — 复制排期（含全部子表）
+// 新排期标题加「（副本）」，置顶（updated_at 最新）
+// ═══════════════════════════════════════════════
+router.post("/quick-schedules/:id/duplicate", (req, res) => {
+  const src = db
+    .prepare("SELECT * FROM quick_schedules WHERE id = ? AND owner_id = ?")
+    .get(req.params.id, req.userId);
+  if (!src) return res.status(404).json({ ok: false, error: "排期不存在" });
+
+  const runCopy = db.transaction(() => {
+    // 父表
+    const newTitle = `${src.title}（副本）`.slice(0, 200);
+    const insSchedule = db.prepare(
+      "INSERT INTO quick_schedules (owner_id, title, start_date, end_date) VALUES (?, ?, ?, ?)"
+    );
+    const newId = insSchedule.run(req.userId, newTitle, src.start_date, src.end_date).lastInsertRowid;
+
+    // 轨道
+    const tracks = db
+      .prepare("SELECT * FROM quick_schedule_tracks WHERE schedule_id = ? AND owner_id = ? ORDER BY id")
+      .all(req.params.id, req.userId);
+    const insTrack = db.prepare(
+      "INSERT INTO quick_schedule_tracks (schedule_id, owner_id, title, sort_order, label_color) VALUES (?, ?, ?, ?, ?)"
+    );
+    const trackMap = new Map();
+    for (const t of tracks) {
+      const nt = insTrack.run(newId, req.userId, t.title, t.sort_order, t.label_color).lastInsertRowid;
+      trackMap.set(t.id, nt);
+    }
+
+    // 进度条
+    const bars = db
+      .prepare("SELECT * FROM quick_schedule_bars WHERE schedule_id = ? AND owner_id = ? ORDER BY id")
+      .all(req.params.id, req.userId);
+    const insBar = db.prepare(
+      "INSERT INTO quick_schedule_bars (schedule_id, track_id, owner_id, title, start_date, end_date, color, style, shadow, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    const barMap = new Map();
+    for (const b of bars) {
+      const nb = insBar.run(
+        newId, trackMap.get(b.track_id) ?? b.track_id, req.userId, b.title, b.start_date, b.end_date,
+        b.color, b.style, b.shadow, b.sort_order
+      ).lastInsertRowid;
+      barMap.set(b.id, nb);
+    }
+
+    // 关键节点（bar_id 跟随映射，无关联则保持 null）
+    const milestones = db
+      .prepare("SELECT * FROM quick_schedule_milestones WHERE schedule_id = ? AND owner_id = ? ORDER BY id")
+      .all(req.params.id, req.userId);
+    const insMs = db.prepare(
+      "INSERT INTO quick_schedule_milestones (schedule_id, track_id, bar_id, owner_id, title, date, symbol, color, text_color, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    );
+    for (const m of milestones) {
+      const nbId = m.bar_id != null ? (barMap.get(m.bar_id) ?? null) : null;
+      insMs.run(
+        newId, trackMap.get(m.track_id) ?? m.track_id, nbId, req.userId, m.title, m.date,
+        m.symbol, m.color, m.text_color, m.sort_order
+      );
+    }
+
+    // 竖虚线
+    const vlines = db
+      .prepare("SELECT * FROM quick_schedule_vlines WHERE schedule_id = ? AND owner_id = ? ORDER BY id")
+      .all(req.params.id, req.userId);
+    const insVline = db.prepare(
+      "INSERT INTO quick_schedule_vlines (schedule_id, owner_id, title, date, color, sort_order) VALUES (?, ?, ?, ?, ?, ?)"
+    );
+    for (const v of vlines) {
+      insVline.run(newId, req.userId, v.title, v.date, v.color, v.sort_order);
+    }
+
+    return newId;
+  });
+
+  try {
+    const newId = runCopy();
+    const detail = buildScheduleDetail(newId, req.userId);
+    res.json({ ok: true, data: detail });
+  } catch (err) {
+    console.error("[quick-schedules] duplicate 失败:", err);
+    res.status(500).json({ ok: false, error: err.message || "复制失败" });
+  }
+});
+
+// ═══════════════════════════════════════════════
 // POST /quick-schedules/:id/tracks — 添加轨道
 // Body: { title, label_color }
 // ═══════════════════════════════════════════════

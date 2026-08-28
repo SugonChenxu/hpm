@@ -227,6 +227,8 @@ export const api = {
     update: (id, data) =>
       request(`/quick-schedules/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     remove: (id) => request(`/quick-schedules/${id}`, { method: "DELETE" }),
+    duplicate: (id) =>
+      request(`/quick-schedules/${id}/duplicate`, { method: "POST" }),
     tracks: {
       create: (scheduleId, data) =>
         request(`/quick-schedules/${scheduleId}/tracks`, { method: "POST", body: JSON.stringify(data) }),

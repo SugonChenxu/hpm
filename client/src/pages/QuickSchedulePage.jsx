@@ -156,6 +156,17 @@ export default function QuickSchedulePage() {
     }
   };
 
+  const handleDuplicate = async (s) => {
+    try {
+      const r = await api.quickSchedules.duplicate(s.id);
+      const detail = r.data;
+      setSchedules((prev) => [detail, ...prev]);
+      setExpandedIds((prev) => new Set(prev).add(detail.id));
+    } catch (err) {
+      alert(err.message || "复制失败");
+    }
+  };
+
   const commitTitle = async (s) => {
     setEditingId(null);
     const t = titleDraft.trim();
@@ -245,6 +256,15 @@ export default function QuickSchedulePage() {
                       {s.title}
                     </Typography>
                   )}
+                  <Tooltip title="复制排期">
+                    <IconButton
+                      size="small"
+                      onClick={(e) => { e.stopPropagation(); handleDuplicate(s); }}
+                      sx={{ color: "text.secondary" }}
+                    >
+                      <Box component="span" sx={{ fontSize: "0.85rem", fontWeight: 700 }}>⧉</Box>
+                    </IconButton>
+                  </Tooltip>
                   <Tooltip title="删除排期">
                     <IconButton
                       size="small"
