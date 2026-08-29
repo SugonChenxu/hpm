@@ -44,6 +44,11 @@ const SYMBOL_SHAPE = {
   flag: "triangle",
 };
 
+// 阴影预设（PPT 原生 outerShdw，让卡片/进度条/节点更立体）
+const SHADOW_CARD = { type: "outer", color: "000000", opacity: 0.16, blur: 6, offset: 3, angle: 90 };
+const SHADOW_BAR = { type: "outer", color: "000000", opacity: 0.28, blur: 3, offset: 1.5, angle: 90 };
+const SHADOW_NODE = { type: "outer", color: "000000", opacity: 0.32, blur: 2.5, offset: 1.2, angle: 90 };
+
 function buildQuarters(startDate, endDate) {
   const quarters = [];
   const startT = parseDateUTC(startDate);
@@ -117,6 +122,7 @@ function addBarShape(builder, x, y, w, h, color, title) {
     fill: { color: stripHash(color) },
     line: { color: "FFFFFF", width: 0.5 },
     fontSize: 8, color: "FFFFFF", bold: true, align: "center", valign: "middle",
+    shadow: SHADOW_BAR,
   });
   // 白色斜纹：长度 = h*1.5（旋转后垂直跨度≈h，不溢出）
   const hatchSeqs = [];
@@ -260,6 +266,7 @@ export async function buildSchedulePptx(schedule) {
       x: 0.32, y: 0.12, w: 12.69, h: 7.26, rectRadius: 0.14,
       fill: { color: "FFFFFF", transparency: 88 },
       line: { color: "94A3B8", width: 1 },
+      shadow: SHADOW_CARD,
     });
 
     // 标题 + 日期范围
@@ -361,6 +368,7 @@ export async function buildSchedulePptx(schedule) {
         const symSeq = B.addShape(shape, {
           x: mx - size / 2, y: centerY - size / 2, w: size, h: size,
           fill: { color: stripHash(ms.color) }, line: { type: "none" },
+          shadow: SHADOW_NODE,
         });
         const txtSeq = B.addText(ms.title || "", {
           x: mx - 0.55, y: centerY + size / 2 + 0.02, w: 1.1, h: 0.2,

@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-29 — 【快速排期】PPT 导出增加阴影立体效果
+- 模块：`server/src/quick-schedule-pptx.js`
+- 新增：卡片边框、进度条主矩形、关键节点符号加 PPT 原生 `outerShdw` 阴影（预设 SHADOW_CARD/SHADOW_BAR/SHADOW_NODE），导出更立体。
+- 不变：箭头轨道线、白色斜纹底纹不加阴影；逐日精确版式与配色保持不变。
+- 验证：临时脚本生成 pptx 校验 slide XML 含 5 个 `<a:outerShdw>`；语法通过；forge 重启 online。
+
 ## 2026-08-28 — 【快速排期】新增「复制排期」功能（含全部子表深拷贝）
 
 - 新增 `POST /quick-schedules/:id/duplicate`：事务复制父表 + 轨道/进度条/关键节点/参照线，新标题追加「（副本）」，track/bar 关联 id 同步映射
