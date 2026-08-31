@@ -45,9 +45,22 @@ const SYMBOL_SHAPE = {
 };
 
 // 阴影预设（PPT 原生 outerShdw，让卡片/进度条/节点更立体）
+// 三类区分：纯色(无阴影) / 黑色阴影(浅色元素) / 白色阴影(深色元素，黑阴影不可见)
 const SHADOW_CARD = { type: "outer", color: "000000", opacity: 0.16, blur: 6, offset: 3, angle: 90 };
 const SHADOW_BAR = { type: "outer", color: "000000", opacity: 0.28, blur: 3, offset: 1.5, angle: 90 };
 const SHADOW_NODE = { type: "outer", color: "000000", opacity: 0.32, blur: 2.5, offset: 1.2, angle: 90 };
+const SHADOW_WHITE = { type: "outer", color: "FFFFFF", opacity: 0.6, blur: 3, offset: 1.5, angle: 90 };
+
+/** 判断颜色是否偏暗（相对亮度 < 0.5），用于自动选择黑/白阴影 */
+function isDarkColor(hex) {
+  const c = stripHash(hex);
+  if (c.length < 6) return false;
+  const r = parseInt(c.slice(0, 2), 16);
+  const g = parseInt(c.slice(2, 4), 16);
+  const b = parseInt(c.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum < 0.5;
+}
 
 function buildQuarters(startDate, endDate) {
   const quarters = [];
@@ -116,13 +129,15 @@ class SlideBuilder {
 
 /** 进度条：纯色矩形（内嵌文字）+ 白色斜纹，返回组内 sp 顺序号 */
 function addBarShape(builder, x, y, w, h, color, title) {
+  // 深色填充用白色阴影（黑阴影不可见），浅色用黑色阴影
+  const barShadow = isDarkColor(color) ? SHADOW_WHITE : SHADOW_BAR;
   const mainSeq = builder.addText(title || "", {
     shape: "rect",
     x, y, w, h,
     fill: { color: stripHash(color) },
     line: { color: "FFFFFF", width: 0.5 },
     fontSize: 8, color: "FFFFFF", bold: true, align: "center", valign: "middle",
-    shadow: SHADOW_BAR,
+    shadow: barShadow,
   });
   // 白色斜纹：长度 = h*1.5（旋转后垂直跨度≈h，不溢出）
   const hatchSeqs = [];
@@ -365,10 +380,12 @@ export async function buildSchedulePptx(schedule) {
         const shape = SYMBOL_SHAPE[ms.symbol] || "ellipse";
         const mx = xForDate(ms.date);
         const size = 0.16;
+        // 深色符号用白色阴影（黑阴影不可见），浅色用黑色阴影
+        const nodeShadow = isDarkColor(ms.color) ? SHADOW_WHITE : SHADOW_NODE;
         const symSeq = B.addShape(shape, {
           x: mx - size / 2, y: centerY - size / 2, w: size, h: size,
           fill: { color: stripHash(ms.color) }, line: { type: "none" },
-          shadow: SHADOW_NODE,
+          shadow: nodeShadow,
         });
         const txtSeq = B.addText(ms.title || "", {
           x: mx - 0.55, y: centerY + size / 2 + 0.02, w: 1.1, h: 0.2,
