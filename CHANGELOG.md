@@ -2,6 +2,13 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-08-31 — 【快速排期】PPT 进度条改为纯色输出，移除白色阴影
+- 模块：`server/src/quick-schedule-pptx.js`
+- 调整：进度条按需求改为纯色输出（移除 `SHADOW_BAR` 与 shadow 属性，不再区分纯色/阴影）。
+- 移除：`SHADOW_WHITE` 白色阴影预设与 `isDarkColor()` 亮度判断；关键节点统一使用黑色阴影 `SHADOW_NODE`（白卡背景下黑阴影可见）。
+- 保留：卡片边框黑色阴影 `SHADOW_CARD`；箭头线、白色斜纹仍为纯色无阴影。
+- 验证：mock 生成 pptx 校验 slide XML 仅 2 个 `outerShdw`（卡片+节点）均为 `000000` 黑色，0 白色、进度条 0 阴影；语法通过；forge 重启 online。
+
 ## 2026-08-29 — 【快速排期】PPT 导出增加阴影立体效果
 - 模块：`server/src/quick-schedule-pptx.js`
 - 新增：卡片边框、进度条主矩形、关键节点符号加 PPT 原生 `outerShdw` 阴影（预设 SHADOW_CARD/SHADOW_BAR/SHADOW_NODE），导出更立体。
