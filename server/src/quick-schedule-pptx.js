@@ -3,7 +3,7 @@
  *
  * 将排期甘特图映射为 PowerPoint 原生形状：
  *   - 轨道线（arrow bar）→ 直线 + 右端箭头
- *   - 进度条（bar）→ 纯色矩形（内嵌文字）+ 白色斜纹底纹
+ *   - 进度条（bar）→ 纯色矩形（内嵌文字），无斜纹、无阴影
  *   - 关键节点（milestone）→ 圆/方块/菱形/三角/五角星 + 文字
  *   - 时间轴 → 季度（红底）+ 月份（浅红底）两行，含分割线
  *   - 整体 → 圆角毛玻璃边框；轨道名称保留浅色底纹；底部统计
@@ -114,7 +114,7 @@ class SlideBuilder {
   }
 }
 
-/** 进度条：纯色矩形（内嵌文字）+ 白色斜纹，无阴影（纯色输出），返回组内 sp 顺序号 */
+/** 进度条：纯色矩形（内嵌文字），无斜纹、无阴影（纯色输出），返回组内 sp 顺序号 */
 function addBarShape(builder, x, y, w, h, color, title) {
   const mainSeq = builder.addText(title || "", {
     shape: "rect",
@@ -123,24 +123,7 @@ function addBarShape(builder, x, y, w, h, color, title) {
     line: { color: "FFFFFF", width: 0.5 },
     fontSize: 8, color: "FFFFFF", bold: true, align: "center", valign: "middle",
   });
-  // 白色斜纹：长度 = h*1.5（旋转后垂直跨度≈h，不溢出）
-  const hatchSeqs = [];
-  const stripeLen = h * 1.5;
-  const step = 0.09;
-  const count = Math.max(1, Math.ceil((w + h) / step));
-  for (let i = 0; i <= count; i++) {
-    const cx = x - h + i * step;
-    const cy = y + h / 2;
-    hatchSeqs.push(
-      builder.addShape("rect", {
-        x: cx - 0.02, y: cy - stripeLen / 2, w: 0.04, h: stripeLen,
-        rotate: 45,
-        fill: { color: "FFFFFF", transparency: 55 },
-        line: { type: "none" },
-      })
-    );
-  }
-  return [mainSeq, ...hatchSeqs];
+  return [mainSeq];
 }
 
 /** 把组内 sp 包成 <p:grpSp>（子坐标转为相对 chOff） */
@@ -355,7 +338,7 @@ export async function buildSchedulePptx(schedule) {
           const bx = xForDate(bar.start_date);
           const bw = Math.max(0.08, daysBetween(bar.start_date, bar.end_date) * dayW + dayW);
           const seqs = addBarShape(B, bx, centerY - 0.11, bw, 0.22, bar.color, bar.title);
-          B.addGroup(seqs); // 进度条 + 文字 + 斜纹 自动成组
+          B.addGroup(seqs); // 进度条 + 文字 自动成组
         }
       }
 
