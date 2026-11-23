@@ -128,7 +128,7 @@
 
 1. **提取策略**：遍历 OA 页面 DOM 的 `<table>` → 列头智能匹配 → 每行提取物料数据；
 2. **字段映射**：物料编号→part_number, 厂家→manufacturer, 型号配置/物料描述→model, 数量→quantity, 单价→_price, 金额→_amount；
-3. **表单字段**：申请日期→purchase_date（label→input_field→input.value），内部立项号→order_number（同上）；
+3. **表单字段**：申请日期→purchase_date（label→input_field→input.value），内部立项号→order_number（同上），**申请单号→oa_form_no（2026-11-23 新增，label→input→兄弟节点→全文正则四级兜底，标签匹配「申请单号/申请编号/单据编号/采购申请单号」）**；
 4. **状态**：OA 导入默认「已下单」（已提采购申请）；
 5. **项目匹配**：按 order_number 查项目表，命中→导入对应项目，未命中→入 PM「项目管理部日常工作」项目；
 6. **三种使用方式**（⚠️ 2026-07-17 起应用内「OA 导入」按钮已移除，改为外部注入方式）：
@@ -136,6 +136,7 @@
    - 书签浮窗：拖 `scripts/oa-bookmarklet.txt` 到书签栏；
    - Console 脚本：`scripts/oa-import-bookmarklet.js`。
 7. **后端端点**：`POST /api/materials/oa-import`（跨域 CORS，浏览器直接提交，由上述三种外部脚本调用）。
+8. **申请单号持久化**（2026-11-23）：materials 表新增 `oa_form_no` 字段；同一张申请单导入的物料行共用同一单号，随 `oa_link` 一并落库；插件浮窗面板展示单号供核对；采购清单新增「申请单号」列（表格显示 + Excel 导出均包含）；服务端抓取路径 `/materials/oa-fetch` 同步支持服务端正则提取单号。
 
 > **变更说明**：原「工具栏 OA 导入按钮」已下架，避免与应用内 Excel 导入入口混淆；OA 采购数据现统一通过 Chrome 扩展 / 书签 / Console 脚本在 OA 页面内注入，后端 `oa-import` 端点与字段映射逻辑保持不变。
 
