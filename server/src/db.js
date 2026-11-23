@@ -960,4 +960,17 @@ try {
   }
 }
 
+// =====================================================
+// 物料 OA 申请单号：materials.oa_form_no
+// OA 导入时从采购申请单页面提取「申请单号」，同一张申请单导入的
+// 所有物料行共用同一个单号，便于按单追溯（配合 oa_link 使用）
+// =====================================================
+try {
+  db.exec(`ALTER TABLE materials ADD COLUMN oa_form_no TEXT DEFAULT ''`);
+} catch (e) {
+  if (!e.message.includes("duplicate column name")) {
+    console.warn("Migration materials.oa_form_no:", e.message);
+  }
+}
+
 export default db;

@@ -76,6 +76,7 @@ function normalize(item = {}) {
     })(),
     notes: item.notes != null ? String(item.notes) : "",
     oa_link: item.oa_link != null ? String(item.oa_link) : "",
+    oa_form_no: item.oa_form_no != null ? String(item.oa_form_no) : "",
   };
 }
 
@@ -111,8 +112,8 @@ router.post("/materials", (req, res) => {
   const seq = nextSeq(Number(project_id));
   const result = db
     .prepare(
-      `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, oa_link, owner_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, oa_link, oa_form_no, owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       Number(project_id),
@@ -129,6 +130,7 @@ router.post("/materials", (req, res) => {
       n.expected_delivery,
       n.notes,
       n.oa_link,
+      n.oa_form_no,
       req.userId
     );
   res.status(201).json({
@@ -147,8 +149,8 @@ router.post("/materials/batch", (req, res) => {
     return res.status(400).json({ ok: false, error: "items 必填且非空" });
   let seq = nextSeq(Number(project_id));
   const insert = db.prepare(
-    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, oa_link, owner_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, quantity_per_set, set_count, purchase_date, lead_time, expected_delivery, notes, oa_link, oa_form_no, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -169,6 +171,7 @@ router.post("/materials/batch", (req, res) => {
         n.expected_delivery,
         n.notes,
         n.oa_link,
+        n.oa_form_no,
         req.userId
       );
       insertedIds.push(r.lastInsertRowid);
@@ -292,7 +295,7 @@ router.put("/materials/:id", (req, res) => {
   db.prepare(
     `UPDATE materials SET
       part_number=?, manufacturer=?, model=?, material_status=?, quantity=?,
-      quantity_per_set=?, set_count=?, purchase_date=?, lead_time=?, expected_delivery=?, notes=?, oa_link=?,
+      quantity_per_set=?, set_count=?, purchase_date=?, lead_time=?, expected_delivery=?, notes=?, oa_link=?, oa_form_no=?,
       updated_at=datetime('now','localtime')
      WHERE id=?`
   ).run(
@@ -308,6 +311,7 @@ router.put("/materials/:id", (req, res) => {
     n.expected_delivery,
     n.notes,
     n.oa_link,
+    n.oa_form_no,
     req.params.id
   );
   res.json({ ok: true, data: db.prepare("SELECT * FROM materials WHERE id = ?").get(req.params.id) });
@@ -345,6 +349,13 @@ router.post("/materials/oa-fetch", async (req, res) => {
     let formDate = null;
     const dateMatch = html.match(/申请日期[：:\s<]*[^<]*?(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
     if (dateMatch) formDate = dateMatch[1].replace(/[./]/g, "-");
+
+    // 1.5 提取申请单号（标签：申请单号/申请编号/单据编号；值为字母数字组合）
+    let formNo = null;
+    const noMatch = html.match(
+      /(?:申请单号|申请编号|单据编号|采购申请单号)[：:\s<]*[^<]*?([A-Za-z0-9][A-Za-z0-9\-_/]{2,})/
+    );
+    if (noMatch) formNo = noMatch[1].trim();
 
     // 2. 找物料表格 — 找到包含"物料编号"或"料号"的 <table>
     // 找物料表格 — 在所有 <table> 中找包含"物料编号"或含物料列关键字的
@@ -416,6 +427,7 @@ router.post("/materials/oa-fetch", async (req, res) => {
       if (hasData && item.part_number) {
         delete item._price; delete item._amount;
         item.purchase_date = item.purchase_date || formDate;
+        item.oa_form_no = item.oa_form_no || formNo || ""; // 申请单号
         item.material_status = "默认";
         item.oa_link = url || ""; // OA 采购单链接（单价/金额不再塞进备注）
         items.push(item);
@@ -423,7 +435,7 @@ router.post("/materials/oa-fetch", async (req, res) => {
     }
 
     if (!items.length) throw new Error("未提取到物料行。");
-    res.json({ ok: true, data: { count: items.length, items, formDate } });
+    res.json({ ok: true, data: { count: items.length, items, formDate, formNo } });
   } catch (e) {
     res.json({ ok: false, error: e.message || "OA 抓取失败" });
   }
@@ -435,7 +447,7 @@ router.post("/materials/oa-fetch", async (req, res) => {
 router.post("/materials/oa-import", (req, res) => {
   res.set("Access-Control-Allow-Origin", "*");
   res.set("Access-Control-Allow-Headers", "Content-Type");
-  const { project_id, internal_code, order_number, oa_url, items } = req.body;
+  const { project_id, internal_code, order_number, oa_url, oa_form_no, items } = req.body;
   if (!Array.isArray(items) || !items.length)
     return res.json({ ok: false, error: "items 必填且非空" });
 
@@ -460,8 +472,8 @@ router.post("/materials/oa-import", (req, res) => {
 
   let seq = nextSeq(target.id);
   const insert = db.prepare(
-    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes, oa_link, owner_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?, ?)`
+    `INSERT INTO materials (project_id, seq, part_number, manufacturer, model, material_status, quantity, purchase_date, lead_time, expected_delivery, notes, oa_link, oa_form_no, owner_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, null, ?, ?, ?, ?)`
   );
   const insertedIds = [];
   db.transaction(() => {
@@ -474,6 +486,7 @@ router.post("/materials/oa-import", (req, res) => {
         it.purchase_date || null,
         it.notes || "",
         it.oa_link || oa_url || "",
+        it.oa_form_no || oa_form_no || "",
         ownerId
       );
       insertedIds.push(r.lastInsertRowid);

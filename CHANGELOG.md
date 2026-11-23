@@ -2,6 +2,14 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-11-23 — 【物料管理】OA 导入支持申请单号
+- 模块：`server/src/db.js`、`server/src/routes/materials.js`、`chrome-extension/inject.js`、`client/src/pages/MaterialListPage.jsx`
+- 新增：materials 表新增 `oa_form_no`（申请单号）字段（含迁移）；OA 导入时从采购申请单页面提取「申请单号」并随每条物料落库。
+- 插件：inject.js 按 label 提取「申请单号/申请编号/单据编号/采购申请单号」（label→input→兄弟节点→全文正则四级兜底），浮窗面板展示单号，随 oa-import 请求发送 `oa_form_no`。
+- 后端：`/materials/oa-fetch`（服务端抓取路径）服务端正则提取单号并回填每行；`/materials/oa-import`（插件路径）接收顶层 `oa_form_no`；`normalize()`/单条新增/批量导入/单条更新接口均支持该字段。
+- 前端：采购清单新增「申请单号」列（表格显示 + 导出 Excel 均包含）；JSON 粘贴导入路径支持 `oa_form_no`/「申请单号」字段映射；OA 导入说明同步更新。
+- 验证：迁移后 `PRAGMA table_info` 确认字段存在；模拟插件 POST `/oa-import`（含 oa_form_no）落库校验通过后清理测试行；语法检查通过；vite build 通过；forge 重启 online（200）。
+
 ## 2026-08-31 — 【快速排期】PPT 进度条移除白色斜纹（彻底纯色）
 - 模块：`server/src/quick-schedule-pptx.js`
 - 缺陷：进度条上的「白色斜纹」（transparency 55 的半透明白条）盖在色块上形成白色遮盖，用户反馈仍有白色阴影。

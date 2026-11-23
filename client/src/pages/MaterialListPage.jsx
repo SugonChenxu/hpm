@@ -30,6 +30,7 @@ const COLUMNS = [
   { key: "purchase_date",     label: "采购时间", type: "date",   width: 120 },
   { key: "lead_time",         label: "采购周期", type: "number", width: 90 },
   { key: "expected_delivery", label: "预计交期", type: "date",   width: 120 },
+  { key: "oa_form_no",        label: "申请单号", type: "text",   width: 140 },
   { key: "oa_link",           label: "OA链接",  type: "text",   width: 220 },
 ];
 // 前期物料需求清单列（与实际采购清单相互独立，字段不同）
@@ -469,6 +470,7 @@ export default function MaterialListPage() {
         })(),
         notes: it.notes || it["备注"] || "",
         oa_link: it.oa_link || it["OA链接"] || it.oaUrl || it["oa_url"] || "",
+        oa_form_no: it.oa_form_no || it.oaFormNo || it["申请单号"] || "",
         expected_delivery: it.expected_delivery || it.expectedDelivery || it["交期"] || it["预计交期"] || null,
       }));
       setOaPreview(items);
@@ -956,7 +958,7 @@ export default function MaterialListPage() {
               <ol style={{ margin: "4px 0 8px 18px", padding: 0, color: "text.secondary", fontSize: 13, lineHeight: 1.8 }}>
                 <li>打开 OA 采购申请页面（soa.com.cn 域下）</li>
                 <li>点浏览器工具栏的扩展图标「提取物料到 Forge」</li>
-                <li>页面右侧出现提取面板，核对物料条数、申请日期</li>
+                <li>页面右侧出现提取面板，核对物料条数、申请日期、申请单号</li>
                 <li>点「发送到 Forge」——物料会自动归到该 OA 单「内部立项号」对应的 Forge 项目</li>
               </ol>
 

@@ -46,6 +46,33 @@
     if (m) formDate = `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
   }
 
+  // ===== 申请单号（同申请日期：label叶子→父input_field→input.value；兜底全文正则） =====
+  let formNo = null;
+  const allLblNo = document.querySelectorAll("span, label, div");
+  for (const el of allLblNo) {
+    if (el.children.length > 0) continue;
+    const txt = (el.textContent || "").trim().replace(/\s+/g, "");
+    if (txt === "申请单号" || txt === "申请编号" || txt === "单据编号" || txt === "采购申请单号") {
+      const parent = el.parentElement;
+      if (parent) {
+        const input = parent.querySelector("input, select, textarea");
+        if (input && input.value) { formNo = input.value.trim(); break; }
+        if (parent.nextElementSibling) {
+          const sib = (parent.nextElementSibling.textContent || "").trim();
+          if (sib) { formNo = sib; break; }
+        }
+      }
+      const p = el.closest("tr, div, dl, li");
+      const ptx = (p || el.parentElement)?.textContent || "";
+      const m = ptx.match(/(?:申请单号|申请编号|单据编号|采购申请单号)[：:\s]*([A-Za-z0-9][A-Za-z0-9\-_/（）()]{2,})/);
+      if (m) { formNo = m[1].trim(); break; }
+    }
+  }
+  if (!formNo) {
+    const m = document.body.innerText.match(/(?:申请单号|申请编号|单据编号|采购申请单号)[：:\s]*([A-Za-z0-9][A-Za-z0-9\-_/（）()]{2,})/);
+    if (m) formNo = m[1].trim();
+  }
+
   // ===== 提取表格 =====
   const tables = document.querySelectorAll("table");
   let bestResult = null;
@@ -117,9 +144,11 @@
     html += '<p style="color:#d32f2f">未提取到物料数据。</p>';
     html += '<p style="color:#666">请确保页面已显示采购明细表格。</p>';
     html += '<p style="color:#666">申请日期: ' + (formDate || "❌ 未找到") + '</p>';
+    html += '<p style="color:#666">申请单号: ' + (formNo || "❌ 未找到") + '</p>';
   } else {
     html += '<p>已识别 <b>' + bestResult.items.length + '</b> 条物料';
-    html += ' &nbsp; 申请日期: <b>' + (formDate || "❌") + '</b></p>';
+    html += ' &nbsp; 申请日期: <b>' + (formDate || "❌") + '</b>';
+    html += ' &nbsp; 申请单号: <b>' + (formNo || "❌") + '</b></p>';
 
     html += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0">';
     html += '<tr style="background:#f5f5f5">';
@@ -177,6 +206,7 @@
             internal_code: internalCode || undefined,
             project_id: 20,
             oa_url: location.href, // 当前 OA 采购单页面 URL → 后端存为 oa_link
+            oa_form_no: formNo || undefined, // 申请单号 → 后端存为 oa_form_no
             items: bestResult.items.map(it => ({
               part_number: it.part_number || "",
               manufacturer: it.manufacturer || "",
