@@ -345,15 +345,15 @@ router.post("/materials/oa-fetch", async (req, res) => {
     if (!resp.ok) throw new Error("OA 页面返回 HTTP " + resp.status);
     const html = await resp.text();
 
-    // 1. 提取申请日期（表单头部标签-值对）
+    // 1. 提取申请日期（表单头部标签-值对；容忍 label/value 跨 td 标签边界）
     let formDate = null;
-    const dateMatch = html.match(/申请日期[：:\s<]*[^<]*?(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
+    const dateMatch = html.match(/申请日期[：:\s]*(?:<[^>]*>)*\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})/);
     if (dateMatch) formDate = dateMatch[1].replace(/[./]/g, "-");
 
-    // 1.5 提取申请单号（标签：申请单号/申请编号/单据编号；值为字母数字组合）
+    // 1.5 提取申请单号（标签：申请单号/申请编号/单据编号/采购申请单号；容忍跨标签边界）
     let formNo = null;
     const noMatch = html.match(
-      /(?:申请单号|申请编号|单据编号|采购申请单号)[：:\s<]*[^<]*?([A-Za-z0-9][A-Za-z0-9\-_/]{2,})/
+      /(?:申请单号|申请编号|单据编号|采购申请单号)[：:\s]*(?:<[^>]*>)*\s*([A-Za-z0-9][A-Za-z0-9\-_/（）()]{2,})/
     );
     if (noMatch) formNo = noMatch[1].trim();
 
@@ -365,8 +365,9 @@ router.post("/materials/oa-fetch", async (req, res) => {
     for (const tbl of tableMatches) {
       const rows = tbl.match(/<tr[\s>][\s\S]*?<\/tr>/gi) || [];
       let score = 0;
-      // 检查是否含物料关键字
-      if (/物料编号|料号|part_no/i.test(tbl)) score += 10;
+      // 检查是否含物料关键字（物料编码/物料描述 计分以兼容内部领用申请表）
+      if (/物料编号|物料编码|料号|part_no/i.test(tbl)) score += 10;
+      if (/物料描述|物料名称/.test(tbl)) score += 4;
       if (/厂家|供应商/.test(tbl)) score += 5;
       if (/型号|规格/.test(tbl)) score += 5;
       if (/数量/.test(tbl)) score += 3;
@@ -383,31 +384,36 @@ router.post("/materials/oa-fetch", async (req, res) => {
     const trs = bestTable.rows;
 
     // 3. 解析列映射 — 取第一个有效 tr 作为表头
+    // 2026-11-25 适配「测试物料内部领用申请」(fromid=materialconsume)：无厂家列，物料描述/物料名称→型号
     let colMap = {};
-    for (const tr of trs) {
+    let headerIdx = -1;
+    for (let hi = 0; hi < trs.length; hi++) {
+      const tr = trs[hi];
       const tds = tr.match(/<t[dh][\s>][\s\S]*?<\/t[dh]>/gi);
       if (!tds || tds.length < 3) continue;
       tds.forEach((td, i) => {
         const text = td.replace(/<[^>]+>/g, "").trim();
         if (!text) return;
         const t = text.toLowerCase();
-        if (/物料编号|料号|编号|part.?no/.test(t)) colMap[i] = "part_number";
+        if (/物料编号|物料编码|料号|编号|part.?no/.test(t)) colMap[i] = "part_number";
         else if (/厂家|供应商|品牌|厂商/.test(t)) colMap[i] = "manufacturer";
-        else if (/型号|描述|规格/.test(t)) colMap[i] = "model";
+        else if (/型号|描述|规格|物料名称/.test(t)) colMap[i] = "model";
         else if (/数量/.test(t)) colMap[i] = "quantity";
         else if (/单价/.test(t)) colMap[i] = "_price";
         else if (/金额|总价/.test(t)) colMap[i] = "_amount";
         else if (/备注|说明|用途/.test(t)) colMap[i] = "notes";
         else if (/交期|delivery/.test(t)) colMap[i] = "expected_delivery";
       });
-      if (Object.keys(colMap).length >= 2) break; // 表头匹配成功
+      if (Object.keys(colMap).length >= 2) { headerIdx = hi; break; } // 表头匹配成功
     }
 
     if (Object.keys(colMap).length < 2) throw new Error("无法识别表头列名。页面 HTML 前500字:" + html.slice(0, 500));
 
-    // 4. 提取数据行
+    // 4. 提取数据行（跳过表头行）
     const items = [];
-    for (const tr of trs) {
+    for (let ri = 0; ri < trs.length; ri++) {
+      if (ri === headerIdx) continue; // 表头行不作为数据
+      const tr = trs[ri];
       const tds = tr.match(/<t[dh][\s>][\s\S]*?<\/t[dh]>/gi);
       if (!tds) continue;
       const item = {};
@@ -428,7 +434,8 @@ router.post("/materials/oa-fetch", async (req, res) => {
         delete item._price; delete item._amount;
         item.purchase_date = item.purchase_date || formDate;
         item.oa_form_no = item.oa_form_no || formNo || ""; // 申请单号
-        item.material_status = "默认";
+        // 内部领用申请 → 已入库；普通采购申请 → 默认
+        item.material_status = /fromid=materialconsume/i.test(url) ? "已入库" : "默认";
         item.oa_link = url || ""; // OA 采购单链接（单价/金额不再塞进备注）
         items.push(item);
       }

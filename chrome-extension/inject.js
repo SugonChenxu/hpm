@@ -9,9 +9,10 @@
   function matchField(h) {
     const t = norm(h);
     if (!t) return null;
-    if (t.includes("物料编号") || t.includes("料号") || t.includes("partno") || t === "编号") return "part_number";
+    if (t.includes("物料编号") || t.includes("物料编码") || t.includes("料号") || t.includes("partno") || t === "编号") return "part_number";
     if (t.includes("厂家") || t.includes("供应商") || t.includes("品牌") || t.includes("厂商")) return "manufacturer";
-    if (t.includes("型号") || t.includes("规格") || t === "型" || t === "号") return "model";
+    // 物料描述/物料名称 → 型号（2026-11-25：测试物料内部领用申请表无厂家列，物料描述即型号）
+    if (t.includes("物料描述") || t.includes("物料名称") || t.includes("型号") || t.includes("规格") || t === "型" || t === "号") return "model";
     if (t.includes("数量") || t === "qty") return "quantity";
     if (t === "单价" || t.includes("unitprice")) return "_price";
     if (t === "金额" || t.includes("总价") || t.includes("total")) return "_amount";
@@ -19,6 +20,9 @@
     if (t.includes("交期") || t.includes("delivery")) return "expected_delivery";
     return null;
   }
+
+  // ===== 表单类型（2026-11-25：适配「测试物料内部领用申请」fromid=materialconsume） =====
+  const isConsumeForm = /fromid=materialconsume/i.test(location.href);
 
   // ===== 申请日期（同立项号：label叶子→父input_field→input.value） =====
   let formDate = null;
@@ -136,7 +140,7 @@
   });
 
   let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
-  html += '<b style="font-size:16px">Forge OA 导入</b>';
+  html += '<b style="font-size:16px">Forge OA 导入' + (isConsumeForm ? '（内部领用）' : '') + '</b>';
   html += '<span style="color:#999;cursor:pointer" onclick="document.getElementById(\'forge-oa-panel\').remove()">✕</span>';
   html += '</div>';
 
@@ -149,6 +153,9 @@
     html += '<p>已识别 <b>' + bestResult.items.length + '</b> 条物料';
     html += ' &nbsp; 申请日期: <b>' + (formDate || "❌") + '</b>';
     html += ' &nbsp; 申请单号: <b>' + (formNo || "❌") + '</b></p>';
+    if (isConsumeForm) {
+      html += '<p style="color:#e65100;font-size:11px">检测到「内部领用申请」：无厂家列，物料描述→型号，导入状态为「已入库」</p>';
+    }
 
     html += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0">';
     html += '<tr style="background:#f5f5f5">';
@@ -210,11 +217,12 @@
             items: bestResult.items.map(it => ({
               part_number: it.part_number || "",
               manufacturer: it.manufacturer || "",
-              model: it.model || "",
+              model: it.model || it.material_desc || "",
               quantity: it.quantity || 0,
               purchase_date: it.purchase_date || formDate,
               notes: it.notes || "",
-              material_status: "已下单",
+              // 内部领用申请 → 已入库；普通采购申请 → 已下单
+              material_status: isConsumeForm ? "已入库" : "已下单",
             })),
           }),
         });

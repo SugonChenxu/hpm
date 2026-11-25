@@ -137,6 +137,7 @@
    - Console 脚本：`scripts/oa-import-bookmarklet.js`。
 7. **后端端点**：`POST /api/materials/oa-import`（跨域 CORS，浏览器直接提交，由上述三种外部脚本调用）。
 8. **申请单号持久化**（2026-11-23）：materials 表新增 `oa_form_no` 字段；同一张申请单导入的物料行共用同一单号，随 `oa_link` 一并落库；插件浮窗面板展示单号供核对；采购清单新增「申请单号」列（表格显示 + Excel 导出均包含）；服务端抓取路径 `/materials/oa-fetch` 同步支持服务端正则提取单号。
+9. **测试物料内部领用申请适配**（2026-11-25）：`fromid=materialconsume` 表单（如 `OpenForm?fromid=materialconsume&docid=…`）——该表**无「厂家」列**，列映射将 **物料描述/物料名称 → 型号(model)**，并支持「物料编码」列头；领用表单导入的物料默认状态为「已入库」（采购表单不变）；插件按 URL 自动识别表单类型并在浮窗提示。另修复 oa-fetch 表头行被误当数据行混入的缺陷，申请日期/申请单号正则支持 label 与 value 跨 `<td>` 边界。
 
 > **变更说明**：原「工具栏 OA 导入按钮」已下架，避免与应用内 Excel 导入入口混淆；OA 采购数据现统一通过 Chrome 扩展 / 书签 / Console 脚本在 OA 页面内注入，后端 `oa-import` 端点与字段映射逻辑保持不变。
 
