@@ -154,7 +154,7 @@
     html += ' &nbsp; 申请日期: <b>' + (formDate || "❌") + '</b>';
     html += ' &nbsp; 申请单号: <b>' + (formNo || "❌") + '</b></p>';
     if (isConsumeForm) {
-      html += '<p style="color:#e65100;font-size:11px">检测到「内部领用申请」：无厂家列，物料描述→型号，导入状态为「已入库」</p>';
+      html += '<p style="color:#e65100;font-size:11px">检测到「内部领用申请」：无厂家列，物料描述→型号，导入状态为「待入库」</p>';
     }
 
     html += '<table style="width:100%;border-collapse:collapse;font-size:11px;margin:8px 0">';
@@ -221,8 +221,8 @@
               quantity: it.quantity || 0,
               purchase_date: it.purchase_date || formDate,
               notes: it.notes || "",
-              // 内部领用申请 → 已入库；普通采购申请 → 已下单
-              material_status: isConsumeForm ? "已入库" : "已下单",
+              // 内部领用申请 → 待入库（领用≠入库，还需库管调库）；普通采购申请 → 已下单
+              material_status: isConsumeForm ? "待入库" : "已下单",
             })),
           }),
         });

@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-11-25 — 【物料管理】新增「待入库」状态，领用单导入状态修正
+- 模块：`client/src/utils/materialStatus.js`、`server/src/routes/materials.js`、`server/src/routes/requirements.js`、`chrome-extension/inject.js`、`docs/modules/04-物料管理模块-PRD.md`
+- 修正：内部领用申请（`fromid=materialconsume`）导入的物料默认状态由「已入库」改为「**待入库**」——领用 ≠ 入库，还需库管调库后手动改「已入库」。
+- 新增：物料状态枚举新增「待入库」（青色 #e6fffb/#00474f），前后端枚举 + 需求清单联动 + 批量改状态接口白名单同步；前端状态下拉/筛选/色块预览自动联动。
+- 验证：语法检查通过；前端重新构建；forge 重启 online（200）。
+
 ## 2026-11-25 — 【物料管理】OA 导入适配「测试物料内部领用申请」流程
 - 模块：`chrome-extension/inject.js`、`server/src/routes/materials.js`
 - 适配：针对 `fromid=materialconsume`（测试物料内部领用申请）表单——该表无「厂家」列，列映射将 **物料描述/物料名称 → 型号(model)**；插件与服务端抓取路径同步支持；新增「物料编码」列头识别。
@@ -9,6 +15,7 @@
 - 缺陷修复：oa-fetch 数据行提取跳过表头行（此前表头文本可能被当作一条物料混入）。
 - 接口调整：申请日期/申请单号提取正则容忍 label 与 value 跨 `<td>` 标签边界（此前分属两个单元格时提取失败）。
 - 验证：mock 领用表（无厂家 + 物料描述列）与 mock 采购表（含厂家）双端到端测试——领用表提取 part_number/model/数量/申请日期/申请单号 全部正确、状态「已入库」、表头不混入；采购表回归通过（厂家正常、状态「默认」）；语法通过；forge 重启 online（200）。
+
 
 ## 2026-11-23 — 【物料管理】OA 导入支持申请单号
 - 模块：`server/src/db.js`、`server/src/routes/materials.js`、`chrome-extension/inject.js`、`client/src/pages/MaterialListPage.jsx`

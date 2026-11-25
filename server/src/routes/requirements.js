@@ -3,7 +3,7 @@ import db from "../db.js";
 const router = Router();
 
 // 需求清单与采购清单复用同一套状态枚举（保证「采购状态 → 需求联动」语义一致）
-const MATERIAL_STATUSES = ["默认", "已入库", "已下单", "待决策", "高风险"];
+const MATERIAL_STATUSES = ["默认", "待入库", "已入库", "已下单", "待决策", "高风险"];
 
 const COLUMNS = [
   "seq",

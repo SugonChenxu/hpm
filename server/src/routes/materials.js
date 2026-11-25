@@ -18,7 +18,7 @@ const COLUMNS = [
   "notes",
 ];
 
-const MATERIAL_STATUSES = ["默认", "已入库", "已下单", "待决策", "高风险"];
+const MATERIAL_STATUSES = ["默认", "待入库", "已入库", "已下单", "待决策", "高风险"];
 
 // 需求清单与采购清单通过物料号(part_number)关联，需求状态在「读取需求清单」时
 // 实时联动采购清单同物料号的最新状态（见 requirements.js 列表接口），故此处无需写时同步。
@@ -434,8 +434,8 @@ router.post("/materials/oa-fetch", async (req, res) => {
         delete item._price; delete item._amount;
         item.purchase_date = item.purchase_date || formDate;
         item.oa_form_no = item.oa_form_no || formNo || ""; // 申请单号
-        // 内部领用申请 → 已入库；普通采购申请 → 默认
-        item.material_status = /fromid=materialconsume/i.test(url) ? "已入库" : "默认";
+        // 内部领用申请 → 待入库（领用≠入库，还需库管调库）；普通采购申请 → 默认
+        item.material_status = /fromid=materialconsume/i.test(url) ? "待入库" : "默认";
         item.oa_link = url || ""; // OA 采购单链接（单价/金额不再塞进备注）
         items.push(item);
       }
