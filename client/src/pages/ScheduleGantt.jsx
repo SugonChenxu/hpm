@@ -529,7 +529,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
           left: left - 40,
           top: 23, // 符号 18px 高，top 23 → 中心 32，与轨道线中线对齐
           width: 80,
-          height: 44,
+          height: 56, // 符号 + 日期行 + 名称行
           zIndex: 4, // 节点永远显示在最上方，盖过矩形进度条与箭头线
           pointerEvents: "none", // 容器不拦截，仅符号区域响应拖拽/编辑
           userSelect: "none",
@@ -547,10 +547,28 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
         >
           <MilestoneSymbol symbol={ms.symbol} color={ms.color} size={18} />
         </svg>
+        {/* 日期行：显示在名称上面一行（月/日，季度标签已含年份） */}
         <Typography
           variant="caption"
           sx={{
-            mt: 0.5,
+            fontSize: "0.55rem",
+            lineHeight: 1.1,
+            fontWeight: 600,
+            color: ms.text_color || "#000000",
+            textAlign: "center",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+          }}
+        >
+          {(() => {
+            const [, m, d] = String(ms.date || "").split("-");
+            return m && d ? `${Number(m)}/${Number(d)}` : "";
+          })()}
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{
+            mt: 0.25,
             fontSize: "0.6rem",
             fontWeight: 600,
             lineHeight: 1.15,

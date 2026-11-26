@@ -2,6 +2,12 @@
 
 > 每次代码迭代的变更记录，字段：修改模块 / 新增功能 / 缺陷修复 / 接口调整 / 参数变动。
 
+## 2026-11-26 — 【快速排期】关键节点显示日期（名称上一行）
+- 模块：`client/src/pages/ScheduleGantt.jsx`、`server/src/quick-schedule-pptx.js`、`docs/modules/11-快速排期模块-PRD.md`
+- 新增：关键节点（手动添加）在排期图中显示日期——符号下方先输出**日期行（月/日，如 11/25）**，名称移至日期下方一行；前端甘特与 PPT 导出同步（PPT 节点组扩展为 符号+日期+名称 三元素成组）。
+- 说明：日期仅显示月/日，年份由时间轴季度标签（含年份）提供；悬停 Tooltip 仍显示完整日期。
+- 验证：vite build 通过；mock 排期生成 PPTX，XML 中校验节点名称与日期文本均存在、节点组 3 元素成组正常；forge 重启 online（200）。
+
 ## 2026-11-25 — 【物料管理】新增「待入库」状态，领用单导入状态修正
 - 模块：`client/src/utils/materialStatus.js`、`server/src/routes/materials.js`、`server/src/routes/requirements.js`、`chrome-extension/inject.js`、`docs/modules/04-物料管理模块-PRD.md`
 - 修正：内部领用申请（`fromid=materialconsume`）导入的物料默认状态由「已入库」改为「**待入库**」——领用 ≠ 入库，还需库管调库后手动改「已入库」。
