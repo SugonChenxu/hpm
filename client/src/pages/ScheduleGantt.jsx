@@ -552,7 +552,7 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
           variant="caption"
           sx={{
             fontSize: "0.55rem",
-            lineHeight: 1.1,
+            lineHeight: 1.05,
             fontWeight: 600,
             color: ms.text_color || "#000000",
             textAlign: "center",
@@ -568,10 +568,10 @@ function DraggableMilestone({ ms, months, monthWidth, minDate, maxDate, onUpdate
         <Typography
           variant="caption"
           sx={{
-            mt: 0.25,
+            mt: "-1px",
             fontSize: "0.6rem",
             fontWeight: 600,
-            lineHeight: 1.15,
+            lineHeight: 1.1,
             color: ms.text_color || "#000000",
             textAlign: "center",
             whiteSpace: "nowrap",

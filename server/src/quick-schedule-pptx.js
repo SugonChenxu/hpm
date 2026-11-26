@@ -352,14 +352,14 @@ export async function buildSchedulePptx(schedule) {
           fill: { color: stripHash(ms.color) }, line: { type: "none" },
           shadow: SHADOW_NODE,
         });
-        // 日期行（月/日）：名称上面一行
+        // 日期行（月/日）：名称上面一行（紧凑排布，不重叠）
         const [, dM, dD] = String(ms.date || "").split("-");
         const dateSeq = B.addText(dM && dD ? `${Number(dM)}/${Number(dD)}` : "", {
-          x: mx - 0.55, y: centerY + size / 2 + 0.01, w: 1.1, h: 0.13,
+          x: mx - 0.55, y: centerY + size / 2 + 0.01, w: 1.1, h: 0.11,
           fontSize: 6.5, color: stripHash(ms.text_color || "000000"), align: "center",
         });
         const txtSeq = B.addText(ms.title || "", {
-          x: mx - 0.55, y: centerY + size / 2 + 0.15, w: 1.1, h: 0.2,
+          x: mx - 0.55, y: centerY + size / 2 + 0.12, w: 1.1, h: 0.2,
           fontSize: 7.5, color: stripHash(ms.text_color || "000000"), align: "center",
         });
         B.addGroup([symSeq, dateSeq, txtSeq]);
